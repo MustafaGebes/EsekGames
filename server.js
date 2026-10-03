@@ -36,6 +36,10 @@ const rooms = new Map();
 const ROOM_NAME_MAX = 32;
 const ROOM_TTL_MS = 30 * 60 * 1000;
 const ROOM_MAX_PLAYERS = 10;
+const CITY_DOOR_IDS = new Set([
+    "icecream-shop", "weapons-shop", "cafe", "market", "grocery",
+    "tool-shop", "clothing-shop", "home-one", "home-two"
+]);
 
 function normalizeRoomName(value) {
     return String(value || "").trim().replace(/\s+/g, " ").slice(0, ROOM_NAME_MAX);
@@ -93,6 +97,18 @@ function removePlayerFromRoom(player) {
 function getPlayerRoom(player) {
     return player && player.roomId ? rooms.get(player.roomId) || null : null;
 }
+function handleBuildingDoorState(player, data) {
+    const room = getPlayerRoom(player);
+    const buildingId = String(data && data.buildingId || "");
+    if (!player || !player.inGame || !room || !room.members.has(player.id) || !CITY_DOOR_IDS.has(buildingId)) return;
+    if (typeof data.open !== "boolean") return;
+    const now = Date.now();
+    if (now - (player.lastDoorStateAt || 0) < 120) return;
+    player.lastDoorStateAt = now;
+    room.doorStates.set(buildingId, data.open);
+    room.lastActivityAt = now;
+    broadcastToRoom(room.id, { type: "building_door_state", buildingId, open: data.open });
+}
 function handleRoomsRequest(player) {
     sendRoomList(player);
 }
@@ -112,7 +128,7 @@ function handleCreateRoom(player, data) {
     if (player.roomId) removePlayerFromRoom(player);
     const room = {
         id: makeRoomId(), name, maxPlayers, mapId,
-        hostId: player.id, members: new Set([player.id]), lastActivityAt: Date.now()
+        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), lastActivityAt: Date.now()
     };
     rooms.set(room.id, room);
     player.roomId = room.id;
@@ -140,6 +156,7 @@ function handleJoinRoom(player, data) {
     room.lastActivityAt = Date.now();
     sendTo(player, { type: "room_joined", room: publicRoom(room) });
     joinGame(player, { ...data, roomId: room.id });
+    if (player.inGame) sendTo(player, { type: "building_door_states", doors: [...room.doorStates].map(([buildingId, open]) => ({ buildingId, open })) });
     broadcastRoomLists();
 }
 function handleLeaveRoom(player) {
@@ -1897,6 +1914,10 @@ wss.on("connection", (ws, req) => {
 
             case "move":
                 handleMove(player, data);
+                break;
+
+            case "building_door_state":
+                handleBuildingDoorState(player, data);
                 break;
 
             case "chat":
