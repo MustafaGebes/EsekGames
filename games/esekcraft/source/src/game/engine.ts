@@ -508,11 +508,11 @@ export class MinecraftEngine {
       const dy = (remote.target.y + 0.95) - eye.y;
       const dz = remote.target.z - eye.z;
       const distance = Math.hypot(dx, dy, dz);
-      if (distance > 3.55 || distance < 0.01) continue;
+      if (distance > 4.0 || distance < 0.01) continue;
       const dot = (dx * dir.x + dy * dir.y + dz * dir.z) / distance;
-      if (dot < 0.30) continue;
+      if (dot < 0.08) continue;
       const perpendicular = Math.sqrt(Math.max(0, distance * distance - (distance * dot) ** 2));
-      if (perpendicular > 0.85) continue;
+      if (perpendicular > 1.15) continue;
       if (!best || distance < best.distance) best = { id, distance };
     }
     return best?.id || null;
@@ -1790,6 +1790,27 @@ export class MinecraftEngine {
     }
   }
 
+  public handleNetworkDeath(reason = 'Öldün!') {
+    this.hp = 0;
+    this.isDead = true;
+    this.damageFlashTimer = 0;
+    this.exitPointerLock();
+    this.onToast?.(reason);
+    this.onUIStateChange?.('dead');
+    this.onHUDUpdate?.();
+  }
+  public respawnAt(spawn?: { x: number; y: number; z: number }) {
+    this.isDead = false;
+    this.hp = this.maxHp;
+    this.hunger = this.maxHunger;
+    this.vel = { x: 0, y: 0, z: 0 };
+    if (spawn && Number.isFinite(spawn.x) && Number.isFinite(spawn.y) && Number.isFinite(spawn.z)) {
+      this.pos = { x: spawn.x, y: spawn.y, z: spawn.z };
+    } else {
+      this.spawnDefaultPlayer();
+    }
+    this.onHUDUpdate?.();
+  }
   public respawn() {
     this.isDead = false;
     this.hp = this.maxHp;

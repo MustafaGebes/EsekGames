@@ -303,6 +303,13 @@ export default function App() {
           if (message.targetId === onlinePlayerIdRef.current) engineRef.current.applyNetworkHealth(Number(message.health));
           else if (message.targetId) engineRef.current.flashRemotePlayer(String(message.targetId));
         }
+        if (message.type === 'player_death' && engineRef.current && message.id === onlinePlayerIdRef.current) {
+          engineRef.current.handleNetworkDeath(String(message.reason || 'Öldün!'));
+        }
+        if (message.type === 'respawned' && engineRef.current) {
+          engineRef.current.respawnAt(message.spawn);
+          setUIState('playing');
+        }
       } catch {}
     };
     ws.onerror = () => showToast('Online sunucuya bağlanılamadı.');
@@ -422,7 +429,10 @@ export default function App() {
           uiState={uiState}
           setUIState={setUIState}
           onSaveAndQuit={handleSaveAndQuit}
-          onRespawn={() => engineRef.current?.respawn()}
+          onRespawn={() => {
+            if (onlineRoomRef.current) sendOnlineMessage({ type: 'respawn' });
+            else engineRef.current?.respawn();
+          }}
           toastMessage={toastMessage}
           keyBindings={keyBindings}
           onSaveKeyBindings={handleSaveKeyBindings}

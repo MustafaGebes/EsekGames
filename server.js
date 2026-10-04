@@ -223,11 +223,11 @@ function handleEsekCraftAttack(player, data = {}) {
         const dz = candidate.z - player.z;
         const horizontalDistance = Math.hypot(dx, dz);
         // Capsule hitbox: body radius ~0.42 plus a small melee margin.
-        if (horizontalDistance > ESEKCRAFT_ATTACK_REACH + 0.42) continue;
+        if (horizontalDistance > ESEKCRAFT_ATTACK_REACH + 0.5) continue;
         const verticalOverlap = candidate.y < player.y + 2.15 && candidate.y + 1.85 > player.y + 0.15;
         if (!verticalOverlap) continue;
         const dot = horizontalDistance > 0 ? (dx / horizontalDistance) * facingX + (dz / horizontalDistance) * facingZ : 1;
-        if (dot < 0.28) continue;
+        if (dot < 0.08) continue;
         if (horizontalDistance < bestDistance) { bestDistance = horizontalDistance; target = candidate; }
     }
     broadcastToRoom(room.id, { type: "esekcraft_attack", attackerId: player.id });
@@ -705,7 +705,7 @@ const CARROT_RESPAWN_MS = 5 * 60 * 1000; // istemcideki CARROT_RESPAWN_MS ile ay
 
 const FIST_DAMAGE = 1.5;
 const SWORD_DAMAGE = 3;
-const ESEKCRAFT_ATTACK_REACH = 3.1;
+const ESEKCRAFT_ATTACK_REACH = 3.4;
 const ESEKCRAFT_ATTACK_COOLDOWN_MS = 500;
 const ESEKCRAFT_DAMAGE_BY_WEAPON = Object.freeze({ fist: 1.5, sword: 4, axe: 5, pickaxe: 2, shovel: 1 });
 const GUN_DAMAGE = 4;
