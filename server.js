@@ -201,6 +201,7 @@ const PLAYER_PETS_FILE = path.join(DATA_DIR, "player-pets.json");
 
 const MAIN_INDEX = path.join(ROOT, "index.html");
 const SIMULATOR_INDEX = path.join(ROOT, "games", "eseksimulator", "index.html");
+const ESEKCRAFT_DIST = path.join(ROOT, "games", "esekcraft", "dist");
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -235,6 +236,8 @@ function persistPlayerPetsStore() {
 // ============================================================
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/games/esekcraft/source", (_req, res) => res.sendStatus(404));
+app.use("/games/esekcraft", express.static(ESEKCRAFT_DIST));
 app.use(express.static(ROOT));
 
 app.get("/", (req, res) => {

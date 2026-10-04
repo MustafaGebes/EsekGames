@@ -1,0 +1,6 @@
+{
+  "name": "Minecraft Web - 3D Voxel & Crafting",
+  "description": "Authentic 3D Minecraft experience with full 2x2 and 3x3 crafting tables, recipe book, tools, ores, smelting furnace, survival stats, and day/night cycle.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

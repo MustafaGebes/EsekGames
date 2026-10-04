@@ -1,0 +1,2321 @@
+/**
+ * Minecraft Web - 3D Engine, Player Physics, Interaction, Day/Night & Entities
+ */
+import * as THREE from 'three';
+import {
+  SX,
+  SY,
+  SZ,
+  BlockType,
+  ItemType,
+  AnyItemId,
+  ItemStack,
+  WorldMeta,
+  FurnaceData,
+  ChestData,
+  MobType,
+  MobEntity,
+  KeyBindings,
+  DEFAULT_KEY_BINDINGS,
+} from './types';
+import {
+  BLOCK_DEFS,
+  ITEM_DEFS,
+  TILE_SIZE,
+  TILES_PER_ROW,
+  ATLAS_SIZE,
+  atlasTexture,
+  crackTextures,
+  getItemName,
+} from './textures';
+import { VoxelWorld, inBounds, IDX } from './world';
+import { Sound, SoundMaterial } from './audio';
+import { findSmeltRecipe } from './recipes';
+
+export interface DropItemEntity {
+  id: AnyItemId;
+  count: number;
+  mesh: THREE.Mesh;
+  vel: { x: number; y: number; z: number };
+  age: number;
+  baseY: number | null;
+}
+
+export interface ParticleEntity {
+  mesh: THREE.Mesh;
+  vel: { x: number; y: number; z: number };
+  life: number;
+  maxLife: number;
+}
+
+export class MinecraftEngine {
+  public scene: THREE.Scene;
+  public camera: THREE.PerspectiveCamera;
+  public renderer: THREE.WebGLRenderer;
+  public world: VoxelWorld;
+
+  // Day/Night and Sky
+  public sunLight: THREE.DirectionalLight;
+  public hemiLight: THREE.HemisphereLight;
+  public sunMesh: THREE.Mesh;
+  public moonMesh: THREE.Mesh;
+  public starsGroup: THREE.Group;
+  public timeOfDay = 0.25; // 0 = noon, 0.25 = afternoon, 0.5 = sunset/night, etc.
+  public dayLength = 480; // 8 minutes per full day/night cycle
+
+  // Materials
+  public worldMaterial: THREE.MeshLambertMaterial;
+  public highlightBox: THREE.LineSegments;
+  public crackMesh: THREE.Mesh;
+
+  // Player & Models
+  public donkey3P: THREE.Group;
+  public handGroup: THREE.Group;
+  public heldItemMesh: THREE.Mesh | null = null;
+  public isThirdPerson = false;
+  public fov = 75;
+  public mouseSensitivity = 1.0;
+
+  // Player State
+  public pos = { x: 40.5, y: 30, z: 40.5 };
+  public vel = { x: 0, y: 0, z: 0 };
+  public yaw = 0;
+  public pitch = 0;
+  public onGround = false;
+  public isSneaking = false;
+  public isSprinting = false;
+  public hp = 20;
+  public maxHp = 20;
+  public hunger = 20;
+  public maxHunger = 20;
+  public xp = 0;
+  public level = 0;
+  public selectedSlot = 0;
+  public inventory: (ItemStack | null)[] = new Array(36).fill(null);
+  public armor: (ItemStack | null)[] = new Array(4).fill(null);
+  public offhand: ItemStack | null = null;
+
+  // Game Mode & Settings
+  public gameMode: 'survival' | 'creative' = 'survival';
+  public isFlying = false;
+  public flyCooldown = 0;
+
+  // Physics params
+  public readonly PW = 0.3;
+  public readonly PH = 1.8;
+  public readonly EYE_HEIGHT = 1.62;
+  public readonly SNEAK_EYE = 1.4;
+
+  // Interaction State
+  public breakingBlock: { x: number; y: number; z: number } | null = null;
+  public breakProgress = 0;
+  public swingTimer = -1;
+  public placeCooldown = 0;
+  public fallStartY = 0;
+  public walkPhase = 0;
+  public stepDistance = 0;
+  public hungerExhaustion = 0;
+  public regenTimer = 0;
+  public starveTimer = 0;
+  public damageFlashTimer = 0;
+
+  // Active Tile Entity Open
+  public currentFurnacePos: { x: number; y: number; z: number } | null = null;
+  public currentChestPos: { x: number; y: number; z: number } | null = null;
+
+  // Entities & Particles
+  public drops: DropItemEntity[] = [];
+  public particles: ParticleEntity[] = [];
+  public mobs: MobEntity[] = [];
+  public attackCooldown = 0;
+
+  // Keys & Input
+  public keys: Record<string, boolean> = {};
+  public keyBindings: KeyBindings = { ...DEFAULT_KEY_BINDINGS };
+  public mouseLeft = false;
+  public mouseRight = false;
+  public isPointerLocked = false;
+  public isPaused = false;
+  public isDead = false;
+  public isGUIOpen = false;
+
+  // Callbacks to React UI
+  public onUIStateChange?: (state: string) => void;
+  public onHUDUpdate?: () => void;
+  public onToast?: (msg: string) => void;
+
+  private lastTime = 0;
+  private animFrameId = 0;
+
+  constructor(canvasContainer: HTMLElement, meta?: WorldMeta) {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x87ceeb);
+    this.scene.fog = new THREE.Fog(0x87ceeb, 45, 120);
+
+    this.camera = new THREE.PerspectiveCamera(
+      this.fov,
+      window.innerWidth / window.innerHeight,
+      0.05,
+      350
+    );
+    this.camera.rotation.order = 'YXZ';
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    canvasContainer.appendChild(this.renderer.domElement);
+
+    // World Material
+    this.worldMaterial = new THREE.MeshLambertMaterial({
+      map: atlasTexture,
+      vertexColors: true,
+      transparent: true,
+      alphaTest: 0.1,
+    });
+
+    // Lights
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x667788, 0.85);
+    this.scene.add(this.hemiLight);
+
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 0.65);
+    this.sunLight.position.set(60, 100, 30);
+    this.scene.add(this.sunLight);
+
+    // Celestial Sun, Moon, Stars
+    const sunGeo = new THREE.BoxGeometry(10, 10, 2);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff6a3 });
+    this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    this.scene.add(this.sunMesh);
+
+    const moonGeo = new THREE.BoxGeometry(8, 8, 2);
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xecf0f1 });
+    this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    this.scene.add(this.moonMesh);
+
+    // Stars
+    this.starsGroup = new THREE.Group();
+    const starGeo = new THREE.BufferGeometry();
+    const starCoords: number[] = [];
+    for (let i = 0; i < 300; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = 180;
+      starCoords.push(
+        r * Math.sin(phi) * Math.cos(theta),
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi)
+      );
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 });
+    this.starsGroup.add(new THREE.Points(starGeo, starMat));
+    this.scene.add(this.starsGroup);
+
+    // Highlight bounding box
+    this.highlightBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002)),
+      new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2, transparent: true, opacity: 0.6 })
+    );
+    this.highlightBox.visible = false;
+    this.scene.add(this.highlightBox);
+
+    // Crack breaking mesh with heavy offset and high opacity
+    this.crackMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1.015, 1.015, 1.015),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.98,
+        depthTest: true,
+        depthWrite: false,
+        map: crackTextures[0],
+        polygonOffset: true,
+        polygonOffsetFactor: -6,
+        polygonOffsetUnits: -6,
+      })
+    );
+    this.crackMesh.visible = false;
+    this.scene.add(this.crackMesh);
+
+    // Create World
+    this.world = new VoxelWorld(meta ? meta.seed : 'minecraft');
+    if (meta && meta.mods) {
+      this.world.mods = { ...meta.mods };
+    }
+    if (meta && meta.furnaces) {
+      this.world.furnaces = { ...meta.furnaces };
+    }
+    if (meta && meta.chests) {
+      this.world.chests = { ...meta.chests };
+    }
+
+    // Player Models (3D Donkey Character & Donkey Hoof Hand)
+    this.donkey3P = this.createDonkeyModel();
+    this.donkey3P.visible = false;
+    this.scene.add(this.donkey3P);
+
+    this.handGroup = this.createFirstPersonHand();
+    this.camera.add(this.handGroup);
+    this.scene.add(this.camera);
+
+    // Load Keybindings from localStorage if available
+    try {
+      const savedBinds = localStorage.getItem('esekcraft_keybinds');
+      if (savedBinds) {
+        this.keyBindings = { ...DEFAULT_KEY_BINDINGS, ...JSON.parse(savedBinds) };
+      }
+    } catch {}
+
+    // Load or Initialize Player State
+    this.initPlayerState(meta);
+
+    // Event Listeners
+    this.setupListeners();
+  }
+
+  private initPlayerState(meta?: WorldMeta) {
+    if (meta) {
+      this.gameMode = meta.gameMode || 'survival';
+      if (meta.player) {
+        this.pos = { x: meta.player.x, y: meta.player.y, z: meta.player.z };
+        this.yaw = meta.player.yaw || 0;
+        this.pitch = meta.player.pitch || 0;
+        this.hp = meta.player.hp ?? 20;
+        this.hunger = meta.player.hunger ?? 20;
+        this.xp = meta.player.xp || 0;
+        this.level = meta.player.level || 0;
+        this.selectedSlot = meta.player.sel || 0;
+        this.inventory = meta.player.inv || new Array(36).fill(null);
+        this.armor = meta.player.armor || new Array(4).fill(null);
+        this.offhand = meta.player.offhand || null;
+      } else {
+        this.spawnDefaultPlayer();
+      }
+    } else {
+      this.spawnDefaultPlayer();
+    }
+    this.fallStartY = this.pos.y;
+  }
+
+  private spawnDefaultPlayer() {
+    const sx = SX / 2 + 0.5;
+    const sz = SZ / 2 + 0.5;
+    const topY = this.world.getTopSolid(Math.floor(sx), Math.floor(sz));
+    this.pos = { x: sx, y: Math.max(16, topY + 1.2), z: sz };
+    this.hp = 20;
+    this.hunger = 20;
+    this.xp = 0;
+    this.level = 0;
+    this.selectedSlot = 0;
+    this.inventory = new Array(36).fill(null);
+    this.armor = new Array(4).fill(null);
+    this.offhand = null;
+
+    // Starter items (classic adventure style)
+    this.inventory[0] = { id: BlockType.OAK_LOG, count: 8 };
+    this.inventory[1] = { id: ItemType.APPLE, count: 6 };
+    this.inventory[2] = { id: BlockType.TORCH, count: 16 };
+  }
+
+  public start() {
+    this.world.generate();
+    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.spawnMobs(16);
+    this.lastTime = performance.now();
+    this.animate(this.lastTime);
+  }
+
+  public destroy() {
+    cancelAnimationFrame(this.animFrameId);
+    this.mobs.forEach((m) => {
+      this.scene.remove(m.mesh);
+    });
+    this.mobs = [];
+    this.renderer.dispose();
+  }
+
+  // ================= 3D MODELS (Donkey Character & Donkey Hoof Hand) =================
+  private createDonkeyModel(): THREE.Group {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
+    const lightMat = new THREE.MeshLambertMaterial({ color: 0xc9c4bb });
+    const blackMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    // Body (0.72 w, 0.62 h, 1.22 length)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.62, 1.22), bodyMat);
+    body.position.set(0, 0.95, 0);
+    g.add(body);
+
+    // Spine dark stripe
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.08, 1.24), darkMat);
+    spine.position.set(0, 1.26, 0);
+    g.add(spine);
+
+    // Neck
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.45, 0.38), bodyMat);
+    neck.position.set(0, 1.35, -0.58);
+    g.add(neck);
+
+    // Mane on neck
+    const mane = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.4), darkMat);
+    mane.position.set(0, 1.45, -0.48);
+    g.add(mane);
+
+    // Head Group (for nodding and ear physics)
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.5, -0.85);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.55), bodyMat);
+    headGroup.add(head);
+
+    // Muzzle / Snout
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.28, 0.25), lightMat);
+    snout.position.set(0, -0.07, -0.36);
+    headGroup.add(snout);
+
+    // Nostrils
+    const nostril1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), blackMat);
+    nostril1.position.set(-0.1, -0.08, -0.49);
+    headGroup.add(nostril1);
+    const nostril2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), blackMat);
+    nostril2.position.set(0.1, -0.08, -0.49);
+    headGroup.add(nostril2);
+
+    // Eyes
+    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), blackMat);
+    eye1.position.set(-0.19, 0.08, -0.15);
+    headGroup.add(eye1);
+    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), blackMat);
+    eye2.position.set(0.19, 0.08, -0.15);
+    headGroup.add(eye2);
+
+    // Long Donkey Ears!
+    const ear1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.1), bodyMat);
+    ear1.position.set(-0.14, 0.42, 0.05);
+    headGroup.add(ear1);
+    const earInner1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), darkMat);
+    earInner1.position.set(-0.14, 0.42, 0.06);
+    headGroup.add(earInner1);
+
+    const ear2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.1), bodyMat);
+    ear2.position.set(0.14, 0.42, 0.05);
+    headGroup.add(ear2);
+    const earInner2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), darkMat);
+    earInner2.position.set(0.14, 0.42, 0.06);
+    headGroup.add(earInner2);
+
+    g.add(headGroup);
+
+    // Tail
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.08), darkMat);
+    tail.position.set(0, 0.95, 0.68);
+    tail.rotation.x = 0.2;
+    g.add(tail);
+
+    // 4 Legs with dark hooves
+    const legs: THREE.Group[] = [];
+    const legPositions = [
+      [-0.24, -0.45], // front-left
+      [0.24, -0.45],  // front-right
+      [-0.24, 0.45],  // back-left
+      [0.24, 0.45],   // back-right
+    ];
+
+    for (const p of legPositions) {
+      const lg = new THREE.Group();
+      lg.position.set(p[0], 0.68, p[1]);
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.62, 0.18), bodyMat);
+      upper.position.y = -0.31;
+      lg.add(upper);
+      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.2), darkMat);
+      hoof.position.y = -0.64;
+      lg.add(hoof);
+      g.add(lg);
+      legs.push(lg);
+    }
+
+    g.userData = { headGroup, legs };
+    return g;
+  }
+
+  // First Person Donkey Hoof Hand on the right side - authentically angled upward & inward like Minecraft
+  private createFirstPersonHand(): THREE.Group {
+    const group = new THREE.Group();
+    const furMat = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
+    const hoofMat = new THREE.MeshLambertMaterial({ color: 0x2c2c2c });
+
+    // Donkey front leg arm originating from the bottom right and extending upwards
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.44, 0.16), furMat);
+    leg.position.set(0, -0.12, 0);
+    group.add(leg);
+
+    // Dark hoof at top/front of arm
+    const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.18), hoofMat);
+    hoof.position.set(0, 0.13, 0);
+    group.add(hoof);
+
+    // Positioned in bottom-right corner, tilted up and slightly inward toward screen center
+    group.position.set(0.36, -0.28, -0.48);
+    group.rotation.set(0.12, -0.28, 0.08);
+    return group;
+  }
+
+  public updateHeldItemModel() {
+    if (this.heldItemMesh) {
+      this.handGroup.remove(this.heldItemMesh);
+      this.heldItemMesh.geometry?.dispose();
+      this.heldItemMesh = null;
+    }
+
+    const currentStack = this.inventory[this.selectedSlot];
+    if (!currentStack) return;
+
+    const id = currentStack.id;
+
+    // If it's a block: render miniature 3D block held by the hoof, tilted upright facing player
+    if (BLOCK_DEFS[id]) {
+      const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+      this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
+      this.setupMeshUVs(geo, id);
+      this.heldItemMesh.position.set(-0.02, 0.15, -0.06);
+      this.heldItemMesh.rotation.set(0.2, -0.45, 0.15);
+      this.handGroup.add(this.heldItemMesh);
+    } else {
+      // It's a tool or item: authentic Minecraft voxel design
+      const def = ITEM_DEFS[id];
+      const toolGroup = new THREE.Group();
+
+      let headColor = 0x8a6d3b; // wood
+      if (def?.tool) {
+        if (def.tool.material === 'iron') headColor = 0xe0e0e0;
+        else if (def.tool.material === 'diamond') headColor = 0x38ebf5;
+        else if (def.tool.material === 'stone') headColor = 0x808080;
+      } else if (id === ItemType.GOLD_INGOT) {
+        headColor = 0xffd700;
+      } else if (id === ItemType.DIAMOND) {
+        headColor = 0x38ebf5;
+      } else if (id === ItemType.APPLE) {
+        headColor = 0xd42222;
+      } else if (id === ItemType.COOKED_STEAK || id === ItemType.RAW_BEEF) {
+        headColor = 0xba3c3c;
+      } else if (id === ItemType.RAW_PORKCHOP || id === ItemType.COOKED_PORKCHOP) {
+        headColor = 0xf09090;
+      } else if (id === ItemType.RAW_MUTTON || id === ItemType.COOKED_MUTTON) {
+        headColor = 0xcc6060;
+      } else if (id === ItemType.RAW_CHICKEN || id === ItemType.COOKED_CHICKEN) {
+        headColor = 0xdeaa88;
+      } else if (id === ItemType.WHITE_WOOL) {
+        headColor = 0xf0f0eb;
+      } else if (id === ItemType.COAL || id === ItemType.CHARCOAL) {
+        headColor = 0x222222;
+      }
+
+      const woodHandleMat = new THREE.MeshLambertMaterial({ color: 0x6e4e20 });
+      const toolMat = new THREE.MeshLambertMaterial({ color: headColor });
+
+      // Wooden handle rod
+      const handleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.52, 0.045), woodHandleMat);
+      handleMesh.position.set(0, 0, 0);
+      toolGroup.add(handleMesh);
+
+      // Authentic Minecraft Tool Head Modeling
+      if (def?.tool?.type === 'pickaxe') {
+        // Minecraft Iconic Curved Pickaxe Head with arched wings and pointed down-teeth!
+        const center = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.07), toolMat);
+        center.position.set(0, 0.24, 0);
+        toolGroup.add(center);
+
+        // Left curved arm
+        const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.07), toolMat);
+        leftArm.position.set(-0.08, 0.23, 0);
+        toolGroup.add(leftArm);
+
+        // Left down-curving spike
+        const leftSpike = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.07), toolMat);
+        leftSpike.position.set(-0.14, 0.17, 0);
+        toolGroup.add(leftSpike);
+
+        // Left sharp point
+        const leftPoint = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.06), toolMat);
+        leftPoint.position.set(-0.16, 0.09, 0);
+        toolGroup.add(leftPoint);
+
+        // Right curved arm
+        const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.07), toolMat);
+        rightArm.position.set(0.08, 0.23, 0);
+        toolGroup.add(rightArm);
+
+        // Right down-curving spike
+        const rightSpike = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.07), toolMat);
+        rightSpike.position.set(0.14, 0.17, 0);
+        toolGroup.add(rightSpike);
+
+        // Right sharp point
+        const rightPoint = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.06), toolMat);
+        rightPoint.position.set(0.16, 0.09, 0);
+        toolGroup.add(rightPoint);
+      } else if (def?.tool?.type === 'sword') {
+        // Minecraft Sword: Pommel, grip, crossguard with wings, and tapered blade
+        const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.07), woodHandleMat);
+        pommel.position.set(0, -0.22, 0);
+        toolGroup.add(pommel);
+
+        const guardMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+        const crossguard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.07), guardMat);
+        crossguard.position.set(0, 0.06, 0);
+        toolGroup.add(crossguard);
+
+        const guardLeft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.07), guardMat);
+        guardLeft.position.set(-0.13, 0.09, 0);
+        toolGroup.add(guardLeft);
+
+        const guardRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.07), guardMat);
+        guardRight.position.set(0.13, 0.09, 0);
+        toolGroup.add(guardRight);
+
+        // Sword blade
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.48, 0.04), toolMat);
+        blade.position.set(0, 0.32, 0);
+        toolGroup.add(blade);
+
+        // Sword tip
+        const tip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.04), toolMat);
+        tip.position.set(0, 0.58, 0);
+        toolGroup.add(tip);
+      } else if (def?.tool?.type === 'axe') {
+        // Minecraft Axe: Counterweight poll behind, wide flared blade in front
+        const backPoll = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.07), toolMat);
+        backPoll.position.set(0.06, 0.22, 0);
+        toolGroup.add(backPoll);
+
+        const mainBlade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.07), toolMat);
+        mainBlade.position.set(-0.08, 0.22, 0);
+        toolGroup.add(mainBlade);
+
+        const upperBeard = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.07), toolMat);
+        upperBeard.position.set(-0.16, 0.26, 0);
+        toolGroup.add(upperBeard);
+
+        const lowerBeard = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.07), toolMat);
+        lowerBeard.position.set(-0.16, 0.14, 0);
+        toolGroup.add(lowerBeard);
+      } else if (def?.tool?.type === 'shovel') {
+        // Minecraft Shovel: Socket neck and scooped spade head
+        const neck = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.07), toolMat);
+        neck.position.set(0, 0.24, 0);
+        toolGroup.add(neck);
+
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.05), toolMat);
+        blade.position.set(0, 0.34, 0);
+        toolGroup.add(blade);
+
+        const tip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.05), toolMat);
+        tip.position.set(0, 0.44, 0);
+        toolGroup.add(tip);
+      } else {
+        // General items, food, materials (apple, ingot, diamond, wool, meat)
+        if (id === ItemType.DIAMOND) {
+          const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), toolMat);
+          gem.position.set(0, 0.16, 0);
+          toolGroup.add(gem);
+        } else if (id === ItemType.APPLE) {
+          const apple = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), toolMat);
+          apple.position.set(0, 0.14, 0);
+          toolGroup.add(apple);
+          const stem = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.04), woodHandleMat);
+          stem.position.set(0, 0.26, 0);
+          toolGroup.add(stem);
+        } else {
+          const itemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.16), toolMat);
+          itemMesh.position.set(0, 0.14, 0);
+          toolGroup.add(itemMesh);
+        }
+      }
+
+      // Attaches right at the hoof, pointed UPWARD & forward towards crosshair
+      toolGroup.position.set(-0.02, 0.15, -0.06);
+      toolGroup.rotation.set(-0.16, 0.32, -0.22);
+      this.heldItemMesh = toolGroup as unknown as THREE.Mesh;
+      this.handGroup.add(this.heldItemMesh);
+    }
+  }
+
+  private setupMeshUVs(geo: THREE.BoxGeometry, blockId: AnyItemId) {
+    const def = BLOCK_DEFS[blockId];
+    if (!def) return;
+    const uvAttr = geo.attributes.uv;
+    const tileUvSize = TILE_SIZE / ATLAS_SIZE;
+    const tiles = [def.side, def.side, def.top, def.bottom, def.front || def.side, def.side];
+
+    for (let f = 0; f < 6; f++) {
+      const t = tiles[f];
+      const tx = t % TILES_PER_ROW;
+      const ty = Math.floor(t / TILES_PER_ROW);
+      const u0 = tx * tileUvSize;
+      const u1 = u0 + tileUvSize;
+      const v0 = 1 - (ty + 1) * tileUvSize;
+      const v1 = 1 - ty * tileUvSize;
+
+      uvAttr.setXY(f * 4 + 0, u0, v1);
+      uvAttr.setXY(f * 4 + 1, u1, v1);
+      uvAttr.setXY(f * 4 + 2, u0, v0);
+      uvAttr.setXY(f * 4 + 3, u1, v0);
+    }
+    uvAttr.needsUpdate = true;
+  }
+
+  // ================= KEY BINDINGS HELPERS =================
+  public setKeyBindings(binds: KeyBindings) {
+    this.keyBindings = { ...binds };
+    try {
+      localStorage.setItem('esekcraft_keybinds', JSON.stringify(binds));
+    } catch {}
+  }
+
+  public isActionActive(action: keyof KeyBindings): boolean {
+    const code = this.keyBindings[action];
+    if (!code) return false;
+    if (this.keys[code]) return true;
+    if (code === 'ShiftLeft' && this.keys['ShiftRight']) return true;
+    if (code === 'ShiftRight' && this.keys['ShiftLeft']) return true;
+    if (code === 'ControlLeft' && this.keys['ControlRight']) return true;
+    if (code === 'ControlRight' && this.keys['ControlLeft']) return true;
+    return false;
+  }
+
+  // ================= 3D MOB MODELS (Cow, Sheep, Pig, Chicken) =================
+  private createCowModel(): THREE.Group {
+    const g = new THREE.Group();
+    const cowBrown = new THREE.MeshLambertMaterial({ color: 0x543825 });
+    const cowWhite = new THREE.MeshLambertMaterial({ color: 0xe0ded8 });
+    const cowSnout = new THREE.MeshLambertMaterial({ color: 0xbaa293 });
+    const cowHorn = new THREE.MeshLambertMaterial({ color: 0xeae6dc });
+    const cowHoof = new THREE.MeshLambertMaterial({ color: 0x242424 });
+    const cowUdder = new THREE.MeshLambertMaterial({ color: 0xf29f9f });
+    const black = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    const materials = [cowBrown, cowWhite, cowSnout, cowHorn, cowHoof, cowUdder, black];
+
+    // Body (0.86 w, 0.76 h, 1.35 len)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.76, 1.35), cowBrown);
+    body.position.set(0, 0.98, 0);
+    g.add(body);
+
+    // White cow spots
+    const spot1 = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.42, 0.52), cowWhite);
+    spot1.position.set(0, 1.05, -0.2);
+    g.add(spot1);
+
+    const spot2 = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.35, 0.42), cowWhite);
+    spot2.position.set(0, 0.92, 0.32);
+    g.add(spot2);
+
+    // Pink Udder underneath rear
+    const udder = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.32), cowUdder);
+    udder.position.set(0, 0.55, 0.36);
+    g.add(udder);
+
+    // Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.35, -0.75);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.44, 0.44), cowBrown);
+    headGroup.add(head);
+
+    // White spot on forehead
+    const forehead = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.46), cowWhite);
+    forehead.position.set(0, 0.1, 0);
+    headGroup.add(forehead);
+
+    // Snout / Muzzle
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.2), cowSnout);
+    snout.position.set(0, -0.11, -0.24);
+    headGroup.add(snout);
+
+    // Nostrils
+    const nostril1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), black);
+    nostril1.position.set(-0.1, -0.12, -0.34);
+    headGroup.add(nostril1);
+    const nostril2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), black);
+    nostril2.position.set(0.1, -0.12, -0.34);
+    headGroup.add(nostril2);
+
+    // Horns
+    const horn1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.08), cowHorn);
+    horn1.position.set(-0.25, 0.28, 0.02);
+    headGroup.add(horn1);
+    const horn2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.08), cowHorn);
+    horn2.position.set(0.25, 0.28, 0.02);
+    headGroup.add(horn2);
+
+    // Eyes
+    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), black);
+    eye1.position.set(-0.21, 0.06, -0.12);
+    headGroup.add(eye1);
+    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), black);
+    eye2.position.set(0.21, 0.06, -0.12);
+    headGroup.add(eye2);
+
+    g.add(headGroup);
+
+    // 4 Legs
+    const legs: THREE.Group[] = [];
+    const legCoords = [
+      [-0.28, -0.42], // front-left
+      [0.28, -0.42],  // front-right
+      [-0.28, 0.42],  // back-left
+      [0.28, 0.42],   // back-right
+    ];
+
+    for (const [lx, lz] of legCoords) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(lx, 0.62, lz);
+
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.62, 0.22), cowBrown);
+      leg.position.set(0, -0.31, 0);
+      legGroup.add(leg);
+
+      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.24), cowHoof);
+      hoof.position.set(0, -0.56, 0);
+      legGroup.add(hoof);
+
+      g.add(legGroup);
+      legs.push(legGroup);
+    }
+
+    g.userData = { headGroup, legs, materials, origColors: materials.map((m) => m.color.getHex()) };
+    return g;
+  }
+
+  private createSheepModel(): THREE.Group {
+    const g = new THREE.Group();
+    const woolMat = new THREE.MeshLambertMaterial({ color: 0xf4f4ee });
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xd9b29a });
+    const hoofMat = new THREE.MeshLambertMaterial({ color: 0x242424 });
+    const black = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    const materials = [woolMat, skinMat, hoofMat, black];
+
+    // Big fluffy wool body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.84, 1.34), woolMat);
+    body.position.set(0, 0.96, 0);
+    g.add(body);
+
+    // Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.28, -0.74);
+
+    // Pink / Skin sheep face
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.42), skinMat);
+    headGroup.add(face);
+
+    // Wool cap on head top/back
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.38), woolMat);
+    cap.position.set(0, 0.16, 0.04);
+    headGroup.add(cap);
+
+    // Ears
+    const ear1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.16), skinMat);
+    ear1.position.set(-0.21, 0.06, 0.06);
+    headGroup.add(ear1);
+    const ear2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.16), skinMat);
+    ear2.position.set(0.21, 0.06, 0.06);
+    headGroup.add(ear2);
+
+    // Eyes
+    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), black);
+    eye1.position.set(-0.16, 0.04, -0.15);
+    headGroup.add(eye1);
+    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), black);
+    eye2.position.set(0.16, 0.04, -0.15);
+    headGroup.add(eye2);
+
+    g.add(headGroup);
+
+    // 4 Legs with wool shoulders
+    const legs: THREE.Group[] = [];
+    const legCoords = [
+      [-0.28, -0.42],
+      [0.28, -0.42],
+      [-0.28, 0.42],
+      [0.28, 0.42],
+    ];
+
+    for (const [lx, lz] of legCoords) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(lx, 0.62, lz);
+
+      const woolUpper = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.22), woolMat);
+      woolUpper.position.set(0, -0.12, 0);
+      legGroup.add(woolUpper);
+
+      const skinLeg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.38, 0.18), skinMat);
+      skinLeg.position.set(0, -0.38, 0);
+      legGroup.add(skinLeg);
+
+      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.08, 0.19), hoofMat);
+      hoof.position.set(0, -0.58, 0);
+      legGroup.add(hoof);
+
+      g.add(legGroup);
+      legs.push(legGroup);
+    }
+
+    g.userData = { headGroup, legs, materials, origColors: materials.map((m) => m.color.getHex()) };
+    return g;
+  }
+
+  private createPigModel(): THREE.Group {
+    const g = new THREE.Group();
+    const pigPink = new THREE.MeshLambertMaterial({ color: 0xf29090 });
+    const snoutPink = new THREE.MeshLambertMaterial({ color: 0xd96f72 });
+    const hoofMat = new THREE.MeshLambertMaterial({ color: 0x3d2729 });
+    const black = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    const materials = [pigPink, snoutPink, hoofMat, black];
+
+    // Pig body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.72, 1.25), pigPink);
+    body.position.set(0, 0.78, 0);
+    g.add(body);
+
+    // Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.98, -0.72);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.44), pigPink);
+    headGroup.add(head);
+
+    // Distinct Protruding Pig Snout
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.15), snoutPink);
+    snout.position.set(0, -0.07, -0.27);
+    headGroup.add(snout);
+
+    // Nostrils
+    const nostril1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.03), black);
+    nostril1.position.set(-0.07, -0.07, -0.35);
+    headGroup.add(nostril1);
+    const nostril2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.03), black);
+    nostril2.position.set(0.07, -0.07, -0.35);
+    headGroup.add(nostril2);
+
+    // Eyes
+    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), black);
+    eye1.position.set(-0.21, 0.06, -0.12);
+    headGroup.add(eye1);
+    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), black);
+    eye2.position.set(0.21, 0.06, -0.12);
+    headGroup.add(eye2);
+
+    g.add(headGroup);
+
+    // 4 Short Pink Legs
+    const legs: THREE.Group[] = [];
+    const legCoords = [
+      [-0.26, -0.38],
+      [0.26, -0.38],
+      [-0.26, 0.38],
+      [0.26, 0.38],
+    ];
+
+    for (const [lx, lz] of legCoords) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(lx, 0.48, lz);
+
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.48, 0.2), pigPink);
+      leg.position.set(0, -0.24, 0);
+      legGroup.add(leg);
+
+      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.08, 0.21), hoofMat);
+      hoof.position.set(0, -0.46, 0);
+      legGroup.add(hoof);
+
+      g.add(legGroup);
+      legs.push(legGroup);
+    }
+
+    g.userData = { headGroup, legs, materials, origColors: materials.map((m) => m.color.getHex()) };
+    return g;
+  }
+
+  private createChickenModel(): THREE.Group {
+    const g = new THREE.Group();
+    const whiteMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const beakMat = new THREE.MeshLambertMaterial({ color: 0xf5a623 });
+    const wattleMat = new THREE.MeshLambertMaterial({ color: 0xd02525 });
+    const footMat = new THREE.MeshLambertMaterial({ color: 0xcca020 });
+    const black = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+    const materials = [whiteMat, beakMat, wattleMat, footMat, black];
+
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.34, 0.48), whiteMat);
+    body.position.set(0, 0.48, 0);
+    g.add(body);
+
+    // Wings
+    const wing1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.32), whiteMat);
+    wing1.position.set(-0.21, 0.48, 0);
+    g.add(wing1);
+    const wing2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.32), whiteMat);
+    wing2.position.set(0.21, 0.48, 0);
+    g.add(wing2);
+
+    // Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.72, -0.26);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.2), whiteMat);
+    headGroup.add(head);
+
+    // Yellow beak
+    const beak = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.14), beakMat);
+    beak.position.set(0, -0.04, -0.15);
+    headGroup.add(beak);
+
+    // Red wattle
+    const wattle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.06), wattleMat);
+    wattle.position.set(0, -0.12, -0.1);
+    headGroup.add(wattle);
+
+    // Eyes
+    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.04), black);
+    eye1.position.set(-0.1, 0.06, -0.07);
+    headGroup.add(eye1);
+    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.04), black);
+    eye2.position.set(0.1, 0.06, -0.07);
+    headGroup.add(eye2);
+
+    g.add(headGroup);
+
+    // 2 Yellow Legs
+    const legs: THREE.Group[] = [];
+    for (const lx of [-0.09, 0.09]) {
+      const legGroup = new THREE.Group();
+      legGroup.position.set(lx, 0.31, 0);
+
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), footMat);
+      leg.position.set(0, -0.14, 0);
+      legGroup.add(leg);
+
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.14), footMat);
+      foot.position.set(0, -0.27, -0.03);
+      legGroup.add(foot);
+
+      g.add(legGroup);
+      legs.push(legGroup);
+    }
+
+    g.userData = { headGroup, legs, wings: [wing1, wing2], materials, origColors: materials.map((m) => m.color.getHex()) };
+    return g;
+  }
+
+  // ================= MOB SPAWNING, AI & COMBAT =================
+  public spawnMobs(targetCount = 14) {
+    const mobTypes = [MobType.COW, MobType.SHEEP, MobType.PIG, MobType.CHICKEN];
+
+    for (let i = 0; i < targetCount; i++) {
+      const x = Math.floor(8 + Math.random() * (SX - 16));
+      const z = Math.floor(8 + Math.random() * (SZ - 16));
+      const topY = this.world.getTopSolid(x, z);
+
+      if (topY <= 0 || topY >= SY - 2) continue;
+      const b = this.world.getBlock(x, topY, z);
+      if (b !== BlockType.GRASS) continue;
+
+      const type = mobTypes[Math.floor(Math.random() * mobTypes.length)];
+      let mesh: THREE.Group;
+      let hp = 10;
+
+      if (type === MobType.COW) {
+        mesh = this.createCowModel();
+        hp = 10;
+      } else if (type === MobType.SHEEP) {
+        mesh = this.createSheepModel();
+        hp = 8;
+      } else if (type === MobType.PIG) {
+        mesh = this.createPigModel();
+        hp = 10;
+      } else {
+        mesh = this.createChickenModel();
+        hp = 4;
+      }
+
+      const posX = x + 0.5;
+      const posY = topY + 1.0;
+      const posZ = z + 0.5;
+      mesh.position.set(posX, posY, posZ);
+      this.scene.add(mesh);
+
+      const mob: MobEntity = {
+        id: `mob_${Date.now()}_${i}`,
+        type,
+        mesh,
+        pos: { x: posX, y: posY, z: posZ },
+        vel: { x: 0, y: 0, z: 0 },
+        yaw: Math.random() * Math.PI * 2,
+        hp,
+        maxHp: hp,
+        hurtTimer: 0,
+        wanderTimer: 2 + Math.random() * 4,
+        soundTimer: 6 + Math.random() * 16,
+        walkPhase: Math.random() * 10,
+        isPanicking: false,
+        panicTimer: 0,
+      };
+
+      this.mobs.push(mob);
+    }
+  }
+
+  private updateMobs(dt: number) {
+    for (let i = this.mobs.length - 1; i >= 0; i--) {
+      const mob = this.mobs[i];
+
+      // Hurt timer & red damage flash
+      if (mob.hurtTimer > 0) {
+        mob.hurtTimer -= dt;
+        const flash = mob.hurtTimer > 0;
+        const ud = mob.mesh.userData;
+        if (ud?.materials && ud?.origColors) {
+          for (let m = 0; m < ud.materials.length; m++) {
+            ud.materials[m].color.setHex(flash ? 0xff4444 : ud.origColors[m]);
+          }
+        }
+      }
+
+      // Panic timer
+      if (mob.isPanicking) {
+        mob.panicTimer -= dt;
+        if (mob.panicTimer <= 0) {
+          mob.isPanicking = false;
+        }
+      }
+
+      // Ambient sounds
+      mob.soundTimer -= dt;
+      if (mob.soundTimer <= 0) {
+        mob.soundTimer = 12 + Math.random() * 22;
+        const dist = Math.hypot(mob.pos.x - this.pos.x, mob.pos.y - this.pos.y, mob.pos.z - this.pos.z);
+        if (dist < 20) {
+          if (mob.type === MobType.COW) Sound.cowMoo();
+          else if (mob.type === MobType.SHEEP) Sound.sheepBaa();
+          else if (mob.type === MobType.PIG) Sound.pigOink();
+          else if (mob.type === MobType.CHICKEN) Sound.chickenCluck();
+        }
+      }
+
+      // Wander / Movement AI
+      mob.wanderTimer -= dt;
+      if (mob.wanderTimer <= 0 && !mob.isPanicking) {
+        mob.wanderTimer = 2.5 + Math.random() * 4.5;
+        if (Math.random() < 0.45) {
+          mob.vel.x = 0;
+          mob.vel.z = 0;
+        } else {
+          mob.yaw = Math.random() * Math.PI * 2;
+        }
+      }
+
+      let speed = mob.type === MobType.CHICKEN ? 1.4 : 1.6;
+      if (mob.isPanicking) speed *= 2.6;
+
+      const isMoving =
+        mob.isPanicking ||
+        (mob.wanderTimer > 1.2 && (Math.abs(mob.vel.x) > 0.05 || Math.abs(mob.vel.z) > 0.05 || Math.random() < 0.7));
+
+      if (isMoving) {
+        mob.vel.x = Math.sin(mob.yaw) * speed;
+        mob.vel.z = Math.cos(mob.yaw) * speed;
+        mob.walkPhase += dt * (mob.isPanicking ? 18 : 8);
+      } else {
+        mob.vel.x = 0;
+        mob.vel.z = 0;
+      }
+
+      // Gravity
+      if (mob.type === MobType.CHICKEN) {
+        mob.vel.y = Math.max(-2.5, mob.vel.y - 12 * dt); // Flapping slow fall
+      } else {
+        mob.vel.y = Math.max(-26, mob.vel.y - 24 * dt);
+      }
+
+      // Terrain collision & jump over 1-block steps
+      const nextX = mob.pos.x + mob.vel.x * dt;
+      const nextZ = mob.pos.z + mob.vel.z * dt;
+      const curY = Math.floor(mob.pos.y);
+
+      if (inBounds(Math.floor(nextX), curY, Math.floor(mob.pos.z))) {
+        const blk = this.world.getBlock(Math.floor(nextX), curY, Math.floor(mob.pos.z));
+        if (blk !== BlockType.AIR && blk !== BlockType.TORCH) {
+          const above = this.world.getBlock(Math.floor(nextX), curY + 1, Math.floor(mob.pos.z));
+          if (above === BlockType.AIR || above === BlockType.TORCH) {
+            mob.vel.y = 5.2; // hop up 1 block!
+          } else {
+            mob.yaw += Math.PI * 0.75;
+          }
+        } else {
+          mob.pos.x = nextX;
+        }
+      }
+
+      if (inBounds(Math.floor(mob.pos.x), curY, Math.floor(nextZ))) {
+        const blk = this.world.getBlock(Math.floor(mob.pos.x), curY, Math.floor(nextZ));
+        if (blk !== BlockType.AIR && blk !== BlockType.TORCH) {
+          const above = this.world.getBlock(Math.floor(mob.pos.x), curY + 1, Math.floor(nextZ));
+          if (above === BlockType.AIR || above === BlockType.TORCH) {
+            mob.vel.y = 5.2;
+          } else {
+            mob.yaw += Math.PI * 0.75;
+          }
+        } else {
+          mob.pos.z = nextZ;
+        }
+      }
+
+      // Y Movement & ground landing
+      mob.pos.y += mob.vel.y * dt;
+      const groundY = this.world.getTopSolid(Math.floor(mob.pos.x), Math.floor(mob.pos.z));
+      if (mob.pos.y < groundY + 1.0) {
+        mob.pos.y = groundY + 1.0;
+        mob.vel.y = 0;
+      }
+
+      // Update mesh position and rotation
+      mob.mesh.position.set(mob.pos.x, mob.pos.y, mob.pos.z);
+      mob.mesh.rotation.y = mob.yaw;
+
+      // Limb swing animation
+      const ud = mob.mesh.userData;
+      if (ud?.legs && ud.legs.length >= 2) {
+        const swing = Math.sin(mob.walkPhase) * 0.55;
+        if (ud.legs.length === 4) {
+          ud.legs[0].rotation.x = swing;
+          ud.legs[1].rotation.x = -swing;
+          ud.legs[2].rotation.x = -swing;
+          ud.legs[3].rotation.x = swing;
+        } else if (ud.legs.length === 2) {
+          ud.legs[0].rotation.x = swing;
+          ud.legs[1].rotation.x = -swing;
+        }
+      }
+
+      // Chicken wing flapping
+      if (mob.type === MobType.CHICKEN && ud?.wings) {
+        const flap = isMoving || mob.vel.y < -0.1 ? Math.sin(performance.now() * 0.03) * 0.6 : 0;
+        ud.wings[0].rotation.z = -flap;
+        ud.wings[1].rotation.z = flap;
+      }
+    }
+  }
+
+  private raycastMob(
+    eye: { x: number; y: number; z: number },
+    dir: { x: number; y: number; z: number },
+    maxDist: number
+  ): MobEntity | null {
+    let closestMob: MobEntity | null = null;
+    let closestDist = maxDist;
+
+    for (const mob of this.mobs) {
+      const dx = mob.pos.x - eye.x;
+      const dy = mob.pos.y + 0.6 - eye.y;
+      const dz = mob.pos.z - eye.z;
+
+      const proj = dx * dir.x + dy * dir.y + dz * dir.z;
+      if (proj <= 0.2 || proj > closestDist) continue;
+
+      const perpX = dx - proj * dir.x;
+      const perpY = dy - proj * dir.y;
+      const perpZ = dz - proj * dir.z;
+      const perpDistSq = perpX * perpX + perpY * perpY + perpZ * perpZ;
+
+      const radius = mob.type === MobType.CHICKEN ? 0.45 : 0.85;
+      if (perpDistSq < radius * radius) {
+        closestDist = proj;
+        closestMob = mob;
+      }
+    }
+    return closestMob;
+  }
+
+  private attackMob(mob: MobEntity, dir: { x: number; y: number; z: number }) {
+    const currentItem = this.inventory[this.selectedSlot];
+    const def = currentItem ? ITEM_DEFS[currentItem.id] : null;
+
+    let damage = 2; // Bare hand
+    if (this.gameMode === 'creative') {
+      damage = 25;
+    } else if (def?.tool?.damage) {
+      damage = def.tool.damage;
+    }
+
+    mob.hp -= damage;
+    mob.hurtTimer = 0.28;
+    Sound.mobHurt();
+
+    // Knockback
+    mob.isPanicking = true;
+    mob.panicTimer = 3.2;
+    mob.yaw = Math.atan2(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
+    mob.vel.x = dir.x * 6;
+    mob.vel.y = 4.0;
+    mob.vel.z = dir.z * 6;
+
+    // Check Mob Death
+    if (mob.hp <= 0) {
+      // White smoke death puff
+      for (let p = 0; p < 12; p++) {
+        const geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(mob.pos.x, mob.pos.y + 0.5, mob.pos.z);
+        this.scene.add(mesh);
+        this.particles.push({
+          mesh,
+          vel: {
+            x: (Math.random() - 0.5) * 3,
+            y: 1.5 + Math.random() * 2,
+            z: (Math.random() - 0.5) * 3,
+          },
+          life: 0,
+          maxLife: 0.4 + Math.random() * 0.3,
+        });
+      }
+
+      // Authentic Minecraft mob drops & XP
+      if (mob.type === MobType.COW) {
+        const beefCount = Math.floor(1 + Math.random() * 3); // 1-3
+        const leatherCount = Math.floor(Math.random() * 3); // 0-2
+        this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.RAW_BEEF, beefCount);
+        if (leatherCount > 0) {
+          this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.LEATHER, leatherCount);
+        }
+        this.addXP(Math.floor(1 + Math.random() * 3));
+        this.onToast?.(`İnek kesildi! +${beefCount} Çiğ Sığır Eti`);
+      } else if (mob.type === MobType.SHEEP) {
+        const muttonCount = Math.floor(1 + Math.random() * 2); // 1-2
+        this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.WHITE_WOOL, 1);
+        this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.RAW_MUTTON, muttonCount);
+        this.addXP(Math.floor(1 + Math.random() * 3));
+        this.onToast?.(`Koyun kesildi! +1 Beyaz Yün, +${muttonCount} Çiğ Koyun Eti`);
+      } else if (mob.type === MobType.PIG) {
+        const porkCount = Math.floor(1 + Math.random() * 3); // 1-3
+        this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.RAW_PORKCHOP, porkCount);
+        this.addXP(Math.floor(1 + Math.random() * 3));
+        this.onToast?.(`Domuz kesildi! +${porkCount} Çiğ Domuz Eti`);
+      } else if (mob.type === MobType.CHICKEN) {
+        const featherCount = Math.floor(Math.random() * 3); // 0-2
+        this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.RAW_CHICKEN, 1);
+        if (featherCount > 0) {
+          this.spawnDrop(mob.pos.x, mob.pos.y + 0.5, mob.pos.z, ItemType.FEATHER, featherCount);
+        }
+        this.addXP(Math.floor(1 + Math.random() * 3));
+        this.onToast?.(`Tavuk kesildi! +1 Çiğ Tavuk`);
+      }
+
+      this.scene.remove(mob.mesh);
+      this.mobs = this.mobs.filter((m) => m.id !== mob.id);
+    }
+  }
+
+  // ================= DAY / NIGHT CYCLE =================
+  private updateDayNight(dt: number) {
+    this.timeOfDay = (this.timeOfDay + dt / this.dayLength) % 1.0;
+
+    // Angle: 0 = noon, 0.25 = sunset, 0.5 = midnight, 0.75 = sunrise
+    const angle = this.timeOfDay * Math.PI * 2;
+    const sunDist = 140;
+
+    const sunX = Math.sin(angle) * sunDist;
+    const sunY = Math.cos(angle) * sunDist;
+    const sunZ = 20;
+
+    this.sunMesh.position.set(this.pos.x + sunX, this.pos.y + sunY, this.pos.z + sunZ);
+    this.moonMesh.position.set(this.pos.x - sunX, this.pos.y - sunY, this.pos.z - sunZ);
+    this.starsGroup.position.set(this.pos.x, this.pos.y, this.pos.z);
+
+    this.sunLight.position.set(this.pos.x + sunX, this.pos.y + sunY, this.pos.z + sunZ);
+
+    // Sky colors based on sun elevation
+    const sunElev = Math.cos(angle); // 1 = noon, -1 = midnight
+    let skyR = 0.53,
+      skyG = 0.81,
+      skyB = 0.92;
+    let lightIntensity = 0.7;
+
+    if (sunElev > 0.2) {
+      // Day
+      skyR = 0.53;
+      skyG = 0.81;
+      skyB = 0.92;
+      lightIntensity = 0.75;
+      this.starsGroup.visible = false;
+    } else if (sunElev > -0.2) {
+      // Sunset / Sunrise
+      const t = (sunElev + 0.2) / 0.4;
+      skyR = THREE.MathUtils.lerp(0.12, 0.85, t);
+      skyG = THREE.MathUtils.lerp(0.12, 0.55, t);
+      skyB = THREE.MathUtils.lerp(0.22, 0.35, t);
+      lightIntensity = THREE.MathUtils.lerp(0.2, 0.6, t);
+      this.starsGroup.visible = true;
+    } else {
+      // Night
+      skyR = 0.04;
+      skyG = 0.05;
+      skyB = 0.1;
+      lightIntensity = 0.15;
+      this.starsGroup.visible = true;
+    }
+
+    const skyColor = new THREE.Color(skyR, skyG, skyB);
+    this.scene.background = skyColor;
+    if (this.scene.fog) {
+      this.scene.fog.color = skyColor;
+    }
+    this.hemiLight.color.setRGB(skyR + 0.3, skyG + 0.3, skyB + 0.3);
+    this.hemiLight.intensity = Math.max(0.25, lightIntensity * 0.9);
+    this.sunLight.intensity = Math.max(0.05, Math.max(0, sunElev) * 0.7);
+  }
+
+  // ================= PHYSICS & PLAYER MOVEMENT =================
+  private checkCollision(px: number, py: number, pz: number): boolean {
+    const x0 = Math.floor(px - this.PW);
+    const x1 = Math.floor(px + this.PW);
+    const y0 = Math.floor(py);
+    const y1 = Math.floor(py + this.PH - 0.001);
+    const z0 = Math.floor(pz - this.PW);
+    const z1 = Math.floor(pz + this.PW);
+
+    for (let y = y0; y <= y1; y++) {
+      for (let z = z0; z <= z1; z++) {
+        for (let x = x0; x <= x1; x++) {
+          const b = this.world.getBlockPhys(x, y, z);
+          if (b !== BlockType.AIR && b !== BlockType.TORCH) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private updatePlayer(dt: number) {
+    if (this.isDead) return;
+
+    this.isSneaking = this.isActionActive('sneak') && this.onGround && !this.isFlying;
+    this.isSprinting =
+      (this.isActionActive('sprint') || !!(this.keys['ControlLeft'] || this.keys['ControlRight'])) &&
+      !this.isSneaking &&
+      this.hunger > 6;
+
+    // Movement Input
+    let mx = 0,
+      mz = 0;
+    if (this.isActionActive('forward')) mz -= 1;
+    if (this.isActionActive('backward')) mz += 1;
+    if (this.isActionActive('left')) mx -= 1;
+    if (this.isActionActive('right')) mx += 1;
+
+    const len = Math.hypot(mx, mz);
+    if (len > 0) {
+      mx /= len;
+      mz /= len;
+    }
+
+    const sin = Math.sin(this.yaw);
+    const cos = Math.cos(this.yaw);
+    const wishX = mx * cos + mz * sin;
+    const wishZ = -mx * sin + mz * cos;
+
+    // Creative Flying Mode
+    if (this.isFlying) {
+      let speed = 10;
+      if (this.isActionActive('jump')) this.pos.y += speed * dt;
+      if (this.isActionActive('sneak')) this.pos.y -= speed * dt;
+      this.pos.x += wishX * speed * dt;
+      this.pos.z += wishZ * speed * dt;
+      this.vel = { x: 0, y: 0, z: 0 };
+      return;
+    }
+
+    let speed = 4.35;
+    if (this.isSneaking) speed = 1.35;
+    else if (this.isSprinting) speed = 5.75;
+
+    const wishLen = Math.hypot(wishX, wishZ);
+    const targetVx = wishLen > 0 ? (wishX / wishLen) * speed : 0;
+    const targetVz = wishLen > 0 ? (wishZ / wishLen) * speed : 0;
+
+    if (this.onGround) {
+      this.vel.x = targetVx;
+      this.vel.z = targetVz;
+    } else {
+      this.vel.x += (targetVx - this.vel.x) * Math.min(1, dt * 2.5);
+      this.vel.z += (targetVz - this.vel.z) * Math.min(1, dt * 2.5);
+    }
+
+    // Jump
+    if (this.isActionActive('jump') && this.onGround) {
+      this.vel.y = 8.4;
+      this.onGround = false;
+      Sound.step(this.getCurrentSurfaceMaterial());
+      this.hungerExhaustion += 0.2;
+    }
+
+    // Gravity
+    this.vel.y -= 26 * dt;
+    if (this.vel.y < -48) this.vel.y = -48;
+
+    // Y Axis Collision
+    const oldY = this.pos.y;
+    this.pos.y += this.vel.y * dt;
+    if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
+      if (this.vel.y < 0) {
+        this.pos.y = Math.floor(this.pos.y) + 1;
+        while (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.pos.y += 0.01;
+
+        // Fall damage calculation
+        const fallDistance = this.fallStartY - this.pos.y;
+        if (fallDistance > 3.5 && this.gameMode === 'survival') {
+          const dmg = Math.floor(fallDistance - 3);
+          this.applyDamage(dmg, 'Düşerek öldün');
+        }
+        this.onGround = true;
+        this.fallStartY = this.pos.y;
+        if (fallDistance > 0.8) Sound.step(this.getCurrentSurfaceMaterial());
+      } else {
+        this.pos.y = oldY;
+        while (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.pos.y -= 0.01;
+      }
+      this.vel.y = 0;
+    } else {
+      if (this.onGround) this.fallStartY = this.pos.y;
+      this.onGround = false;
+      if (this.vel.y > 0) this.fallStartY = this.pos.y;
+    }
+
+    // Sneaking edge protection (bridging without falling off!)
+    let nextX = this.pos.x + this.vel.x * dt;
+    let nextZ = this.pos.z + this.vel.z * dt;
+    if (this.isSneaking && this.onGround) {
+      if (!this.checkCollision(nextX, this.pos.y - 0.5, this.pos.z)) {
+        nextX = this.pos.x;
+        this.vel.x = 0;
+      }
+      if (!this.checkCollision(this.pos.x, this.pos.y - 0.5, nextZ)) {
+        nextZ = this.pos.z;
+        this.vel.z = 0;
+      }
+    }
+
+    // X Axis Collision
+    this.pos.x = nextX;
+    if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
+      this.pos.x -= this.vel.x * dt;
+      this.vel.x = 0;
+    }
+
+    // Z Axis Collision
+    this.pos.z = nextZ;
+    if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
+      this.pos.z -= this.vel.z * dt;
+      this.vel.z = 0;
+    }
+
+    // World Bounding box limits
+    this.pos.x = Math.max(this.PW + 0.1, Math.min(SX - this.PW - 0.1, this.pos.x));
+    this.pos.z = Math.max(this.PW + 0.1, Math.min(SZ - this.PW - 0.1, this.pos.z));
+
+    // Void death
+    if (this.pos.y < -10) {
+      this.applyDamage(50, 'Boşluğa düştün');
+      this.pos.y = SY + 5;
+    }
+
+    // Footsteps
+    const horizontalSpeed = Math.hypot(this.vel.x, this.vel.z);
+    if (this.onGround && horizontalSpeed > 0.4) {
+      this.stepDistance += horizontalSpeed * dt;
+      this.walkPhase += horizontalSpeed * dt * 2.4;
+      if (this.stepDistance > (this.isSprinting ? 1.7 : 2.1)) {
+        this.stepDistance = 0;
+        Sound.step(this.getCurrentSurfaceMaterial());
+      }
+    }
+
+    // Survival Hunger & Health Regen
+    if (this.gameMode === 'survival') {
+      this.hungerExhaustion += (horizontalSpeed > 0.5 ? (this.isSprinting ? 0.12 : 0.05) : 0.01) * dt;
+      if (this.hungerExhaustion >= 4.0) {
+        this.hungerExhaustion -= 4.0;
+        if (this.hunger > 0) {
+          this.hunger--;
+          this.onHUDUpdate?.();
+        }
+      }
+
+      // Health regeneration when well fed
+      if (this.hunger >= 18 && this.hp < this.maxHp) {
+        this.regenTimer += dt;
+        if (this.regenTimer >= 4.0) {
+          this.regenTimer = 0;
+          this.hp = Math.min(this.maxHp, this.hp + 1);
+          this.hungerExhaustion += 1.5;
+          this.onHUDUpdate?.();
+        }
+      }
+
+      // Starvation damage when hunger is empty
+      if (this.hunger <= 0) {
+        this.starveTimer += dt;
+        if (this.starveTimer >= 4.0) {
+          this.starveTimer = 0;
+          if (this.hp > 1) {
+            this.applyDamage(1, 'Açlıktan öldün');
+          }
+        }
+      }
+    }
+  }
+
+  public applyDamage(amount: number, cause = 'Öldün') {
+    if (this.gameMode === 'creative' || this.isDead) return;
+
+    // Armor defense reduction
+    let defensePoints = 0;
+    this.armor.forEach((a) => {
+      if (a) {
+        const def = ITEM_DEFS[a.id]?.armor;
+        if (def) defensePoints += def.defense;
+      }
+    });
+
+    const damageMultiplier = Math.max(0.2, 1 - defensePoints * 0.04);
+    const finalDamage = Math.max(1, Math.round(amount * damageMultiplier));
+
+    this.hp -= finalDamage;
+    Sound.hit();
+    this.damageFlashTimer = 0.4;
+    this.onHUDUpdate?.();
+
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.isDead = true;
+      this.onUIStateChange?.('dead');
+      if (this.onToast) this.onToast(cause);
+    }
+  }
+
+  public respawn() {
+    this.isDead = false;
+    this.hp = this.maxHp;
+    this.hunger = this.maxHunger;
+    this.spawnDefaultPlayer();
+    this.onHUDUpdate?.();
+  }
+
+  private getCurrentSurfaceMaterial(): SoundMaterial {
+    const b = this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.2), Math.floor(this.pos.z));
+    if (b === BlockType.GRASS || b === BlockType.OAK_LEAVES) return 'grass';
+    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
+      return 'wood';
+    if (b === BlockType.SAND) return 'sand';
+    if (b === BlockType.GLASS) return 'glass';
+    return 'stone';
+  }
+
+  // ================= RAYCASTING, MINING & PLACING =================
+  public getEyePos(): { x: number; y: number; z: number } {
+    return {
+      x: this.pos.x,
+      y: this.pos.y + (this.isSneaking ? this.SNEAK_EYE : this.EYE_HEIGHT),
+      z: this.pos.z,
+    };
+  }
+
+  public getLookDir(): { x: number; y: number; z: number } {
+    const cp = Math.cos(this.pitch);
+    return {
+      x: -Math.sin(this.yaw) * cp,
+      y: Math.sin(this.pitch),
+      z: -Math.cos(this.yaw) * cp,
+    };
+  }
+
+  private updateInteraction(dt: number) {
+    if (this.isDead || this.isPaused) return;
+
+    const eye = this.getEyePos();
+    const dir = this.getLookDir();
+    const hit = this.world.raycast(eye, dir, 5.2);
+
+    // Update Highlight wireframe
+    if (hit) {
+      this.highlightBox.visible = true;
+      this.highlightBox.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    } else {
+      this.highlightBox.visible = false;
+    }
+
+    // Place cooldown
+    if (this.placeCooldown > 0) this.placeCooldown -= dt;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+
+    // Attack Mobs
+    if (this.mouseLeft && this.attackCooldown <= 0) {
+      const hitMob = this.raycastMob(eye, dir, 4.4);
+      if (hitMob) {
+        this.attackMob(hitMob, dir);
+        this.attackCooldown = 0.35;
+        this.swingTimer = 0;
+        this.breakingBlock = null;
+        this.breakProgress = 0;
+        this.crackMesh.visible = false;
+        return;
+      }
+    }
+
+    // Mining / Breaking
+    if (this.mouseLeft && hit) {
+      const bDef = BLOCK_DEFS[hit.id];
+      if (bDef && bDef.hardness !== Infinity) {
+        if (!this.breakingBlock || this.breakingBlock.x !== hit.x || this.breakingBlock.y !== hit.y || this.breakingBlock.z !== hit.z) {
+          this.breakingBlock = { x: hit.x, y: hit.y, z: hit.z };
+          this.breakProgress = 0;
+        }
+
+        // Calculate break speed based on tool
+        let toolSpeed = 1.0;
+        const currentItem = this.inventory[this.selectedSlot];
+        const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
+
+        if (this.gameMode === 'creative') {
+          toolSpeed = 100; // instant break
+        } else if (itemDef?.tool) {
+          if (itemDef.tool.type === bDef.requiredTool) {
+            toolSpeed = itemDef.tool.speed;
+          }
+        }
+
+        this.breakProgress += (dt * toolSpeed) / bDef.hardness;
+        if (this.swingTimer < 0) this.swingTimer = 0;
+
+        const stage = Math.min(9, Math.floor(this.breakProgress * 10));
+        this.crackMesh.visible = true;
+        this.crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+        if (this.crackMesh.material instanceof THREE.MeshBasicMaterial) {
+          this.crackMesh.material.map = crackTextures[stage];
+          this.crackMesh.material.needsUpdate = true;
+        }
+
+        // Continual mining debris particles and crack sound for vivid feedback
+        if (Math.random() < 0.35) {
+          Sound.crumble();
+          this.spawnBlockDebris(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, hit.id);
+        }
+
+        // Break completed!
+        if (this.breakProgress >= 1.0) {
+          this.breakBlock(hit);
+          this.breakingBlock = null;
+          this.breakProgress = 0;
+          this.crackMesh.visible = false;
+        }
+      }
+    } else {
+      if (this.breakingBlock) {
+        this.breakingBlock = null;
+        this.breakProgress = 0;
+        this.crackMesh.visible = false;
+      }
+    }
+
+    // Right Click (Place block or interact with Crafting Table / Furnace / Chest)
+    if (this.mouseRight && this.placeCooldown <= 0 && hit) {
+      this.placeCooldown = 0.25;
+
+      // Check right click on interactive block
+      if (!this.isSneaking) {
+        if (hit.id === BlockType.CRAFTING_TABLE) {
+          this.isGUIOpen = true;
+          this.exitPointerLock();
+          this.onUIStateChange?.('crafting_table');
+          return;
+        }
+        if (hit.id === BlockType.FURNACE || hit.id === BlockType.FURNACE_LIT) {
+          this.currentFurnacePos = { x: hit.x, y: hit.y, z: hit.z };
+          this.isGUIOpen = true;
+          this.exitPointerLock();
+          this.onUIStateChange?.('furnace');
+          return;
+        }
+        if (hit.id === BlockType.CHEST) {
+          this.currentChestPos = { x: hit.x, y: hit.y, z: hit.z };
+          this.isGUIOpen = true;
+          this.exitPointerLock();
+          Sound.chest();
+          this.onUIStateChange?.('chest');
+          return;
+        }
+      }
+
+      // Check food consumption
+      const held = this.inventory[this.selectedSlot];
+      if (held) {
+        const itemDef = ITEM_DEFS[held.id];
+        if (itemDef?.food && this.hunger < this.maxHunger) {
+          this.hunger = Math.min(this.maxHunger, this.hunger + itemDef.food.foodPoints);
+          this.hp = Math.min(this.maxHp, this.hp + itemDef.food.healHp);
+          held.count--;
+          if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+          Sound.eat();
+          this.onHUDUpdate?.();
+          return;
+        }
+      }
+
+      // Place Block
+      this.tryPlaceBlock(hit);
+    }
+
+    // Swing arm timer
+    if (this.swingTimer >= 0) {
+      this.swingTimer += dt;
+      if (this.swingTimer > 0.3) this.swingTimer = -1;
+    }
+  }
+
+  private breakBlock(hit: { x: number; y: number; z: number; id: BlockType }) {
+    const bDef = BLOCK_DEFS[hit.id];
+    let mat: SoundMaterial = 'stone';
+    if (hit.id === BlockType.GRASS || hit.id === BlockType.OAK_LEAVES) mat = 'grass';
+    else if (hit.id === BlockType.OAK_LOG || hit.id === BlockType.OAK_PLANKS || hit.id === BlockType.CRAFTING_TABLE || hit.id === BlockType.CHEST)
+      mat = 'wood';
+    else if (hit.id === BlockType.SAND) mat = 'sand';
+    else if (hit.id === BlockType.GLASS) mat = 'glass';
+
+    Sound.breakBlock(mat);
+    this.spawnBlockDebris(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, hit.id);
+
+    // Determine drop item
+    if (this.gameMode === 'survival') {
+      const currentItem = this.inventory[this.selectedSlot];
+      const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
+
+      // Tool harvest requirement check
+      let canHarvest = true;
+      if (bDef.requiredTool === 'pickaxe' && bDef.minHarvestLevel > 0) {
+        canHarvest = itemDef?.tool?.type === 'pickaxe' && itemDef.tool.harvestLevel >= bDef.minHarvestLevel;
+      }
+
+      if (bDef.drop && canHarvest) {
+        const dropCount = bDef.dropCount || 1;
+        this.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, bDef.drop, dropCount);
+      }
+
+      // Tool Durability reduction
+      if (currentItem && itemDef?.tool) {
+        if (currentItem.durability !== undefined) {
+          currentItem.durability--;
+          if (currentItem.durability <= 0) {
+            this.inventory[this.selectedSlot] = null;
+            Sound.breakBlock('wood');
+          }
+          this.onHUDUpdate?.();
+        }
+      }
+
+      // Award XP for ores
+      if (hit.id === BlockType.COAL_ORE) this.addXP(1);
+      else if (hit.id === BlockType.DIAMOND_ORE) this.addXP(5);
+    }
+
+    this.world.setBlock(hit.x, hit.y, hit.z, BlockType.AIR);
+    this.world.buildMesh(this.scene, this.worldMaterial);
+  }
+
+  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }) {
+    const held = this.inventory[this.selectedSlot];
+    if (!held) return;
+
+    // Must be a block item
+    if (!BLOCK_DEFS[held.id]) return;
+
+    const px = hit.x + hit.nx;
+    const py = hit.y + hit.ny;
+    const pz = hit.z + hit.nz;
+
+    if (!inBounds(px, py, pz)) return;
+    if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return;
+
+    // Check collision with player
+    const intersectsPlayer =
+      px + 1 > this.pos.x - this.PW &&
+      px < this.pos.x + this.PW &&
+      py + 1 > this.pos.y &&
+      py < this.pos.y + this.PH &&
+      pz + 1 > this.pos.z - this.PW &&
+      pz < this.pos.z + this.PW;
+
+    if (intersectsPlayer && held.id !== BlockType.TORCH) return;
+
+    // Place block in world
+    this.world.setBlock(px, py, pz, held.id as BlockType);
+    this.world.buildMesh(this.scene, this.worldMaterial);
+
+    let mat: SoundMaterial = 'stone';
+    if (held.id === BlockType.OAK_LOG || held.id === BlockType.OAK_PLANKS || held.id === BlockType.CRAFTING_TABLE || held.id === BlockType.CHEST)
+      mat = 'wood';
+    Sound.placeBlock(mat);
+    this.swingTimer = 0;
+
+    if (this.gameMode === 'survival') {
+      held.count--;
+      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+      this.onHUDUpdate?.();
+    }
+  }
+
+  public addXP(amount: number) {
+    this.xp += amount;
+    const needed = (this.level + 1) * 7;
+    if (this.xp >= needed) {
+      this.xp -= needed;
+      this.level++;
+      Sound.levelUp();
+      this.onToast?.(`Seviye Atladın: ${this.level}!`);
+    }
+    this.onHUDUpdate?.();
+  }
+
+  // ================= DROPS & PARTICLES =================
+  public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
+    const geo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+    const mesh = new THREE.Mesh(geo, this.worldMaterial);
+    this.setupMeshUVs(geo, id);
+    mesh.position.set(x, y, z);
+    this.scene.add(mesh);
+
+    this.drops.push({
+      id,
+      count,
+      mesh,
+      vel: {
+        x: (Math.random() - 0.5) * 2.8,
+        y: 3.2 + Math.random() * 1.5,
+        z: (Math.random() - 0.5) * 2.8,
+      },
+      age: 0,
+      baseY: null,
+    });
+  }
+
+  private updateDrops(dt: number) {
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const drop = this.drops[i];
+      drop.age += dt;
+
+      // Magnetize toward player if close
+      const dx = this.pos.x - drop.mesh.position.x;
+      const dy = this.pos.y + 0.8 - drop.mesh.position.y;
+      const dz = this.pos.z - drop.mesh.position.z;
+      const dist = Math.hypot(dx, dy, dz);
+
+      if (drop.age > 0.6 && dist < 3.2) {
+        const pullSpeed = Math.min(1, dt * (7 + (3.2 - dist) * 7));
+        drop.mesh.position.x += dx * pullSpeed;
+        drop.mesh.position.y += dy * pullSpeed;
+        drop.mesh.position.z += dz * pullSpeed;
+
+        if (dist < 0.9) {
+          const remaining = this.addToInventory(drop.id, drop.count);
+          if (remaining <= 0) {
+            this.scene.remove(drop.mesh);
+            drop.mesh.geometry.dispose();
+            this.drops.splice(i, 1);
+            Sound.pickup();
+            this.onHUDUpdate?.();
+            continue;
+          }
+          drop.count = remaining;
+        }
+      } else {
+        // Physics for dropped item
+        drop.vel.y -= 18 * dt;
+        let nx = drop.mesh.position.x + drop.vel.x * dt;
+        let ny = drop.mesh.position.y + drop.vel.y * dt;
+        let nz = drop.mesh.position.z + drop.vel.z * dt;
+
+        const by = Math.floor(ny - 0.15);
+        if (drop.vel.y < 0 && this.world.getBlockPhys(Math.floor(nx), by, Math.floor(nz)) !== BlockType.AIR) {
+          ny = by + 1 + 0.15;
+          drop.vel.y = 0;
+          drop.baseY = ny;
+          drop.vel.x *= 0.5;
+          drop.vel.z *= 0.5;
+        }
+
+        drop.mesh.position.set(nx, ny, nz);
+        if (drop.baseY !== null && drop.vel.y === 0) {
+          drop.mesh.position.y = drop.baseY + Math.sin(drop.age * 2.8) * 0.05;
+        }
+      }
+
+      drop.mesh.rotation.y += dt * 2.2;
+    }
+  }
+
+  private spawnBlockDebris(x: number, y: number, z: number, blockId: BlockType) {
+    const count = 6;
+    for (let i = 0; i < count; i++) {
+      const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+      const mesh = new THREE.Mesh(geo, this.worldMaterial);
+      this.setupMeshUVs(geo, blockId);
+      mesh.position.set(x + (Math.random() - 0.5) * 0.5, y + (Math.random() - 0.5) * 0.5, z + (Math.random() - 0.5) * 0.5);
+      this.scene.add(mesh);
+
+      this.particles.push({
+        mesh,
+        vel: {
+          x: (Math.random() - 0.5) * 3,
+          y: 2 + Math.random() * 2,
+          z: (Math.random() - 0.5) * 3,
+        },
+        life: 0,
+        maxLife: 0.6 + Math.random() * 0.4,
+      });
+    }
+  }
+
+  private updateParticles(dt: number) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.vel.y -= 16 * dt;
+      p.mesh.position.x += p.vel.x * dt;
+      p.mesh.position.y += p.vel.y * dt;
+      p.mesh.position.z += p.vel.z * dt;
+      p.mesh.scale.multiplyScalar(0.96);
+    }
+  }
+
+  // ================= INVENTORY HELPERS =================
+  public addToInventory(id: AnyItemId, count: number): number {
+    // 1. Try stacking into existing matching slots
+    for (let i = 0; i < 36 && count > 0; i++) {
+      const stack = this.inventory[i];
+      if (stack && stack.id === id && stack.count < 64) {
+        const canAdd = Math.min(64 - stack.count, count);
+        stack.count += canAdd;
+        count -= canAdd;
+      }
+    }
+    // 2. Try empty slots
+    for (let i = 0; i < 36 && count > 0; i++) {
+      if (!this.inventory[i]) {
+        const canAdd = Math.min(64, count);
+        this.inventory[i] = { id, count: canAdd };
+        count -= canAdd;
+      }
+    }
+    return count;
+  }
+
+  // ================= FURNACE TICKING =================
+  private tickFurnaces(dt: number) {
+    for (const key in this.world.furnaces) {
+      const idx = Number(key);
+      const f = this.world.furnaces[idx];
+      if (!f) continue;
+
+      let isLit = f.burnTimeRemaining > 0;
+      if (f.burnTimeRemaining > 0) {
+        f.burnTimeRemaining = Math.max(0, f.burnTimeRemaining - dt);
+      }
+
+      // Check if we can start burning fuel
+      const smelt = f.input ? findSmeltRecipe(f.input.id) : null;
+      const canSmelt =
+        smelt && (!f.output || (f.output.id === smelt.output.id && f.output.count + smelt.output.count <= 64));
+
+      if (f.burnTimeRemaining <= 0 && canSmelt && f.fuel && f.fuel.count > 0) {
+        const fuelVal = ITEM_DEFS[f.fuel.id]?.fuelValue || (f.fuel.id === BlockType.OAK_LOG ? 15 : 0);
+        if (fuelVal > 0) {
+          f.fuel.count--;
+          if (f.fuel.count <= 0) f.fuel = null;
+          f.burnTimeRemaining = fuelVal;
+          f.maxBurnTime = fuelVal;
+          isLit = true;
+        }
+      }
+
+      // Progress cooking
+      if (isLit && canSmelt) {
+        f.cookProgress += dt;
+        f.maxCookTime = smelt!.cookTime;
+        if (f.cookProgress >= f.maxCookTime) {
+          f.cookProgress = 0;
+          f.input!.count--;
+          if (f.input!.count <= 0) f.input = null;
+          if (!f.output) {
+            f.output = { ...smelt!.output };
+          } else {
+            f.output.count += smelt!.output.count;
+          }
+        }
+      } else if (!canSmelt) {
+        f.cookProgress = Math.max(0, f.cookProgress - dt * 2);
+      }
+    }
+  }
+
+  // ================= ANIMATION & CAMERA UPDATE =================
+  private animate = (now: number) => {
+    this.animFrameId = requestAnimationFrame(this.animate);
+    const dt = Math.min(0.05, (now - this.lastTime) / 1000 || 0.016);
+    this.lastTime = now;
+
+    if (!this.isPaused && !this.isDead) {
+      this.updatePlayer(dt);
+      this.updateInteraction(dt);
+      this.updateMobs(dt);
+      this.updateDrops(dt);
+      this.updateParticles(dt);
+      this.updateDayNight(dt);
+      this.tickFurnaces(dt);
+    }
+
+    this.updateCameraAndModels(dt);
+    this.renderer.render(this.scene, this.camera);
+  };
+
+  private updateCameraAndModels(dt: number) {
+    const eye = this.getEyePos();
+
+    if (!this.isThirdPerson) {
+      // 1st Person
+      this.camera.position.set(eye.x, eye.y, eye.z);
+      this.camera.rotation.set(this.pitch, this.yaw, 0);
+      this.donkey3P.visible = false;
+      this.handGroup.visible = true;
+
+      // First-person donkey hoof bobbing and authentic Minecraft swing
+      const baseRx = 0.12;
+      const baseRy = -0.28;
+      const baseRz = 0.08;
+      let rx = baseRx;
+      let ry = baseRy;
+      let rz = baseRz;
+      let posOffsetY = 0;
+      let posOffsetZ = 0;
+
+      if (this.swingTimer >= 0) {
+        const s = Math.sin((this.swingTimer / 0.28) * Math.PI);
+        // Classic Minecraft swipe: swings down and inward
+        rx = baseRx - s * 0.95;
+        ry = baseRy - s * 0.55;
+        rz = baseRz + s * 0.65;
+        posOffsetY = -s * 0.05;
+        posOffsetZ = -s * 0.07;
+      } else if (this.breakingBlock) {
+        const bob = Math.sin(performance.now() * 0.035);
+        rx = baseRx - Math.abs(bob) * 0.55;
+        ry = baseRy - Math.abs(bob) * 0.25;
+        rz = baseRz + Math.abs(bob) * 0.35;
+      }
+
+      this.handGroup.rotation.x += (rx - this.handGroup.rotation.x) * Math.min(1, dt * 20);
+      this.handGroup.rotation.y += (ry - this.handGroup.rotation.y) * Math.min(1, dt * 20);
+      this.handGroup.rotation.z += (rz - this.handGroup.rotation.z) * Math.min(1, dt * 20);
+
+      const walkFactor = Math.min(1, Math.hypot(this.vel.x, this.vel.z) / 4);
+      this.handGroup.position.x = 0.36 + Math.cos(this.walkPhase * 0.5) * 0.015 * walkFactor;
+      this.handGroup.position.y = -0.28 + Math.sin(this.walkPhase) * 0.02 * walkFactor + posOffsetY;
+      this.handGroup.position.z = -0.48 + posOffsetZ;
+    } else {
+      // 3rd Person
+      this.donkey3P.visible = true;
+      this.handGroup.visible = false;
+
+      this.donkey3P.position.set(this.pos.x, this.pos.y - (this.isSneaking ? 0.22 : 0), this.pos.z);
+      this.donkey3P.rotation.y = this.yaw;
+
+      // Animate Donkey limbs (4 legs + head)
+      const ud = this.donkey3P.userData;
+      const swing = Math.sin(this.walkPhase) * 0.65 * Math.min(1, Math.hypot(this.vel.x, this.vel.z) / 3);
+      if (ud.legs && ud.legs.length === 4) {
+        // Front-left, front-right (swinging with mine/attack), back-left, back-right
+        ud.legs[0].rotation.x = swing;
+        ud.legs[1].rotation.x = this.swingTimer >= 0 ? -Math.sin((this.swingTimer / 0.3) * Math.PI) * 1.5 : -swing;
+        ud.legs[2].rotation.x = -swing;
+        ud.legs[3].rotation.x = swing;
+      }
+      if (ud.headGroup) {
+        ud.headGroup.rotation.x = this.isSneaking ? 0.35 : (this.swingTimer >= 0 ? Math.sin((this.swingTimer / 0.3) * Math.PI) * 0.3 : 0);
+      }
+
+      // Third-person camera positioning with obstacle push-in
+      const d = this.getLookDir();
+      const dist = 3.6;
+      let camX = eye.x - d.x * dist;
+      let camY = eye.y - d.y * dist + 0.6;
+      let camZ = eye.z - d.z * dist;
+
+      for (let s = 0.4; s <= dist; s += 0.4) {
+        const sx = eye.x - d.x * s;
+        const sy = eye.y - d.y * s + 0.3;
+        const sz = eye.z - d.z * s;
+        if (this.world.getBlockPhys(Math.floor(sx), Math.floor(sy), Math.floor(sz)) !== BlockType.AIR) {
+          camX = sx;
+          camY = sy;
+          camZ = sz;
+          break;
+        }
+      }
+      this.camera.position.set(camX, camY, camZ);
+      this.camera.lookAt(eye.x, eye.y, eye.z);
+    }
+  }
+
+  // ================= INPUT LISTENERS =================
+  private setupListeners() {
+    window.addEventListener('keydown', (e) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      this.keys[e.code] = true;
+
+      if (!this.isPaused && !this.isDead) {
+        // Hotbar selection 1-9
+        if (/^Digit[1-9]$/.test(e.code)) {
+          this.selectedSlot = Number(e.code.slice(5)) - 1;
+          this.updateHeldItemModel();
+          this.onHUDUpdate?.();
+        }
+        // Toggle 3rd person perspective
+        else if (e.code === this.keyBindings.perspective) {
+          e.preventDefault();
+          this.isThirdPerson = !this.isThirdPerson;
+          this.onToast?.(this.isThirdPerson ? '3. Şahıs Görünüm' : '1. Şahıs Görünüm');
+        }
+        // Drop held item
+        else if (e.code === this.keyBindings.drop) {
+          e.preventDefault();
+          const held = this.inventory[this.selectedSlot];
+          if (held && held.count > 0) {
+            const dir = this.getLookDir();
+            this.spawnDrop(this.pos.x + dir.x * 0.8, this.pos.y + 1.2, this.pos.z + dir.z * 0.8, held.id, 1);
+            held.count--;
+            if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+            this.updateHeldItemModel();
+            this.onHUDUpdate?.();
+          }
+        }
+        // Swap with offhand
+        else if (e.code === this.keyBindings.offhand) {
+          e.preventDefault();
+          const tmp = this.inventory[this.selectedSlot];
+          this.inventory[this.selectedSlot] = this.offhand;
+          this.offhand = tmp;
+          this.updateHeldItemModel();
+          this.onHUDUpdate?.();
+        }
+        // Creative flight toggle (Double Jump)
+        else if (e.code === this.keyBindings.jump && this.gameMode === 'creative') {
+          const now = performance.now();
+          if (now - this.flyCooldown < 300) {
+            this.isFlying = !this.isFlying;
+            this.onToast?.(this.isFlying ? 'Uçuş Modu Açık' : 'Uçuş Modu Kapalı');
+          }
+          this.flyCooldown = now;
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      this.keys[e.code] = false;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (this.isPaused || this.isDead || this.isGUIOpen) return;
+      if ((e.target as HTMLElement)?.closest('.mc-panel, .mc-slot, .mc-btn, input, select, button')) {
+        return;
+      }
+      if (!this.isPointerLocked) {
+        this.requestPointerLock();
+        return;
+      }
+      if (e.button === 0) {
+        this.mouseLeft = true;
+        if (this.swingTimer < 0) this.swingTimer = 0;
+      } else if (e.button === 2) {
+        this.mouseRight = true;
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (this.isGUIOpen) {
+        this.mouseLeft = false;
+        this.mouseRight = false;
+        return;
+      }
+      if (e.button === 0) this.mouseLeft = false;
+      else if (e.button === 2) this.mouseRight = false;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isPointerLocked || this.isPaused || this.isDead || this.isGUIOpen) return;
+      const s = this.mouseSensitivity * 0.0022;
+      this.yaw -= e.movementX * s;
+      this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - e.movementY * s));
+    });
+
+    window.addEventListener('wheel', (e) => {
+      if (this.isPaused || this.isDead || this.isGUIOpen) return;
+      this.selectedSlot = (this.selectedSlot + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
+      this.updateHeldItemModel();
+      this.onHUDUpdate?.();
+    });
+
+    window.addEventListener('contextmenu', (e) => {
+      if (this.isPointerLocked || this.isGUIOpen) {
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
+      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen) {
+        this.isPaused = true;
+        this.mouseLeft = false;
+        this.mouseRight = false;
+        this.onUIStateChange?.('paused');
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  }
+
+  public requestPointerLock() {
+    try {
+      this.renderer.domElement.requestPointerLock();
+    } catch {
+      // pointerlock error
+    }
+  }
+
+  public exitPointerLock() {
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }
+}
