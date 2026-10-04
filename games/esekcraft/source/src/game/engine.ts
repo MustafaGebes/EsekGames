@@ -17,6 +17,8 @@ import {
   MobEntity,
   KeyBindings,
   DEFAULT_KEY_BINDINGS,
+  getBlockHeight,
+  isSlabBlock,
 } from './types';
 import {
   BLOCK_DEFS,
@@ -85,6 +87,8 @@ export class MinecraftEngine {
   private fpsFrames = 0;
   private fpsClock = 0;
   private visibleMeshCenter = { x: -999, z: -999 };
+  private visibleMeshBuildId = 0;
+  private isRebuildingVisibleMesh = false;
 
   // Player State
   public pos = { x: 40.5, y: 30, z: 40.5 };
@@ -552,9 +556,32 @@ export class MinecraftEngine {
     this.onHUDUpdate?.();
   }
   private rebuildVisibleWorld() {
+    this.visibleMeshBuildId++;
     const cx = this.pos.x; const cz = this.pos.z;
     this.world.buildMesh(this.scene, this.worldMaterial, this.renderDistance, cx, cz);
     this.visibleMeshCenter = { x: cx, z: cz };
+  }
+
+  private rebuildVisibleWorldAdaptive() {
+    if (this.isRebuildingVisibleMesh) return;
+    const buildId = ++this.visibleMeshBuildId;
+    const center = { x: this.pos.x, z: this.pos.z };
+    this.isRebuildingVisibleMesh = true;
+    void this.world.buildMeshAdaptive(
+      this.scene,
+      this.worldMaterial,
+      this.renderDistance,
+      center.x,
+      center.z,
+      undefined,
+      () => buildId === this.visibleMeshBuildId
+    ).then(() => {
+      if (buildId === this.visibleMeshBuildId) this.visibleMeshCenter = center;
+    }).catch((error) => {
+      console.error('EsekCraft visible mesh refresh failed:', error);
+    }).finally(() => {
+      this.isRebuildingVisibleMesh = false;
+    });
   }
 
   public start(
@@ -581,7 +608,8 @@ export class MinecraftEngine {
         );
         this.visibleMeshCenter = { x: centerX, z: centerZ };
         this.rebuildTorchVisuals();
-        this.spawnMobs(30);
+        // Fewer multi-part animal meshes keep the first playable frames smooth.
+        this.spawnMobs(14);
         this.lastTime = performance.now();
         this.animate(this.lastTime);
 
@@ -1059,7 +1087,8 @@ export class MinecraftEngine {
     // Grass, dirt, stone, logs, ores and utility blocks all use their own face tiles.
     // This keeps grass-top/dirt-side and log-endgrain orientation recognizable in hand.
     const size = blockId === BlockType.OAK_LOG || blockId === BlockType.OAK_PLANKS ? 0.33 : 0.30;
-    const geometry = new THREE.BoxGeometry(size, size, size);
+    const height = isSlabBlock(blockId as BlockType) ? 0.5 : 1;
+    const geometry = new THREE.BoxGeometry(size, size * height, size);
     // A dedicated atlas material keeps bark and plank grain visible on hand-held blocks.
     const blockMaterial = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, alphaTest: 0.1 });
     const cube = new THREE.Mesh(geometry, blockMaterial);
@@ -1613,9 +1642,9 @@ export class MinecraftEngine {
 
       // Y Movement & ground landing
       mob.pos.y += mob.vel.y * dt;
-      const groundY = this.world.getTopSolid(Math.floor(mob.pos.x), Math.floor(mob.pos.z));
-      if (mob.pos.y < groundY + 1.0) {
-        mob.pos.y = groundY + 1.0;
+      const groundY = this.world.getTopSurface(Math.floor(mob.pos.x), Math.floor(mob.pos.z));
+      if (mob.pos.y < groundY) {
+        mob.pos.y = groundY;
         mob.vel.y = 0;
       }
 
@@ -1835,8 +1864,8 @@ export class MinecraftEngine {
       }
     }
     // Son çare: bulunduğu sütunun güvenli üstüne çıkar.
-    const top = this.world.getTopSolid(Math.floor(origin.x), Math.floor(origin.z));
-    this.pos = { x: origin.x, y: Math.max(origin.y, top + 1.05), z: origin.z };
+    const top = this.world.getTopSurface(Math.floor(origin.x), Math.floor(origin.z));
+    this.pos = { x: origin.x, y: Math.max(origin.y, top + 0.05), z: origin.z };
   }
   private checkCollision(px: number, py: number, pz: number): boolean {
     const x0 = Math.floor(px - this.PW);
@@ -1850,11 +1879,32 @@ export class MinecraftEngine {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
           const b = this.world.getBlockPhys(x, y, z);
-          if (b !== BlockType.AIR && b !== BlockType.TORCH) return true;
+          if (b !== BlockType.AIR && b !== BlockType.TORCH && py < y + getBlockHeight(b) && py + this.PH > y) return true;
         }
       }
     }
     return false;
+  }
+
+  private findLandingSurface(px: number, pz: number, newY: number, oldY: number): number | null {
+    const x0 = Math.floor(px - this.PW);
+    const x1 = Math.floor(px + this.PW);
+    const z0 = Math.floor(pz - this.PW);
+    const z1 = Math.floor(pz + this.PW);
+    const y0 = Math.max(-1, Math.floor(newY) - 1);
+    const y1 = Math.min(SY - 1, Math.floor(oldY) + 1);
+    let landingY = -Infinity;
+    for (let y = y0; y <= y1; y++) {
+      for (let z = z0; z <= z1; z++) {
+        for (let x = x0; x <= x1; x++) {
+          const block = this.world.getBlockPhys(x, y, z);
+          if (block === BlockType.AIR || block === BlockType.TORCH) continue;
+          const surface = y + getBlockHeight(block);
+          if (surface <= oldY + 0.0001 && surface >= newY - 0.0001) landingY = Math.max(landingY, surface);
+        }
+      }
+    }
+    return Number.isFinite(landingY) ? landingY : null;
   }
 
   private updatePlayer(dt: number) {
@@ -1929,8 +1979,9 @@ export class MinecraftEngine {
     this.pos.y += this.vel.y * dt;
     if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
       if (this.vel.y < 0) {
-        this.pos.y = Math.floor(this.pos.y) + 1;
-        while (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.pos.y += 0.01;
+        const landingY = this.findLandingSurface(this.pos.x, this.pos.z, this.pos.y, oldY);
+        if (landingY !== null) this.pos.y = landingY;
+        for (let attempt = 0; attempt < 100 && this.checkCollision(this.pos.x, this.pos.y, this.pos.z); attempt++) this.pos.y += 0.01;
 
         // Fall damage calculation
         const fallDistance = this.fallStartY - this.pos.y;
@@ -1969,15 +2020,25 @@ export class MinecraftEngine {
     // X Axis Collision
     this.pos.x = nextX;
     if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
-      this.pos.x -= this.vel.x * dt;
-      this.vel.x = 0;
+      const blockedX = this.pos.x;
+      if (this.onGround && !this.checkCollision(blockedX, this.pos.y + 0.5, this.pos.z)) {
+        this.pos.y += 0.5;
+      } else {
+        this.pos.x -= this.vel.x * dt;
+        this.vel.x = 0;
+      }
     }
 
     // Z Axis Collision
     this.pos.z = nextZ;
     if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
-      this.pos.z -= this.vel.z * dt;
-      this.vel.z = 0;
+      const blockedZ = this.pos.z;
+      if (this.onGround && !this.checkCollision(this.pos.x, this.pos.y + 0.5, blockedZ)) {
+        this.pos.y += 0.5;
+      } else {
+        this.pos.z -= this.vel.z * dt;
+        this.vel.z = 0;
+      }
     }
 
     // World Bounding box limits
@@ -2101,7 +2162,7 @@ export class MinecraftEngine {
   private getCurrentSurfaceMaterial(): SoundMaterial {
     const b = this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.2), Math.floor(this.pos.z));
     if (b === BlockType.GRASS || b === BlockType.OAK_LEAVES) return 'grass';
-    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
+    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.OAK_PLANKS_SLAB || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
       return 'wood';
     if (b === BlockType.SAND) return 'sand';
     if (b === BlockType.GLASS) return 'glass';
@@ -2136,7 +2197,9 @@ export class MinecraftEngine {
     // Update Highlight wireframe
     if (hit) {
       this.highlightBox.visible = true;
-      this.highlightBox.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+      const hitHeight = getBlockHeight(hit.id);
+      this.highlightBox.scale.y = hitHeight;
+      this.highlightBox.position.set(hit.x + 0.5, hit.y + hitHeight / 2, hit.z + 0.5);
     } else {
       this.highlightBox.visible = false;
     }
@@ -2339,13 +2402,13 @@ export class MinecraftEngine {
     const bDef = BLOCK_DEFS[hit.id];
     let mat: SoundMaterial = 'stone';
     if (hit.id === BlockType.GRASS || hit.id === BlockType.OAK_LEAVES) mat = 'grass';
-    else if (hit.id === BlockType.OAK_LOG || hit.id === BlockType.OAK_PLANKS || hit.id === BlockType.CRAFTING_TABLE || hit.id === BlockType.CHEST)
+    else if (hit.id === BlockType.OAK_LOG || hit.id === BlockType.OAK_PLANKS || hit.id === BlockType.OAK_PLANKS_SLAB || hit.id === BlockType.CRAFTING_TABLE || hit.id === BlockType.CHEST)
       mat = 'wood';
     else if (hit.id === BlockType.SAND) mat = 'sand';
     else if (hit.id === BlockType.GLASS) mat = 'glass';
 
     Sound.breakBlock(mat);
-    this.spawnBlockDebris(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, hit.id);
+    this.spawnBlockDebris(hit.x + 0.5, hit.y + getBlockHeight(hit.id) / 2, hit.z + 0.5, hit.id);
 
     // Determine drop item
     if (this.gameMode === 'survival') {
@@ -2356,7 +2419,7 @@ export class MinecraftEngine {
       let canHarvest = true;
       const handBreakable = [
         BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
-        BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS,
+        BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS, BlockType.OAK_PLANKS_SLAB,
         BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
       ].includes(hit.id);
       if (bDef.requiredTool !== 'none' && !handBreakable) {
@@ -2392,7 +2455,7 @@ export class MinecraftEngine {
     this.rebuildTorchVisuals();
   }
 
-  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }) {
+  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType }) {
     const held = this.inventory[this.selectedSlot];
     if (!held) return;
 
@@ -2400,6 +2463,30 @@ export class MinecraftEngine {
     const placeId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
     // Materials such as leather and feathers are not placeable blocks.
     if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return;
+
+    if (hit.ny === 1 && isSlabBlock(hit.id) && placeId === hit.id) {
+      const intersectsPlayer =
+        hit.x + 1 > this.pos.x - this.PW &&
+        hit.x < this.pos.x + this.PW &&
+        hit.y + 1 > this.pos.y &&
+        hit.y < this.pos.y + this.PH &&
+        hit.z + 1 > this.pos.z - this.PW &&
+        hit.z < this.pos.z + this.PW;
+      if (intersectsPlayer) return;
+      const fullBlock = hit.id === BlockType.STONE_SLAB ? BlockType.STONE : BlockType.OAK_PLANKS;
+      this.world.setBlock(hit.x, hit.y, hit.z, fullBlock);
+      this.onBlockChanged?.({ x: hit.x, y: hit.y, z: hit.z, blockId: fullBlock });
+      this.rebuildVisibleWorld();
+      this.rebuildTorchVisuals();
+      Sound.placeBlock(hit.id === BlockType.OAK_PLANKS_SLAB ? 'wood' : 'stone');
+      this.swingTimer = 0;
+      if (this.gameMode === 'survival') {
+        held.count--;
+        if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+        this.onHUDUpdate?.();
+      }
+      return;
+    }
 
     const px = hit.x + hit.nx;
     const py = hit.y + hit.ny;
@@ -2412,7 +2499,7 @@ export class MinecraftEngine {
     const intersectsPlayer =
       px + 1 > this.pos.x - this.PW &&
       px < this.pos.x + this.PW &&
-      py + 1 > this.pos.y &&
+      py + getBlockHeight(placeId as BlockType) > this.pos.y &&
       py < this.pos.y + this.PH &&
       pz + 1 > this.pos.z - this.PW &&
       pz < this.pos.z + this.PW;
@@ -2426,7 +2513,7 @@ export class MinecraftEngine {
     this.rebuildTorchVisuals();
 
     let mat: SoundMaterial = 'stone';
-    if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
+    if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.OAK_PLANKS_SLAB || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
       mat = 'wood';
     Sound.placeBlock(mat);
     this.swingTimer = 0;
@@ -2859,7 +2946,7 @@ export class MinecraftEngine {
     this.updateCameraAndModels(dt);
     // Recenter the visible chunk ring before the player reaches its edge.
     // This makes nearby chunks appear while walking instead of waiting for a hard chunk boundary.
-    if (Math.hypot(this.pos.x - this.visibleMeshCenter.x, this.pos.z - this.visibleMeshCenter.z) > 8) this.rebuildVisibleWorld();
+    if (Math.hypot(this.pos.x - this.visibleMeshCenter.x, this.pos.z - this.visibleMeshCenter.z) > 12) this.rebuildVisibleWorldAdaptive();
     this.fpsFrames++;
     this.fpsClock += dt;
     if (this.fpsClock >= 0.5) { this.fps = Math.round(this.fpsFrames / this.fpsClock); this.fpsFrames = 0; this.fpsClock = 0; this.onHUDUpdate?.(); }

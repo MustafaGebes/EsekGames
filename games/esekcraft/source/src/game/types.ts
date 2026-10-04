@@ -35,6 +35,17 @@ export enum BlockType {
   OAK_DOOR = 23,
   BED = 24,
   WHITE_WOOL_BLOCK = 25,
+  STONE_SLAB = 26,
+  OAK_PLANKS_SLAB = 27,
+}
+
+export function isSlabBlock(id: BlockType): boolean {
+  return id === BlockType.STONE_SLAB || id === BlockType.OAK_PLANKS_SLAB;
+}
+
+export function getBlockHeight(id: BlockType): number {
+  if (id === BlockType.AIR || id === BlockType.TORCH) return 0;
+  return isSlabBlock(id) ? 0.5 : 1;
 }
 
 // Non-Block Items

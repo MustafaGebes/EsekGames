@@ -44,7 +44,6 @@ const TRC = BlockType.TORCH;
 const GLS = BlockType.GLASS;
 const SND = BlockType.SAND;
 const DOOR = BlockType.OAK_DOOR;
-const WOOL_BLOCK = BlockType.WHITE_WOOL_BLOCK;
 const SHEARS = ItemType.SHEARS;
 const RAW_IRN = ItemType.RAW_IRON;
 const RAW_GLD = ItemType.RAW_GOLD;
@@ -370,7 +369,11 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
 
   // Raw Iron / Raw Gold are already mineable; smelting yields ingots.
 
-  { id: 'wool_block', name: 'Yün Bloğu', width: 2, height: 2, pattern: [ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, ItemType.WHITE_WOOL], output: { id: WOOL_BLOCK, count: 1 }, category: 'building' },
+  // Bed: three matching wool across a row over three planks.
+  { id: 'bed', name: 'Yatak', width: 3, height: 2, pattern: [ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, PLK, PLK, PLK], output: { id: BlockType.BED, count: 1 }, category: 'building' },
+  // Three matching blocks across a row craft six lower slabs.
+  { id: 'stone_slab', name: 'Taş Yarım Basamak', width: 3, height: 1, pattern: [STN, STN, STN], output: { id: BlockType.STONE_SLAB, count: 6 }, category: 'building' },
+  { id: 'oak_planks_slab', name: 'Meşe Tahta Yarım Basamak', width: 3, height: 1, pattern: [PLK, PLK, PLK], output: { id: BlockType.OAK_PLANKS_SLAB, count: 6 }, category: 'building' },
   { id: 'shears', name: 'Makas', width: 2, height: 2, pattern: [IRN, _, _, IRN], output: { id: SHEARS, count: 1, durability: 238, maxDurability: 238 }, category: 'tools' },
 ];
 

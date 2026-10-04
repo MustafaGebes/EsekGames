@@ -162,6 +162,26 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     minHarvestLevel: 0,
     drop: BlockType.OAK_PLANKS,
   },
+  [BlockType.STONE_SLAB]: {
+    name: 'Taş Yarım Basamak',
+    top: TILE.STONE,
+    bottom: TILE.STONE,
+    side: TILE.STONE,
+    hardness: 1.5,
+    requiredTool: 'pickaxe',
+    minHarvestLevel: 0,
+    drop: BlockType.STONE_SLAB,
+  },
+  [BlockType.OAK_PLANKS_SLAB]: {
+    name: 'Meşe Tahta Yarım Basamak',
+    top: TILE.PLANKS,
+    bottom: TILE.PLANKS,
+    side: TILE.PLANKS,
+    hardness: 1.8,
+    requiredTool: 'axe',
+    minHarvestLevel: 0,
+    drop: BlockType.OAK_PLANKS_SLAB,
+  },
   [BlockType.BED]: {
     name: 'Yatak',
     top: TILE.PLANKS,
@@ -565,6 +585,7 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
 export function getItemFuelValue(id: AnyItemId): number {
   if (id === BlockType.OAK_LOG) return 15;
   if (id === BlockType.OAK_PLANKS) return 15;
+  if (id === BlockType.OAK_PLANKS_SLAB) return 7.5;
   if (id === BlockType.CRAFTING_TABLE) return 15;
   if (id === BlockType.CHEST) return 15;
   if (id === ItemType.STICK) return 5;
@@ -1235,6 +1256,44 @@ export function generateAllItemIcons() {
     if (atlasCanvas) {
       ctx.drawImage(atlasCanvas, tx, ty, TILE_SIZE, TILE_SIZE, 2, 2, 28, 28);
     }
+    iconDataUrls[blockId] = canvas.toDataURL();
+  }
+
+  // Draw slabs as a half-height isometric block rather than a full-cube icon.
+  for (const blockId of [BlockType.STONE_SLAB, BlockType.OAK_PLANKS_SLAB]) {
+    const def = BLOCK_DEFS[blockId];
+    if (!def || !atlasCanvas) continue;
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    const paintClippedTile = (tile: number, points: number[][], shade = 0) => {
+      const tx = (tile % TILES_PER_ROW) * TILE_SIZE;
+      const ty = Math.floor(tile / TILES_PER_ROW) * TILE_SIZE;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(atlasCanvas!, tx, ty, TILE_SIZE, TILE_SIZE, 3, 2, 26, 26);
+      if (shade > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${shade})`;
+        ctx.fillRect(3, 2, 26, 26);
+      }
+      ctx.restore();
+    };
+    paintClippedTile(def.top, [[4, 10], [16, 3], [28, 10], [16, 17]]);
+    paintClippedTile(def.side, [[4, 10], [16, 17], [16, 25], [4, 18]]);
+    paintClippedTile(def.side, [[16, 17], [28, 10], [28, 18], [16, 25]], 0.18);
+    ctx.strokeStyle = 'rgba(25,20,15,0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(4, 10); ctx.lineTo(16, 17); ctx.lineTo(28, 10);
+    ctx.moveTo(16, 17); ctx.lineTo(16, 25); ctx.lineTo(4, 18); ctx.lineTo(4, 10);
+    ctx.moveTo(16, 25); ctx.lineTo(28, 18); ctx.lineTo(28, 10);
+    ctx.stroke();
     iconDataUrls[blockId] = canvas.toDataURL();
   }
 

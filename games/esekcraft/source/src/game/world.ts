@@ -2,7 +2,7 @@
  * Minecraft Web - Voxel World, Generation, Ores & Meshing
  */
 import * as THREE from 'three';
-import { SX, SY, SZ, BlockType, FurnaceData, ChestData } from './types';
+import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBlockHeight, isSlabBlock } from './types';
 import { BLOCK_DEFS, TILE_SIZE, TILES_PER_ROW, ATLAS_SIZE, atlasTexture } from './textures';
 
 export const IDX = (x: number, y: number, z: number) => (y * SZ + z) * SX + x;
@@ -52,6 +52,45 @@ export function hashString(s: string): number {
   h = Math.imul(h ^ (h >>> 16), 2246822507);
   h = Math.imul(h ^ (h >>> 13), 3266489909);
   return (h ^ (h >>> 16)) >>> 0;
+}
+
+function intersectSlabRay(
+  origin: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  x: number,
+  y: number,
+  z: number
+): { distance: number; nx: number; ny: number; nz: number } | null {
+  const bounds = [
+    { origin: origin.x, dir: dir.x, min: x, max: x + 1, axis: 0 },
+    { origin: origin.y, dir: dir.y, min: y, max: y + 0.5, axis: 1 },
+    { origin: origin.z, dir: dir.z, min: z, max: z + 1, axis: 2 },
+  ];
+  let enter = -Infinity;
+  let exit = Infinity;
+  let nx = 0, ny = 0, nz = 0;
+  for (const bound of bounds) {
+    if (Math.abs(bound.dir) < 1e-9) {
+      if (bound.origin < bound.min || bound.origin > bound.max) return null;
+      continue;
+    }
+    const t1 = (bound.min - bound.origin) / bound.dir;
+    const t2 = (bound.max - bound.origin) / bound.dir;
+    const near = Math.min(t1, t2);
+    const far = Math.max(t1, t2);
+    if (near > enter) {
+      enter = near;
+      const normal = t1 < t2 ? -1 : 1;
+      nx = bound.axis === 0 ? normal : 0;
+      ny = bound.axis === 1 ? normal : 0;
+      nz = bound.axis === 2 ? normal : 0;
+    }
+    exit = Math.min(exit, far);
+    if (exit < Math.max(enter, 0)) return null;
+  }
+  if (exit < 0) return null;
+  if (enter < 0) return { distance: 0, nx: 0, ny: 0, nz: 0 };
+  return { distance: enter, nx, ny, nz };
 }
 
 export class VoxelWorld {
@@ -106,6 +145,16 @@ export class VoxelWorld {
       const b = this.getBlock(x, y, z);
       if (b !== BlockType.AIR && b !== BlockType.OAK_LEAVES && b !== BlockType.TORCH) {
         return y;
+      }
+    }
+    return 0;
+  }
+
+  public getTopSurface(x: number, z: number): number {
+    for (let y = SY - 1; y >= 0; y--) {
+      const block = this.getBlock(x, y, z);
+      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES && block !== BlockType.TORCH) {
+        return y + getBlockHeight(block);
       }
     }
     return 0;
@@ -272,6 +321,7 @@ export class VoxelWorld {
 
           const def = BLOCK_DEFS[block];
           if (!def) continue;
+          const blockHeight = getBlockHeight(block);
 
           // Check all 6 faces
           for (let f = 0; f < 6; f++) {
@@ -280,11 +330,22 @@ export class VoxelWorld {
             const neighborInView = nx >= 0 && nx < SX && nz >= 0 && nz < SZ && (fullView || visible[nz * SX + nx] === 1);
             const neighbor = neighborInView ? this.getBlockMesh(nx, y + d[1], nz) : BlockType.AIR;
 
-            // If neighbor is solid, skip hidden face (unless neighbor is transparent and this isn't same transparent)
+            let faceLowerY = 0;
+            // Hide covered faces, but keep only the exposed upper portion beside a lower slab.
             if (neighbor !== BlockType.AIR) {
               const nDef = BLOCK_DEFS[neighbor];
-              if (!nDef?.transparent) continue;
-              if (def.transparent && neighbor === block) continue; // don't draw inner leaves
+              if (nDef?.transparent) {
+                if (def.transparent && neighbor === block) continue; // don't draw inner leaves
+              } else if (d[1] === 0) {
+                const neighborHeight = getBlockHeight(neighbor);
+                if (neighborHeight >= blockHeight) continue;
+                faceLowerY = neighborHeight;
+              } else if (d[1] === 1) {
+                // A lower slab has open space above its top, so the top face remains visible.
+                if (blockHeight >= 1) continue;
+              } else if (d[1] === -1 && getBlockHeight(neighbor) >= 1) {
+                continue;
+              }
             }
 
             // Determine tile index for this face
@@ -311,7 +372,10 @@ export class VoxelWorld {
 
             for (let i = 0; i < 4; i++) {
               const c = corners[i];
-              pos.push(x + c[0], y + c[1], z + c[2]);
+              const localY = d[1] === 0 && faceLowerY > 0
+                ? faceLowerY + c[1] * (blockHeight - faceLowerY)
+                : c[1] * blockHeight;
+              pos.push(x + c[0], y + localY, z + c[2]);
               norm.push(d[0], d[1], d[2]);
               uv.push(u0 + c[3] * (u1 - u0), v0 + c[4] * (v1 - v0));
               col.push(shade, shade, shade);
@@ -364,7 +428,8 @@ export class VoxelWorld {
     renderDistance: number,
     centerX: number,
     centerZ: number,
-    onProgress?: (pct: number, stage: string, fps: number) => void
+    onProgress?: (pct: number, stage: string, fps: number) => void,
+    shouldInstall: () => boolean = () => true
   ): Promise<void> {
     const builder = this.createMeshBuffers(renderDistance, centerX, centerZ);
     let result = builder.next();
@@ -373,6 +438,7 @@ export class VoxelWorld {
     let fps = 60;
 
     while (!result.done) {
+      if (!shouldInstall()) return;
       let layers = 0;
       while (!result.done && layers < layersPerFrame) {
         result = builder.next();
@@ -390,6 +456,7 @@ export class VoxelWorld {
       onProgress?.((completedLayers / SY) * 100, 'Görünür blok yüzeyleri hazırlanıyor...', fps);
     }
 
+    if (!shouldInstall()) return;
     this.installMesh(scene, worldMaterial, result.value);
     onProgress?.(100, 'Arka plan ve bloklar hazır.', fps);
   }
@@ -424,8 +491,16 @@ export class VoxelWorld {
       t = 0;
 
     while (t <= maxDistance) {
-      if (inBounds(x, y, z) && this.data[IDX(x, y, z)] !== BlockType.AIR) {
-        return { x, y, z, nx, ny, nz, id: this.data[IDX(x, y, z)] };
+      if (inBounds(x, y, z)) {
+        const block = this.data[IDX(x, y, z)];
+        if (block !== BlockType.AIR) {
+          if (isSlabBlock(block)) {
+            const hit = intersectSlabRay(origin, dir, x, y, z);
+            if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block };
+          } else {
+            return { x, y, z, nx, ny, nz, id: block };
+          }
+        }
       }
       if (tx < ty && tx < tz) {
         x += sx;
