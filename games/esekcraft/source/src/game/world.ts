@@ -421,7 +421,7 @@ export class VoxelWorld {
     };
 
     const startFloor = entrance.surfaceY - 1;
-    const tunnelLength = 25;
+    const tunnelLength = 40;
     const path: Array<{ x: number; z: number; floorY: number }> = [];
     // A broad, broken lip makes the entrance read as a natural hillside opening.
     carveRaggedVolume(entrance.x, startFloor, entrance.z, entrance.inwardX, entrance.inwardZ, 3.2, 2.8, 3.1);
@@ -432,7 +432,7 @@ export class VoxelWorld {
       const z = entrance.z + entrance.inwardZ * step + sideZ * bend;
       const surface = terrainTop(x, z);
       const floorJitter = Math.floor(randomAt(step + 11) * 3) - 1;
-      const floorY = Math.max(4, Math.min(startFloor - Math.floor(step / 4) + floorJitter, surface - 1));
+      const floorY = Math.max(5, Math.min(startFloor - Math.floor(step / 2) + floorJitter, surface - 1));
       path.push({ x, z, floorY });
       const mouthFactor = step < 3 ? 2.35 - step * 0.28 : 1.45 + randomAt(step + 37) * 0.5;
       const verticalRadius = step < 3 ? 2.9 - step * 0.2 : 1.75 + randomAt(step + 71) * 0.35;
@@ -443,19 +443,26 @@ export class VoxelWorld {
     }
 
     // Uneven rooms give the tunnel destinations rather than a uniform hallway.
-    for (const roomStep of [7, 16, 23]) {
+    for (const roomStep of [7, 16, 23, 31, 38]) {
       const room = path[roomStep];
+      const deepRoom = roomStep >= 31;
+      const finalRoom = roomStep === 38;
       carveRaggedVolume(
         room.x, room.floorY, room.z,
         entrance.inwardX, entrance.inwardZ,
-        roomStep === 23 ? 4.2 : 3.2,
-        roomStep === 23 ? 3.8 : 3.0,
-        roomStep === 23 ? 3.0 : 2.6,
+        finalRoom ? 5.2 : deepRoom ? 3.8 : roomStep === 23 ? 4.2 : 3.2,
+        finalRoom ? 4.8 : deepRoom ? 3.5 : roomStep === 23 ? 3.8 : 3.0,
+        finalRoom ? 3.5 : deepRoom ? 2.9 : roomStep === 23 ? 3.0 : 2.6,
       );
     }
 
-    // Side branches split off at different levels and gently descend into the hill.
-    for (const branch of [{ step: 9, sign: 1, length: 9 }, { step: 17, sign: -1, length: 8 }]) {
+    // Side branches split off at different levels; lower branches descend farther.
+    for (const branch of [
+      { step: 9, sign: 1, length: 9, dropEvery: 5 },
+      { step: 17, sign: -1, length: 8, dropEvery: 5 },
+      { step: 28, sign: 1, length: 10, dropEvery: 3 },
+      { step: 35, sign: -1, length: 8, dropEvery: 3 },
+    ]) {
       const start = path[branch.step];
       const branchX = sideX * branch.sign;
       const branchZ = sideZ * branch.sign;
@@ -464,7 +471,7 @@ export class VoxelWorld {
         const x = start.x + branchX * step + entrance.inwardX * advance;
         const z = start.z + branchZ * step + entrance.inwardZ * advance;
         const surface = terrainTop(x, z);
-        const floorY = Math.max(5, Math.min(start.floorY - Math.floor(step / 5), surface - 1));
+        const floorY = Math.max(5, Math.min(start.floorY - Math.floor(step / branch.dropEvery), surface - 1));
         carveRaggedVolume(x, floorY, z, branchX, branchZ, 1.25, 1.55 + randomAt(step + branch.step * 19) * 0.35, 1.65);
       }
     }

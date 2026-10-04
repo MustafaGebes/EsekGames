@@ -649,8 +649,8 @@ export class MinecraftEngine {
         );
         this.visibleMeshCenter = { x: centerX, z: centerZ };
         this.rebuildTorchVisuals();
-        // Fewer multi-part animal meshes keep the first playable frames smooth.
-        this.spawnMobs(14);
+        // A fuller herd, while keeping the first spawn pass bounded.
+        this.spawnMobs(24);
         this.lastTime = performance.now();
         this.animate(this.lastTime);
 
