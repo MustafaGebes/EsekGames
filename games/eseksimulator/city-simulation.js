@@ -259,8 +259,10 @@ export function createCitySimulation(THREE, scene, options = {}) {
       connect(a, b, points, 'crossing', key);
     }
   }
-  for (let ix = 1; ix <= 3; ix += 1) {
-    for (let iz = 1; iz <= 3; iz += 1) {
+  for (let ix = 0; ix < roadLines.length; ix += 1) {
+    if (Math.abs(roadLines[ix]) > 42) continue;
+    for (let iz = 0; iz < roadLines.length; iz += 1) {
+      if (Math.abs(roadLines[iz]) > 42) continue;
       for (const side of [-1, 1]) {
         addCrossing(ix, iz, 'across-ns', side);
         addCrossing(ix, iz, 'across-ew', side);
@@ -364,12 +366,14 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   const vehicles = [];
+  const trafficExtent = Math.abs(roadLines[roadLines.length - 1]) + 4;
+  const trafficSpan = trafficExtent * 2;
   let vehicleIndex = 0;
   for (const axis of ['NS', 'EW']) {
     for (let i = 0; i < roadLines.length; i += 1) {
       const line = roadLines[i];
       for (const direction of [-1, 1]) {
-        const along = -104 + ((vehicleIndex * 37 + 9) % 208);
+        const along = -trafficExtent + ((vehicleIndex * 37 + 9) % trafficSpan);
         const car = makeCar(carColors[vehicleIndex % carColors.length]);
         const yaw = axis === 'NS'
           ? (direction > 0 ? 0 : Math.PI)
@@ -424,8 +428,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
       } else {
         along = proposed;
       }
-      if (along > 116) along = -116;
-      else if (along < -116) along = 116;
+      if (along > trafficExtent) along = -trafficExtent;
+      else if (along < -trafficExtent) along = trafficExtent;
       vehicle.along = along;
       if (vehicle.axis === 'NS') {
         vehicle.mesh.position.set(vehicle.line + vehicle.direction * 1.35, 0, along);

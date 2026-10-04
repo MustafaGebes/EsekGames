@@ -28,8 +28,8 @@ const SERVER_VERSION = "1.0.0";
 const ROOM_MAPS = Object.freeze({
     city: {
         id: "city", name: "Şehir", icon: "🏙️",
-        description: "Apartmanlar, ara sokaklar ve şehir çöpleri.",
-        boundary: "Şehir sınırı", boundaryRadius: 110
+        description: "Geniş mahalleler, ara sokaklar ve dağlık şehir sınırı.",
+        boundary: "Dağlık şehir sınırı", boundaryRadius: 146
     }
 });
 const rooms = new Map();
@@ -109,6 +109,15 @@ function handleBuildingDoorState(player, data) {
     room.lastActivityAt = now;
     broadcastToRoom(room.id, { type: "building_door_state", buildingId, open: data.open });
 }
+function handleAttack(player) {
+    const room = getPlayerRoom(player);
+    if (!player || !player.inGame || !player.alive || !room || !room.members.has(player.id)) return;
+    const now = Date.now();
+    if (now - (player.lastAttackAt || 0) < 420) return;
+    player.lastAttackAt = now;
+    room.lastActivityAt = now;
+    broadcastToRoom(room.id, { type: "attack", id: player.id });
+}
 function handleRoomsRequest(player) {
     sendRoomList(player);
 }
@@ -171,11 +180,12 @@ function getRoomBoundaryRadius(player) {
     return Math.max(60, Number(map && map.boundaryRadius) || ROOM_MAPS.city.boundaryRadius);
 }
 function clampPlayerToRoom(player, x, z) {
-    const radius = getRoomBoundaryRadius(player) - 5;
-    const distance = Math.hypot(x, z);
-    if (!Number.isFinite(distance) || distance <= radius) return { x, z };
-    const scale = radius / distance;
-    return { x: x * scale, z: z * scale };
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return { x: 0, z: 0 };
+    const boundary = getRoomBoundaryRadius(player) - 0.5;
+    return {
+        x: Math.max(-boundary, Math.min(boundary, x)),
+        z: Math.max(-boundary, Math.min(boundary, z))
+    };
 }
 
 // ============================================================
@@ -1918,6 +1928,10 @@ wss.on("connection", (ws, req) => {
 
             case "building_door_state":
                 handleBuildingDoorState(player, data);
+                break;
+
+            case "attack":
+                handleAttack(player);
                 break;
 
             case "chat":

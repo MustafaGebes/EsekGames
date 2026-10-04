@@ -1,13 +1,13 @@
 export const ENTERABLE_BUILDING_CATALOG = Object.freeze([
-  { slot: '1:2:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', accent: 0x79b9c7, awning: 0xd87867 },
-  { slot: '1:2:1', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', accent: 0x8c7657, awning: 0x5d574b },
-  { slot: '1:2:2', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', accent: 0xc99a62, awning: 0x647b68 },
-  { slot: '1:2:3', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', accent: 0x75a67a, awning: 0x6c9c72 },
-  { slot: '2:1:0', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', accent: 0xd3a75c, awning: 0x9d724d },
-  { slot: '2:1:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', accent: 0x8397a1, awning: 0x596872 },
-  { slot: '2:3:2', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', accent: 0xa386b6, awning: 0x78618b },
-  { slot: '1:1:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', accent: 0xa87b5d, awning: 0x766354 },
-  { slot: '3:3:0', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', accent: 0x78909a, awning: 0x586e76 },
+  { slot: '2:3:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', accent: 0x79b9c7, awning: 0xd87867 },
+  { slot: '2:3:1', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', accent: 0x8c7657, awning: 0x5d574b },
+  { slot: '2:3:2', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', accent: 0xc99a62, awning: 0x647b68 },
+  { slot: '2:3:3', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', accent: 0x75a67a, awning: 0x6c9c72 },
+  { slot: '3:2:0', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', accent: 0xd3a75c, awning: 0x9d724d },
+  { slot: '3:2:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', accent: 0x8397a1, awning: 0x596872 },
+  { slot: '3:4:2', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', accent: 0xa386b6, awning: 0x78618b },
+  { slot: '2:2:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', accent: 0xa87b5d, awning: 0x766354 },
+  { slot: '4:4:0', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', accent: 0x78909a, awning: 0x586e76 },
 ]);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
