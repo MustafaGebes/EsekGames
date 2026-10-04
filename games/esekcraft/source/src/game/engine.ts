@@ -17,12 +17,16 @@ import {
   MobEntity,
   KeyBindings,
   DEFAULT_KEY_BINDINGS,
+  BedFacing,
   DoorFacing,
+  getBedBlockId,
+  getBedState,
   getBlockHeight,
   getBlockOffsetY,
   getDoorBlockId,
   getDoorState,
   getSlabBaseBlock,
+  isBedBlock,
   isDoorBlock,
   isSlabBlock,
 } from './types';
@@ -124,7 +128,7 @@ export class MinecraftEngine {
   public readonly PW = 0.3;
   public readonly PH = 1.8;
   public readonly EYE_HEIGHT = 1.62;
-  public readonly SNEAK_EYE = 1.4;
+  public readonly SNEAK_EYE = 1.27;
 
   // Interaction State
   public breakingBlock: { x: number; y: number; z: number } | null = null;
@@ -1873,11 +1877,42 @@ export class MinecraftEngine {
     const top = this.world.getTopSurface(Math.floor(origin.x), Math.floor(origin.z));
     this.pos = { x: origin.x, y: Math.max(origin.y, top + 0.05), z: origin.z };
   }
+
+  private getPlayerHeight(): number {
+    return this.isSneaking ? 1.5 : this.PH;
+  }
+
+  private hasLowHeadroom(px: number, py: number, pz: number): boolean {
+    const crouchTop = py + 1.5;
+    const standingTop = py + this.PH;
+    const x0 = Math.floor(px - this.PW);
+    const x1 = Math.floor(px + this.PW);
+    const y0 = Math.floor(crouchTop - 0.0001);
+    const y1 = Math.floor(standingTop - 0.0001);
+    const z0 = Math.floor(pz - this.PW);
+    const z1 = Math.floor(pz + this.PW);
+
+    for (let y = y0; y <= y1; y++) {
+      for (let z = z0; z <= z1; z++) {
+        for (let x = x0; x <= x1; x++) {
+          const block = this.world.getBlockPhys(x, y, z);
+          const doorState = getDoorState(block);
+          if (block === BlockType.AIR || block === BlockType.TORCH || doorState?.open) continue;
+          const blockBottom = y + getBlockOffsetY(block);
+          const blockTop = blockBottom + getBlockHeight(block);
+          if (blockBottom >= crouchTop - 0.0001 && blockBottom < standingTop && blockTop > crouchTop) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private checkCollision(px: number, py: number, pz: number): boolean {
+    const playerHeight = this.getPlayerHeight();
     const x0 = Math.floor(px - this.PW);
     const x1 = Math.floor(px + this.PW);
     const y0 = Math.floor(py);
-    const y1 = Math.floor(py + this.PH - 0.001);
+    const y1 = Math.floor(py + playerHeight - 0.001);
     const z0 = Math.floor(pz - this.PW);
     const z1 = Math.floor(pz + this.PW);
 
@@ -1888,7 +1923,7 @@ export class MinecraftEngine {
           const state = getDoorState(b);
           const blockBottom = y + getBlockOffsetY(b);
           const blockTop = blockBottom + getBlockHeight(b);
-          if (b !== BlockType.AIR && b !== BlockType.TORCH && !state?.open && py < blockTop && py + this.PH > blockBottom) return true;
+          if (b !== BlockType.AIR && b !== BlockType.TORCH && !state?.open && py < blockTop && py + playerHeight > blockBottom) return true;
         }
       }
     }
@@ -1919,7 +1954,8 @@ export class MinecraftEngine {
   private updatePlayer(dt: number) {
     if (this.isDead) return;
 
-    this.isSneaking = this.isActionActive('sneak') && this.onGround && !this.isFlying;
+    const requestedSneak = this.isActionActive('sneak') && this.onGround && !this.isFlying;
+    this.isSneaking = requestedSneak;
     this.isSprinting =
       (this.isActionActive('sprint') || !!(this.keys['ControlLeft'] || this.keys['ControlRight'])) &&
       !this.isSneaking &&
@@ -1943,6 +1979,22 @@ export class MinecraftEngine {
     const cos = Math.cos(this.yaw);
     const wishX = mx * cos + mz * sin;
     const wishZ = -mx * sin + mz * cos;
+    const wishLen = Math.hypot(wishX, wishZ);
+
+    // Minecraft forces the crouch pose in a 1.5–1.8 block-high passage.
+    if (this.onGround && !this.isFlying && !requestedSneak) {
+      const step = (this.isSprinting ? 5.75 : 4.35) * dt;
+      const entersLowSpace = wishLen > 0 && this.hasLowHeadroom(
+        this.pos.x + (wishX / wishLen) * step,
+        this.pos.y,
+        this.pos.z + (wishZ / wishLen) * step,
+      );
+      if (this.hasLowHeadroom(this.pos.x, this.pos.y, this.pos.z) || entersLowSpace) this.isSneaking = true;
+    }
+    this.isSprinting =
+      (this.isActionActive('sprint') || !!(this.keys['ControlLeft'] || this.keys['ControlRight'])) &&
+      !this.isSneaking &&
+      this.hunger > 6;
 
     // Creative Flying Mode
     if (this.isFlying) {
@@ -1957,9 +2009,8 @@ export class MinecraftEngine {
 
     let speed = 4.35;
     if (this.isSneaking) speed = 1.35;
-    else if (this.isSprinting) speed = 5.75;
+    else if (this.isSprinting) speed = 6.0;
 
-    const wishLen = Math.hypot(wishX, wishZ);
     const targetVx = wishLen > 0 ? (wishX / wishLen) * speed : 0;
     const targetVz = wishLen > 0 ? (wishZ / wishLen) * speed : 0;
 
@@ -2171,7 +2222,7 @@ export class MinecraftEngine {
   private getCurrentSurfaceMaterial(): SoundMaterial {
     const b = this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.2), Math.floor(this.pos.z));
     if (b === BlockType.GRASS || b === BlockType.OAK_LEAVES) return 'grass';
-    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.OAK_PLANKS_SLAB || b === BlockType.OAK_PLANKS_SLAB_TOP || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
+    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.OAK_PLANKS_SLAB || b === BlockType.OAK_PLANKS_SLAB_TOP || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST || isBedBlock(b))
       return 'wood';
     if (b === BlockType.SAND) return 'sand';
     if (b === BlockType.GLASS) return 'glass';
@@ -2288,7 +2339,7 @@ export class MinecraftEngine {
         const currentItem = this.inventory[this.selectedSlot];
         const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
 
-        const handBreakable = isDoorBlock(hit.id) || [
+        const handBreakable = isDoorBlock(hit.id) || isBedBlock(hit.id) || [
           BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
           BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS,
           BlockType.OAK_PLANKS_SLAB_TOP, BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
@@ -2388,7 +2439,7 @@ export class MinecraftEngine {
       }
 
       // Bed interaction: sleep only at night, then advance to sunrise.
-      if (hit.id === BlockType.BED) {
+      if (isBedBlock(hit.id)) {
         if (this.timeOfDay >= 0.25 && this.timeOfDay <= 0.75) {
           this.timeOfDay = 0.76;
           this.onToast?.('Uyudun. Sabah oldu!');
@@ -2425,6 +2476,32 @@ export class MinecraftEngine {
   }
 
   private breakBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType }) {
+    const bedState = getBedState(hit.id);
+    if (bedState) {
+      const offset = bedState.facing === 0 ? { x: 0, z: -1 }
+        : bedState.facing === 1 ? { x: -1, z: 0 }
+        : bedState.facing === 2 ? { x: 0, z: 1 }
+        : { x: 1, z: 0 };
+      const footX = bedState.head ? hit.x - offset.x : hit.x;
+      const footZ = bedState.head ? hit.z - offset.z : hit.z;
+      const headX = footX + offset.x;
+      const headZ = footZ + offset.z;
+      const footId = getBedBlockId(false, bedState.facing);
+      const headId = getBedBlockId(true, bedState.facing);
+      if (this.world.getBlock(footX, hit.y, footZ) === footId && this.world.getBlock(headX, hit.y, headZ) === headId) {
+        Sound.breakBlock('wood');
+        this.spawnBlockDebris(footX + 0.5, hit.y + 0.3, footZ + 0.5, BlockType.BED);
+        if (this.gameMode === 'survival') this.spawnDrop(footX + 0.5, hit.y + 0.22, footZ + 0.5, BlockType.BED, 1);
+        for (const [x, z] of [[footX, footZ], [headX, headZ]]) {
+          this.world.setBlock(x, hit.y, z, BlockType.AIR);
+          this.onBlockChanged?.({ x, y: hit.y, z, blockId: BlockType.AIR });
+        }
+        this.rebuildVisibleWorld();
+        this.rebuildTorchVisuals();
+        return;
+      }
+    }
+
     const doorState = getDoorState(hit.id);
     if (doorState) {
       const bottomY = doorState.upper ? hit.y - 1 : hit.y;
@@ -2539,7 +2616,7 @@ export class MinecraftEngine {
       x + 1 > this.pos.x - this.PW &&
       x < this.pos.x + this.PW &&
       cellY + 1 > this.pos.y &&
-      cellY < this.pos.y + this.PH &&
+      cellY < this.pos.y + this.getPlayerHeight() &&
       z + 1 > this.pos.z - this.PW &&
       z < this.pos.z + this.PW;
     if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return;
@@ -2563,6 +2640,45 @@ export class MinecraftEngine {
     }
   }
 
+  private tryPlaceBed(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
+    const footX = hit.x + hit.nx;
+    const footY = hit.y + hit.ny;
+    const footZ = hit.z + hit.nz;
+    const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as BedFacing;
+    const headOffset = facing === 0 ? { x: 0, z: -1 }
+      : facing === 1 ? { x: -1, z: 0 }
+      : facing === 2 ? { x: 0, z: 1 }
+      : { x: 1, z: 0 };
+    const headX = footX + headOffset.x;
+    const headZ = footZ + headOffset.z;
+    if (!inBounds(footX, footY, footZ) || !inBounds(headX, footY, headZ)) return;
+    if (this.world.getBlock(footX, footY, footZ) !== BlockType.AIR || this.world.getBlock(headX, footY, headZ) !== BlockType.AIR) return;
+
+    const playerHeight = this.getPlayerHeight();
+    const intersectsPlayer = (x: number, z: number) =>
+      x + 1 > this.pos.x - this.PW && x < this.pos.x + this.PW &&
+      footY + 0.5625 > this.pos.y && footY < this.pos.y + playerHeight &&
+      z + 1 > this.pos.z - this.PW && z < this.pos.z + this.PW;
+    if (intersectsPlayer(footX, footZ) || intersectsPlayer(headX, headZ)) return;
+
+    // Java Edition beds use two horizontal cells and need room, but no floor support.
+    const footId = getBedBlockId(false, facing);
+    const headId = getBedBlockId(true, facing);
+    this.world.setBlock(footX, footY, footZ, footId);
+    this.world.setBlock(headX, footY, headZ, headId);
+    this.onBlockChanged?.({ x: footX, y: footY, z: footZ, blockId: footId });
+    this.onBlockChanged?.({ x: headX, y: footY, z: headZ, blockId: headId });
+    this.rebuildVisibleWorld();
+    Sound.placeBlock('wood');
+    this.swingTimer = 0;
+    if (this.gameMode === 'survival') {
+      held.count--;
+      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+      this.updateHeldItemModel();
+      this.onHUDUpdate?.();
+    }
+  }
+
   private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number }) {
     const held = this.inventory[this.selectedSlot];
     if (!held) return;
@@ -2573,6 +2689,10 @@ export class MinecraftEngine {
     if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return;
     if (placeId === BlockType.OAK_DOOR) {
       this.tryPlaceDoor(hit, held);
+      return;
+    }
+    if (placeId === BlockType.BED) {
+      this.tryPlaceBed(hit, held);
       return;
     }
 
@@ -2586,7 +2706,7 @@ export class MinecraftEngine {
         hit.x + 1 > this.pos.x - this.PW &&
         hit.x < this.pos.x + this.PW &&
         hit.y + 1 > this.pos.y &&
-        hit.y < this.pos.y + this.PH &&
+        hit.y < this.pos.y + this.getPlayerHeight() &&
         hit.z + 1 > this.pos.z - this.PW &&
         hit.z < this.pos.z + this.PW;
       if (intersectsPlayer) return;
@@ -2625,7 +2745,7 @@ export class MinecraftEngine {
       px + 1 > this.pos.x - this.PW &&
       px < this.pos.x + this.PW &&
       py + getBlockOffsetY(placeId as BlockType) + getBlockHeight(placeId as BlockType) > this.pos.y &&
-      py + getBlockOffsetY(placeId as BlockType) < this.pos.y + this.PH &&
+      py + getBlockOffsetY(placeId as BlockType) < this.pos.y + this.getPlayerHeight() &&
       pz + 1 > this.pos.z - this.PW &&
       pz < this.pos.z + this.PW;
 
@@ -2780,6 +2900,27 @@ export class MinecraftEngine {
     for (const light of this.torchLights) { const dx = light.position.x - this.pos.x; const dz = light.position.z - this.pos.z; light.visible = dx * dx + dz * dz < this.renderDistance * this.renderDistance; if (light.visible) light.intensity = 1.25 + flicker; }
   }
   public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
+    if (id === BlockType.BED) {
+      const model = new THREE.Group();
+      const wood = new THREE.MeshLambertMaterial({ color: 0x80512f });
+      const blanket = new THREE.MeshLambertMaterial({ color: 0xb93a45 });
+      const pillow = new THREE.MeshLambertMaterial({ color: 0xf1e8d7 });
+      const addPart = (w: number, h: number, d: number, material: THREE.Material, px: number, py: number, pz: number) => {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        part.position.set(px, py, pz);
+        model.add(part);
+      };
+      addPart(0.24, 0.035, 0.4, wood, 0, -0.025, 0);
+      addPart(0.24, 0.075, 0.4, blanket, 0, 0.03, 0);
+      addPart(0.16, 0.025, 0.11, pillow, 0, 0.08, -0.13);
+      for (const px of [-0.09, 0.09]) {
+        for (const pz of [-0.15, 0.15]) addPart(0.035, 0.09, 0.035, wood, px, -0.06, pz);
+      }
+      model.position.set(x, y, z);
+      this.scene.add(model);
+      this.drops.push({ id, count, mesh: model, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
+      return;
+    }
     if (id === BlockType.TORCH) {
       const mesh = this.createTorchDrop();
       mesh.position.set(x, y, z);

@@ -3,7 +3,7 @@
  * Generates 16x16 pixel-art tiles into a Three.js Texture Atlas & HTML Icon Cache
  */
 import * as THREE from 'three';
-import { BlockType, ItemType, AnyItemId, BlockDef, ItemDef, getDoorState } from './types';
+import { BlockType, ItemType, AnyItemId, BlockDef, ItemDef, getBedState, getDoorState } from './types';
 
 // Pseudo-random helper for deterministic textures
 function mulberry32(a: number) {
@@ -80,6 +80,14 @@ export const TILE = {
   SHEARS: 52,
   DOOR_LOWER: 53,
   DOOR_UPPER: 54,
+  BED_TOP_FOOT: 55,
+  BED_HEAD_NORTH: 56,
+  BED_HEAD_WEST: 57,
+  BED_HEAD_SOUTH: 58,
+  BED_HEAD_EAST: 59,
+  BED_FRAME: 60,
+  BED_SIDE: 61,
+  BED_END: 62,
 };
 
 export const BLOCK_DEFS: Record<number, BlockDef> = {
@@ -198,9 +206,10 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
   },
   [BlockType.BED]: {
     name: 'Yatak',
-    top: TILE.PLANKS,
-    bottom: TILE.PLANKS,
-    side: TILE.PLANKS,
+    top: TILE.BED_TOP_FOOT,
+    bottom: TILE.BED_FRAME,
+    side: TILE.BED_SIDE,
+    front: TILE.BED_END,
     hardness: 0.2,
     requiredTool: 'none',
     minHarvestLevel: 0,
@@ -442,6 +451,22 @@ for (let blockId = BlockType.OAK_DOOR; blockId <= BlockType.OAK_DOOR_TOP_OPEN_EA
   BLOCK_DEFS[blockId] = {
     name: 'Meşe Kapı', top: TILE.PLANKS, bottom: TILE.PLANKS, side: TILE.PLANKS, front: tile,
     hardness: 3.0, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.OAK_DOOR, transparent: true,
+  };
+}
+
+// A bed is stored as two directional states, but remains one craftable item.
+for (const blockId of [
+  BlockType.BED, BlockType.BED_FOOT_WEST, BlockType.BED_FOOT_SOUTH, BlockType.BED_FOOT_EAST,
+  BlockType.BED_HEAD_NORTH, BlockType.BED_HEAD_WEST, BlockType.BED_HEAD_SOUTH, BlockType.BED_HEAD_EAST,
+]) {
+  const state = getBedState(blockId);
+  if (!state) continue;
+  const top = !state.head ? TILE.BED_TOP_FOOT : [
+    TILE.BED_HEAD_NORTH, TILE.BED_HEAD_WEST, TILE.BED_HEAD_SOUTH, TILE.BED_HEAD_EAST,
+  ][state.facing];
+  BLOCK_DEFS[blockId] = {
+    name: 'Yatak', top, bottom: TILE.BED_FRAME, side: TILE.BED_SIDE, front: TILE.BED_END,
+    hardness: 0.2, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.BED,
   };
 }
 
@@ -1192,6 +1217,45 @@ export function initTextures() {
     return pick(rnd, ['#9c743d', '#a98246', '#8e6838', '#aa8245']);
   });
 
+  // Red bed textile and oak frame, with a directional white pillow on the head half.
+  tile(TILE.BED_TOP_FOOT, (x, y) => {
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#7f2028';
+    if (y === 3 || y === 12) return '#d6585c';
+    return pick(rnd, ['#b52d37', '#c43740', '#a92732', '#ba303a']);
+  });
+  const bedHeadTiles = [
+    { tile: TILE.BED_HEAD_NORTH, edge: 'north' },
+    { tile: TILE.BED_HEAD_WEST, edge: 'west' },
+    { tile: TILE.BED_HEAD_SOUTH, edge: 'south' },
+    { tile: TILE.BED_HEAD_EAST, edge: 'east' },
+  ] as const;
+  for (const { tile: bedTile, edge } of bedHeadTiles) {
+    tile(bedTile, (x, y) => {
+      const onPillow = edge === 'north' ? y >= 1 && y <= 4
+        : edge === 'south' ? y >= 11 && y <= 14
+        : edge === 'west' ? x >= 1 && x <= 4
+        : x >= 11 && x <= 14;
+      if (onPillow) return (x + y) % 4 === 0 ? '#ded8ca' : '#f3ead9';
+      if (x === 0 || x === 15 || y === 0 || y === 15) return '#7f2028';
+      return pick(rnd, ['#b52d37', '#c43740', '#a92732', '#ba303a']);
+    });
+  }
+  tile(TILE.BED_FRAME, (x, y) => {
+    if (y === 0 || y === 15) return '#56351e';
+    if (x % 5 === 0) return '#76502d';
+    return pick(rnd, ['#8c6035', '#95683a', '#80552f', '#a0703c']);
+  });
+  tile(TILE.BED_SIDE, (x, y) => {
+    if (y <= 2) return '#d55258';
+    if (y >= 13) return '#603d24';
+    return pick(rnd, ['#ad2933', '#bb333b', '#9f232c', '#b52d37']);
+  });
+  tile(TILE.BED_END, (x, y) => {
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#56351e';
+    if (y === 4 || y === 11) return '#704a29';
+    return pick(rnd, ['#8c6035', '#95683a', '#80552f', '#a0703c']);
+  });
+
   // Create Three.js Texture
   atlasTexture = new THREE.CanvasTexture(atlasCanvas);
   atlasTexture.magFilter = THREE.NearestFilter;
@@ -1359,6 +1423,31 @@ export function generateAllItemIcons() {
     ctx.drawImage(atlasCanvas, tx, ty, TILE_SIZE, TILE_SIZE, 2, 2, 28, 28);
     iconDataUrls[BlockType.OAK_DOOR] = doorCanvas.toDataURL();
   }
+
+  // One complete 3-D bed icon for crafting output and inventory (not a wood tile).
+  const bedCanvas = document.createElement('canvas');
+  bedCanvas.width = 32;
+  bedCanvas.height = 32;
+  const bedCtx = bedCanvas.getContext('2d')!;
+  bedCtx.imageSmoothingEnabled = false;
+  const bedPoly = (points: number[][], fill: string) => {
+    bedCtx.beginPath();
+    bedCtx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) bedCtx.lineTo(points[i][0], points[i][1]);
+    bedCtx.closePath();
+    bedCtx.fillStyle = fill;
+    bedCtx.fill();
+    bedCtx.strokeStyle = '#4a2b1a';
+    bedCtx.lineWidth = 1;
+    bedCtx.stroke();
+  };
+  bedPoly([[7, 16], [18, 10], [28, 15], [17, 22], [17, 27], [7, 21]], '#84552f');
+  bedPoly([[17, 22], [28, 15], [28, 20], [17, 27]], '#633e25');
+  bedPoly([[5, 14], [17, 7], [29, 14], [17, 21]], '#b52d37');
+  bedPoly([[5, 14], [17, 21], [17, 25], [5, 18]], '#98242e');
+  bedPoly([[17, 21], [29, 14], [29, 18], [17, 25]], '#7f2028');
+  bedPoly([[8, 13], [16, 8.5], [22, 12], [14, 16]], '#f3ead9');
+  iconDataUrls[BlockType.BED] = bedCanvas.toDataURL();
 
   // Draw standalone items (stick, tools, ores, ingots, food, armor)
   const drawIcon = (id: AnyItemId, drawFn: (ctx: CanvasRenderingContext2D) => void) => {

@@ -54,6 +54,13 @@ export enum BlockType {
   OAK_DOOR_TOP_OPEN_WEST = 42,
   OAK_DOOR_TOP_OPEN_SOUTH = 43,
   OAK_DOOR_TOP_OPEN_EAST = 44,
+  BED_FOOT_WEST = 45,
+  BED_FOOT_SOUTH = 46,
+  BED_FOOT_EAST = 47,
+  BED_HEAD_NORTH = 48,
+  BED_HEAD_WEST = 49,
+  BED_HEAD_SOUTH = 50,
+  BED_HEAD_EAST = 51,
 }
 
 export type DoorFacing = 0 | 1 | 2 | 3; // north, west, south, east
@@ -92,6 +99,37 @@ export function isDoorBlock(id: BlockType): boolean {
   return getDoorState(id) !== null;
 }
 
+export type BedFacing = DoorFacing;
+
+const BED_FOOT: readonly BlockType[] = [
+  BlockType.BED, BlockType.BED_FOOT_WEST, BlockType.BED_FOOT_SOUTH, BlockType.BED_FOOT_EAST,
+];
+const BED_HEAD: readonly BlockType[] = [
+  BlockType.BED_HEAD_NORTH, BlockType.BED_HEAD_WEST, BlockType.BED_HEAD_SOUTH, BlockType.BED_HEAD_EAST,
+];
+
+export function getBedState(id: BlockType): { head: boolean; facing: BedFacing } | null {
+  switch (id) {
+    case BlockType.BED: return { head: false, facing: 0 };
+    case BlockType.BED_FOOT_WEST: return { head: false, facing: 1 };
+    case BlockType.BED_FOOT_SOUTH: return { head: false, facing: 2 };
+    case BlockType.BED_FOOT_EAST: return { head: false, facing: 3 };
+    case BlockType.BED_HEAD_NORTH: return { head: true, facing: 0 };
+    case BlockType.BED_HEAD_WEST: return { head: true, facing: 1 };
+    case BlockType.BED_HEAD_SOUTH: return { head: true, facing: 2 };
+    case BlockType.BED_HEAD_EAST: return { head: true, facing: 3 };
+    default: return null;
+  }
+}
+
+export function getBedBlockId(head: boolean, facing: BedFacing): BlockType {
+  return (head ? BED_HEAD : BED_FOOT)[facing];
+}
+
+export function isBedBlock(id: BlockType): boolean {
+  return id === BlockType.BED || (id >= BlockType.BED_FOOT_WEST && id <= BlockType.BED_HEAD_EAST);
+}
+
 export function isUpperSlabBlock(id: BlockType): boolean {
   return id === BlockType.STONE_SLAB_TOP || id === BlockType.OAK_PLANKS_SLAB_TOP;
 }
@@ -112,6 +150,7 @@ export function getBlockOffsetY(id: BlockType): number {
 
 export function getBlockHeight(id: BlockType): number {
   if (id === BlockType.AIR || id === BlockType.TORCH) return 0;
+  if (isBedBlock(id)) return 0.5625;
   return isSlabBlock(id) ? 0.5 : 1;
 }
 

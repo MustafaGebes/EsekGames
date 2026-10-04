@@ -2,8 +2,8 @@
  * Minecraft Web - Voxel World, Generation, Ores & Meshing
  */
 import * as THREE from 'three';
-import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBlockHeight, getBlockOffsetY, getDoorState, isDoorBlock, isSlabBlock } from './types';
-import { BLOCK_DEFS, TILE_SIZE, TILES_PER_ROW, ATLAS_SIZE, atlasTexture } from './textures';
+import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBedState, getBlockHeight, getBlockOffsetY, getDoorState, isBedBlock, isDoorBlock, isSlabBlock } from './types';
+import { BLOCK_DEFS, TILE, TILE_SIZE, TILES_PER_ROW, ATLAS_SIZE, atlasTexture } from './textures';
 
 export const IDX = (x: number, y: number, z: number) => (y * SZ + z) * SX + x;
 export const inBounds = (x: number, y: number, z: number) =>
@@ -54,17 +54,18 @@ export function hashString(s: string): number {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-function intersectSlabRay(
+function intersectPartialBlockRay(
   origin: { x: number; y: number; z: number },
   dir: { x: number; y: number; z: number },
   x: number,
   y: number,
   z: number,
-  offsetY: number
+  offsetY: number,
+  height: number
 ): { distance: number; nx: number; ny: number; nz: number } | null {
   const bounds = [
     { origin: origin.x, dir: dir.x, min: x, max: x + 1, axis: 0 },
-    { origin: origin.y, dir: dir.y, min: y + offsetY, max: y + offsetY + 0.5, axis: 1 },
+    { origin: origin.y, dir: dir.y, min: y + offsetY, max: y + offsetY + height, axis: 1 },
     { origin: origin.z, dir: dir.z, min: z, max: z + 1, axis: 2 },
   ];
   let enter = -Infinity;
@@ -312,6 +313,36 @@ export class VoxelWorld {
       if (fullView || Math.hypot(x + 0.5 - centerX, z + 0.5 - centerZ) <= renderDistance) visible[z * SX + x] = 1;
     }
 
+    const emitTexturedBox = (
+      x: number, y: number, z: number,
+      minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number,
+      faceTiles: readonly number[],
+    ) => {
+      for (let f = 0; f < 6; f++) {
+        const tileIdx = faceTiles[f];
+        const tx = tileIdx % TILES_PER_ROW;
+        const ty = Math.floor(tileIdx / TILES_PER_ROW);
+        const u0 = tx * tileUvSize;
+        const u1 = u0 + tileUvSize;
+        const v0 = 1 - (ty + 1) * tileUvSize;
+        const v1 = 1 - ty * tileUvSize;
+        const face = FACES[f];
+        for (const c of face.corners) {
+          pos.push(
+            x + minX + c[0] * (maxX - minX),
+            y + minY + c[1] * (maxY - minY),
+            z + minZ + c[2] * (maxZ - minZ),
+          );
+          norm.push(face.dir[0], face.dir[1], face.dir[2]);
+          uv.push(u0 + c[3] * (u1 - u0), v0 + c[4] * (v1 - v0));
+          const shade = FACE_SHADE[f];
+          col.push(shade, shade, shade);
+        }
+        idx.push(vc, vc + 1, vc + 2, vc + 2, vc + 1, vc + 3);
+        vc += 4;
+      }
+    };
+
     for (let y = 0; y < SY; y++) {
       for (let z = 0; z < SZ; z++) {
         for (let x = 0; x < SX; x++) {
@@ -363,6 +394,33 @@ export class VoxelWorld {
               }
               idx.push(vc, vc + 1, vc + 2, vc + 2, vc + 1, vc + 3);
               vc += 4;
+            }
+            continue;
+          }
+
+          const bedState = getBedState(block);
+          if (bedState) {
+            const headTopTiles = [TILE.BED_HEAD_NORTH, TILE.BED_HEAD_WEST, TILE.BED_HEAD_SOUTH, TILE.BED_HEAD_EAST];
+            const mattressTop = bedState.head ? headTopTiles[bedState.facing] : TILE.BED_TOP_FOOT;
+            const bedSideTiles = [TILE.BED_SIDE, TILE.BED_SIDE, TILE.BED_FRAME, mattressTop, TILE.BED_SIDE, TILE.BED_SIDE];
+            const frameTiles = [TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME];
+            const axisX = bedState.facing === 1 || bedState.facing === 3;
+            const mattressMinX = axisX ? 0.02 : 0.07;
+            const mattressMaxX = axisX ? 0.98 : 0.93;
+            const mattressMinZ = axisX ? 0.07 : 0.02;
+            const mattressMaxZ = axisX ? 0.93 : 0.98;
+            emitTexturedBox(x, y, z, mattressMinX, mattressMaxX, 0.245, 0.5625, mattressMinZ, mattressMaxZ, bedSideTiles);
+            emitTexturedBox(x, y, z, axisX ? 0.02 : 0.12, axisX ? 0.98 : 0.88, 0.10, 0.25, axisX ? 0.12 : 0.02, axisX ? 0.88 : 0.98, frameTiles);
+
+            const headEndIsMin = bedState.facing === 0 || bedState.facing === 1;
+            const legAtMin = bedState.head === headEndIsMin;
+            const edgeMin = legAtMin ? 0.02 : 0.82;
+            for (const cross of [0.12, 0.76]) {
+              if (axisX) {
+                emitTexturedBox(x, y, z, edgeMin, edgeMin + 0.12, 0.02, 0.24, cross, cross + 0.12, frameTiles);
+              } else {
+                emitTexturedBox(x, y, z, cross, cross + 0.12, 0.02, 0.24, edgeMin, edgeMin + 0.12, frameTiles);
+              }
             }
             continue;
           }
@@ -550,8 +608,8 @@ export class VoxelWorld {
       if (inBounds(x, y, z)) {
         const block = this.data[IDX(x, y, z)];
         if (block !== BlockType.AIR) {
-          if (isSlabBlock(block)) {
-            const hit = intersectSlabRay(origin, dir, x, y, z, getBlockOffsetY(block));
+          if (isSlabBlock(block) || isBedBlock(block)) {
+            const hit = intersectPartialBlockRay(origin, dir, x, y, z, getBlockOffsetY(block), getBlockHeight(block));
             if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block, distance: hit.distance };
           } else {
             return { x, y, z, nx, ny, nz, id: block, distance: t };
