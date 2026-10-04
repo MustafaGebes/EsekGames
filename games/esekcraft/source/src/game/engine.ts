@@ -2299,12 +2299,14 @@ export class MinecraftEngine {
     const centerZ = (footZ + headZ) / 2 + 0.5;
     const duration = 5.05;
     const thirdPerson = this.isThirdPerson;
+    // The camera is the player's head: place it toward the pillow and look down the bed toward the feet.
+    const headYaw = Math.atan2(headOffset.x, headOffset.z);
     const targetPosition = thirdPerson
       ? new THREE.Vector3(centerX - headOffset.x * 2.8, hit.y + 2.35, centerZ - headOffset.z * 2.8)
-      : new THREE.Vector3(centerX, hit.y + 0.92, centerZ);
+      : new THREE.Vector3(centerX + headOffset.x * 0.34, hit.y + 0.92, centerZ + headOffset.z * 0.34);
     const targetYaw = thirdPerson
       ? Math.atan2(-(centerX - targetPosition.x), -(centerZ - targetPosition.z))
-      : bedState.facing * (Math.PI / 2);
+      : headYaw;
     const targetPitch = thirdPerson
       ? Math.atan2(hit.y + 0.42 - targetPosition.y, Math.hypot(centerX - targetPosition.x, centerZ - targetPosition.z))
       : 1.18;
