@@ -222,7 +222,8 @@ export class VoxelWorld {
       for (let z = 0; z < SZ; z++) {
         for (let x = 0; x < SX; x++) {
           const block = this.data[IDX(x, y, z)];
-          if (block === BlockType.AIR) continue;
+          // Torches are rendered as dedicated models with point lights by the engine.
+          if (block === BlockType.AIR || block === BlockType.TORCH) continue;
 
           const def = BLOCK_DEFS[block];
           if (!def) continue;

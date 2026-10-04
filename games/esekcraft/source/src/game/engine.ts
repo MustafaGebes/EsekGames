@@ -35,7 +35,7 @@ import { findSmeltRecipe } from './recipes';
 export interface DropItemEntity {
   id: AnyItemId;
   count: number;
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
   vel: { x: number; y: number; z: number };
   age: number;
   baseY: number | null;
@@ -151,6 +151,9 @@ export class MinecraftEngine {
 
   private lastTime = 0;
   private animFrameId = 0;
+  private torchGroup = new THREE.Group();
+  private torchLights: THREE.PointLight[] = [];
+  private torchTime = 0;
 
   constructor(canvasContainer: HTMLElement, meta?: WorldMeta) {
     this.scene = new THREE.Scene();
@@ -169,6 +172,7 @@ export class MinecraftEngine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     canvasContainer.appendChild(this.renderer.domElement);
+    this.scene.add(this.torchGroup);
 
     // World Material
     this.worldMaterial = new THREE.MeshLambertMaterial({
@@ -414,6 +418,7 @@ export class MinecraftEngine {
   public start() {
     this.world.generate();
     this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildTorchVisuals();
     this.spawnMobs(16);
     this.lastTime = performance.now();
     this.animate(this.lastTime);
@@ -567,8 +572,16 @@ export class MinecraftEngine {
 
     const id = currentStack.id;
 
+    // Torches are items with a stick/flame model, not miniature cubes.
+    if (id === BlockType.TORCH) {
+      const torch = this.createTorchDrop();
+      torch.scale.setScalar(0.85);
+      torch.position.set(-0.02, 0.15, -0.06);
+      torch.rotation.set(-0.16, 0.32, -0.22);
+      this.heldItemMesh = torch as unknown as THREE.Mesh;
+      this.handGroup.add(this.heldItemMesh);
     // If it's a block: render miniature 3D block held by the hoof, tilted upright facing player
-    if (BLOCK_DEFS[id]) {
+    } else if (BLOCK_DEFS[id]) {
       const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
       this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
       this.setupMeshUVs(geo, id);
@@ -1884,7 +1897,7 @@ export class MinecraftEngine {
     }
   }
 
-  private breakBlock(hit: { x: number; y: number; z: number; id: BlockType }) {
+  private breakBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType }) {
     const bDef = BLOCK_DEFS[hit.id];
     let mat: SoundMaterial = 'stone';
     if (hit.id === BlockType.GRASS || hit.id === BlockType.OAK_LEAVES) mat = 'grass';
@@ -1909,7 +1922,8 @@ export class MinecraftEngine {
 
       if (bDef.drop && canHarvest) {
         const dropCount = bDef.dropCount || 1;
-        this.spawnDrop(hit.x + 0.5, hit.y + 0.4, hit.z + 0.5, bDef.drop, dropCount);
+        const dropPos = this.findDropPosition(hit);
+        this.spawnDrop(dropPos.x, dropPos.y, dropPos.z, bDef.drop, dropCount);
       }
 
       // Tool Durability reduction
@@ -1931,6 +1945,7 @@ export class MinecraftEngine {
 
     this.world.setBlock(hit.x, hit.y, hit.z, BlockType.AIR);
     this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildTorchVisuals();
   }
 
   private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }) {
@@ -1961,6 +1976,7 @@ export class MinecraftEngine {
     // Place block in world
     this.world.setBlock(px, py, pz, held.id as BlockType);
     this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildTorchVisuals();
 
     let mat: SoundMaterial = 'stone';
     if (held.id === BlockType.OAK_LOG || held.id === BlockType.OAK_PLANKS || held.id === BlockType.CRAFTING_TABLE || held.id === BlockType.CHEST)
@@ -1988,7 +2004,136 @@ export class MinecraftEngine {
   }
 
   // ================= DROPS & PARTICLES =================
+  private findDropPosition(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }) {
+    // Prefer the empty cell below the broken block so blocks broken under the player
+    // do not launch their drops upward into the player's feet. Then try the hit face,
+    // the four sides, and finally the cell above.
+    const candidates = [
+      { dx: 0, dy: -1, dz: 0 },
+      { dx: hit.nx, dy: hit.ny, dz: hit.nz },
+      { dx: 1, dy: 0, dz: 0 },
+      { dx: -1, dy: 0, dz: 0 },
+      { dx: 0, dy: 0, dz: 1 },
+      { dx: 0, dy: 0, dz: -1 },
+      { dx: 0, dy: 1, dz: 0 },
+    ];
+    const seen = new Set<string>();
+    for (const c of candidates) {
+      const key = `${c.dx},${c.dy},${c.dz}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const x = hit.x + c.dx;
+      const y = hit.y + c.dy;
+      const z = hit.z + c.dz;
+      if (inBounds(x, y, z) && this.world.getBlockPhys(x, y, z) === BlockType.AIR) {
+        return { x: x + 0.5, y: y + 0.22, z: z + 0.5 };
+      }
+    }
+    // Fully enclosed fallback; the block has just become air, so this remains collectible.
+    return { x: hit.x + 0.5, y: hit.y + 0.22, z: hit.z + 0.5 };
+  }
+  private createToolDrop(id: AnyItemId): THREE.Group | null {
+    const def = ITEM_DEFS[id as number];
+    if (!def?.tool) return null;
+    const group = new THREE.Group();
+    const handle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.045, 0.42, 0.045),
+      new THREE.MeshLambertMaterial({ color: 0x704b24 })
+    );
+    group.add(handle);
+    let headColor = 0x8a8a8a;
+    if (def.tool.material === 'wood') headColor = 0x9a6b32;
+    if (def.tool.material === 'iron') headColor = 0xd9d9d9;
+    if (def.tool.material === 'diamond') headColor = 0x38ebf5;
+    const headMat = new THREE.MeshLambertMaterial({ color: headColor });
+    if (def.tool.type === 'pickaxe') {
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.07), headMat);
+      head.position.y = 0.21;
+      group.add(head);
+      const left = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.07), headMat);
+      left.position.set(-0.13, 0.16, 0);
+      left.rotation.z = -0.35;
+      group.add(left);
+      const right = left.clone();
+      right.position.x = 0.13;
+      right.rotation.z = 0.35;
+      group.add(right);
+    } else if (def.tool.type === 'axe') {
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.07), headMat);
+      head.position.set(-0.09, 0.2, 0);
+      group.add(head);
+    } else if (def.tool.type === 'shovel') {
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.17, 0.06), headMat);
+      head.position.y = 0.27;
+      group.add(head);
+    } else {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.42, 0.05), headMat);
+      blade.position.y = 0.25;
+      group.add(blade);
+    }
+    group.rotation.set(0.25, 0.55, -0.25);
+    return group;
+  }
+  private createTorchDrop(): THREE.Group {
+    const group = new THREE.Group();
+    const wood = new THREE.MeshLambertMaterial({ color: 0x70451f });
+    const flame = new THREE.MeshLambertMaterial({ color: 0xff9b1a, emissive: 0xff5a00, emissiveIntensity: 0.7 });
+    const stick = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.3, 0.055), wood);
+    stick.position.y = -0.05;
+    group.add(stick);
+    const fire = new THREE.Mesh(new THREE.ConeGeometry(0.095, 0.18, 5), flame);
+    fire.position.y = 0.18;
+    group.add(fire);
+    return group;
+  }
+  private disposeDropObject(object: THREE.Object3D) {
+    object.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material && mesh.material !== this.worldMaterial) {
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((material) => material.dispose());
+      }
+    });
+  }
+  private rebuildTorchVisuals() {
+    this.torchGroup.clear();
+    this.torchLights = [];
+    for (let y = 0; y < SY; y++) {
+      for (let z = 0; z < SZ; z++) {
+        for (let x = 0; x < SX; x++) {
+          if (this.world.getBlock(x, y, z) !== BlockType.TORCH) continue;
+          const model = this.createTorchDrop();
+          model.position.set(x + 0.5, y + 0.42, z + 0.5);
+          this.torchGroup.add(model);
+          const light = new THREE.PointLight(0xffa33a, 1.25, 7, 2);
+          light.position.set(x + 0.5, y + 0.72, z + 0.5);
+          this.torchGroup.add(light);
+          this.torchLights.push(light);
+        }
+      }
+    }
+  }
+  private updateTorchLights(dt: number) {
+    this.torchTime += dt;
+    const flicker = Math.sin(this.torchTime * 11.0) * 0.08 + Math.sin(this.torchTime * 23.0) * 0.04;
+    for (const light of this.torchLights) light.intensity = 1.25 + flicker;
+  }
   public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
+    if (id === BlockType.TORCH) {
+      const mesh = this.createTorchDrop();
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 1.2, y: 0.8, z: (Math.random() - 0.5) * 1.2 }, age: 0, baseY: null });
+      return;
+    }
+    const toolMesh = this.createToolDrop(id);
+    if (toolMesh) {
+      toolMesh.position.set(x, y, z);
+      this.scene.add(toolMesh);
+      this.drops.push({ id, count, mesh: toolMesh, vel: { x: (Math.random() - 0.5) * 1.2, y: 0.8, z: (Math.random() - 0.5) * 1.2 }, age: 0, baseY: null });
+      return;
+    }
     const mineralColors: Record<number, number> = {
       [ItemType.COAL]: 0x171717,
       [ItemType.RAW_IRON]: 0xb97852,
@@ -2015,7 +2160,7 @@ export class MinecraftEngine {
       mesh,
       vel: {
         x: (Math.random() - 0.5) * 2.8,
-        y: 3.2 + Math.random() * 1.5,
+        y: 0.9 + Math.random() * 0.45,
         z: (Math.random() - 0.5) * 2.8,
       },
       age: 0,
@@ -2044,7 +2189,7 @@ export class MinecraftEngine {
           const remaining = this.addToInventory(drop.id, drop.count);
           if (remaining <= 0) {
             this.scene.remove(drop.mesh);
-            drop.mesh.geometry.dispose();
+            this.disposeDropObject(drop.mesh);
             this.drops.splice(i, 1);
             Sound.pickup();
             this.onHUDUpdate?.();
@@ -2201,6 +2346,7 @@ export class MinecraftEngine {
       this.updateDrops(dt);
       this.updateParticles(dt);
       this.updateDayNight(dt);
+      this.updateTorchLights(dt);
       this.tickFurnaces(dt);
     }
 
