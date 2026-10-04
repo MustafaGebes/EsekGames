@@ -17,7 +17,13 @@ import {
   MobEntity,
   KeyBindings,
   DEFAULT_KEY_BINDINGS,
+  DoorFacing,
   getBlockHeight,
+  getBlockOffsetY,
+  getDoorBlockId,
+  getDoorState,
+  getSlabBaseBlock,
+  isDoorBlock,
   isSlabBlock,
 } from './types';
 import {
@@ -1879,7 +1885,10 @@ export class MinecraftEngine {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
           const b = this.world.getBlockPhys(x, y, z);
-          if (b !== BlockType.AIR && b !== BlockType.TORCH && py < y + getBlockHeight(b) && py + this.PH > y) return true;
+          const state = getDoorState(b);
+          const blockBottom = y + getBlockOffsetY(b);
+          const blockTop = blockBottom + getBlockHeight(b);
+          if (b !== BlockType.AIR && b !== BlockType.TORCH && !state?.open && py < blockTop && py + this.PH > blockBottom) return true;
         }
       }
     }
@@ -1898,8 +1907,8 @@ export class MinecraftEngine {
       for (let z = z0; z <= z1; z++) {
         for (let x = x0; x <= x1; x++) {
           const block = this.world.getBlockPhys(x, y, z);
-          if (block === BlockType.AIR || block === BlockType.TORCH) continue;
-          const surface = y + getBlockHeight(block);
+          if (block === BlockType.AIR || block === BlockType.TORCH || isDoorBlock(block)) continue;
+          const surface = y + getBlockOffsetY(block) + getBlockHeight(block);
           if (surface <= oldY + 0.0001 && surface >= newY - 0.0001) landingY = Math.max(landingY, surface);
         }
       }
@@ -2162,7 +2171,7 @@ export class MinecraftEngine {
   private getCurrentSurfaceMaterial(): SoundMaterial {
     const b = this.world.getBlock(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.2), Math.floor(this.pos.z));
     if (b === BlockType.GRASS || b === BlockType.OAK_LEAVES) return 'grass';
-    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.OAK_PLANKS_SLAB || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
+    if (b === BlockType.OAK_LOG || b === BlockType.OAK_PLANKS || b === BlockType.OAK_PLANKS_SLAB || b === BlockType.OAK_PLANKS_SLAB_TOP || b === BlockType.CRAFTING_TABLE || b === BlockType.CHEST)
       return 'wood';
     if (b === BlockType.SAND) return 'sand';
     if (b === BlockType.GLASS) return 'glass';
@@ -2197,9 +2206,21 @@ export class MinecraftEngine {
     // Update Highlight wireframe
     if (hit) {
       this.highlightBox.visible = true;
-      const hitHeight = getBlockHeight(hit.id);
-      this.highlightBox.scale.y = hitHeight;
-      this.highlightBox.position.set(hit.x + 0.5, hit.y + hitHeight / 2, hit.z + 0.5);
+      const doorState = getDoorState(hit.id);
+      if (doorState) {
+        const angle = (doorState.facing % 2 === 0 ? 0 : Math.PI / 2) + (doorState.open
+          ? ((doorState.facing === 0 || doorState.facing === 1) ? Math.PI / 2 : -Math.PI / 2)
+          : 0);
+        this.highlightBox.scale.set(0.9, 1, 0.14);
+        this.highlightBox.rotation.set(0, angle, 0);
+        this.highlightBox.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+      } else {
+        const hitHeight = getBlockHeight(hit.id);
+        const hitBottom = getBlockOffsetY(hit.id);
+        this.highlightBox.scale.set(1, hitHeight, 1);
+        this.highlightBox.rotation.set(0, 0, 0);
+        this.highlightBox.position.set(hit.x + 0.5, hit.y + hitBottom + hitHeight / 2, hit.z + 0.5);
+      }
     } else {
       this.highlightBox.visible = false;
     }
@@ -2267,10 +2288,10 @@ export class MinecraftEngine {
         const currentItem = this.inventory[this.selectedSlot];
         const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
 
-        const handBreakable = [
+        const handBreakable = isDoorBlock(hit.id) || [
           BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
           BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS,
-          BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
+          BlockType.OAK_PLANKS_SLAB_TOP, BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
         ].includes(hit.id);
         if (this.gameMode === 'creative') {
           toolSpeed = 100; // instant break
@@ -2290,7 +2311,7 @@ export class MinecraftEngine {
 
         const stage = Math.min(9, Math.floor(this.breakProgress * 10));
         this.crackMesh.visible = true;
-        this.crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+        this.crackMesh.position.set(hit.x + 0.5, hit.y + getBlockOffsetY(hit.id) + getBlockHeight(hit.id) / 2, hit.z + 0.5);
         if (this.crackMesh.material instanceof THREE.MeshBasicMaterial) {
           this.crackMesh.material.map = crackTextures[stage];
           this.crackMesh.material.needsUpdate = true;
@@ -2299,7 +2320,7 @@ export class MinecraftEngine {
         // Continual mining debris particles and crack sound for vivid feedback
         if (Math.random() < 0.35) {
           Sound.crumble();
-          this.spawnBlockDebris(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, hit.id);
+          this.spawnBlockDebris(hit.x + 0.5, hit.y + getBlockOffsetY(hit.id) + getBlockHeight(hit.id) / 2, hit.z + 0.5, hit.id);
         }
 
         // Break completed!
@@ -2361,6 +2382,11 @@ export class MinecraftEngine {
         }
       }
 
+      if (!this.isSneaking && isDoorBlock(hit.id)) {
+        this.toggleDoor(hit);
+        return;
+      }
+
       // Bed interaction: sleep only at night, then advance to sunrise.
       if (hit.id === BlockType.BED) {
         if (this.timeOfDay >= 0.25 && this.timeOfDay <= 0.75) {
@@ -2399,16 +2425,39 @@ export class MinecraftEngine {
   }
 
   private breakBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType }) {
+    const doorState = getDoorState(hit.id);
+    if (doorState) {
+      const bottomY = doorState.upper ? hit.y - 1 : hit.y;
+      const bottomId = this.world.getBlock(hit.x, bottomY, hit.z);
+      const bottomState = getDoorState(bottomId);
+      if (bottomState && !bottomState.upper) {
+        Sound.breakBlock('wood');
+        this.spawnBlockDebris(hit.x + 0.5, bottomY + 1, hit.z + 0.5, BlockType.OAK_DOOR);
+        if (this.gameMode === 'survival') {
+          this.spawnDrop(hit.x + 0.5, bottomY + 0.2, hit.z + 0.5, BlockType.OAK_DOOR, 1);
+        }
+        for (const [y, shouldBeUpper] of [[bottomY, false], [bottomY + 1, true]] as const) {
+          const part = getDoorState(this.world.getBlock(hit.x, y, hit.z));
+          if (!part || part.upper !== shouldBeUpper) continue;
+          this.world.setBlock(hit.x, y, hit.z, BlockType.AIR);
+          this.onBlockChanged?.({ x: hit.x, y, z: hit.z, blockId: BlockType.AIR });
+        }
+        this.rebuildVisibleWorld();
+        this.rebuildTorchVisuals();
+        return;
+      }
+    }
+
     const bDef = BLOCK_DEFS[hit.id];
     let mat: SoundMaterial = 'stone';
     if (hit.id === BlockType.GRASS || hit.id === BlockType.OAK_LEAVES) mat = 'grass';
-    else if (hit.id === BlockType.OAK_LOG || hit.id === BlockType.OAK_PLANKS || hit.id === BlockType.OAK_PLANKS_SLAB || hit.id === BlockType.CRAFTING_TABLE || hit.id === BlockType.CHEST)
+    else if (hit.id === BlockType.OAK_LOG || hit.id === BlockType.OAK_PLANKS || hit.id === BlockType.OAK_PLANKS_SLAB || hit.id === BlockType.OAK_PLANKS_SLAB_TOP || hit.id === BlockType.CRAFTING_TABLE || hit.id === BlockType.CHEST)
       mat = 'wood';
     else if (hit.id === BlockType.SAND) mat = 'sand';
     else if (hit.id === BlockType.GLASS) mat = 'glass';
 
     Sound.breakBlock(mat);
-    this.spawnBlockDebris(hit.x + 0.5, hit.y + getBlockHeight(hit.id) / 2, hit.z + 0.5, hit.id);
+    this.spawnBlockDebris(hit.x + 0.5, hit.y + getBlockOffsetY(hit.id) + getBlockHeight(hit.id) / 2, hit.z + 0.5, hit.id);
 
     // Determine drop item
     if (this.gameMode === 'survival') {
@@ -2419,7 +2468,7 @@ export class MinecraftEngine {
       let canHarvest = true;
       const handBreakable = [
         BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
-        BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS, BlockType.OAK_PLANKS_SLAB,
+        BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS, BlockType.OAK_PLANKS_SLAB, BlockType.OAK_PLANKS_SLAB_TOP,
         BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
       ].includes(hit.id);
       if (bDef.requiredTool !== 'none' && !handBreakable) {
@@ -2455,16 +2504,84 @@ export class MinecraftEngine {
     this.rebuildTorchVisuals();
   }
 
-  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType }) {
+  private toggleDoor(hit: { x: number; y: number; z: number; id: BlockType }) {
+    const hitState = getDoorState(hit.id);
+    if (!hitState) return;
+    const bottomY = hitState.upper ? hit.y - 1 : hit.y;
+    const bottomState = getDoorState(this.world.getBlock(hit.x, bottomY, hit.z));
+    if (!bottomState || bottomState.upper) return;
+    const upperBlock = this.world.getBlock(hit.x, bottomY + 1, hit.z);
+    const upperState = getDoorState(upperBlock);
+    if (upperBlock !== BlockType.AIR && (!upperState || !upperState.upper)) return;
+    const open = !bottomState.open;
+    const bottomId = getDoorBlockId(false, bottomState.facing, open);
+    const topId = getDoorBlockId(true, bottomState.facing, open);
+    this.world.setBlock(hit.x, bottomY, hit.z, bottomId);
+    this.world.setBlock(hit.x, bottomY + 1, hit.z, topId);
+    this.onBlockChanged?.({ x: hit.x, y: bottomY, z: hit.z, blockId: bottomId });
+    this.onBlockChanged?.({ x: hit.x, y: bottomY + 1, z: hit.z, blockId: topId });
+    this.rebuildVisibleWorld();
+    Sound.click();
+  }
+
+  private tryPlaceDoor(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
+    const x = hit.x + hit.nx;
+    const y = hit.y + hit.ny;
+    const z = hit.z + hit.nz;
+    if (!inBounds(x, y, z) || !inBounds(x, y + 1, z)) return;
+    if (this.world.getBlock(x, y, z) !== BlockType.AIR || this.world.getBlock(x, y + 1, z) !== BlockType.AIR) return;
+
+    const support = this.world.getBlockPhys(x, y - 1, z);
+    const supportDef = BLOCK_DEFS[support];
+    if (!supportDef || supportDef.transparent || getBlockHeight(support) < 1) return;
+
+    const intersectsPlayer = (cellY: number) =>
+      x + 1 > this.pos.x - this.PW &&
+      x < this.pos.x + this.PW &&
+      cellY + 1 > this.pos.y &&
+      cellY < this.pos.y + this.PH &&
+      z + 1 > this.pos.z - this.PW &&
+      z < this.pos.z + this.PW;
+    if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return;
+
+    const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as DoorFacing;
+    const bottomId = getDoorBlockId(false, facing, false);
+    const topId = getDoorBlockId(true, facing, false);
+    this.world.setBlock(x, y, z, bottomId);
+    this.world.setBlock(x, y + 1, z, topId);
+    this.onBlockChanged?.({ x, y, z, blockId: bottomId });
+    this.onBlockChanged?.({ x, y: y + 1, z, blockId: topId });
+    this.rebuildVisibleWorld();
+    this.rebuildTorchVisuals();
+    Sound.placeBlock('wood');
+    this.swingTimer = 0;
+    if (this.gameMode === 'survival') {
+      held.count--;
+      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+      this.updateHeldItemModel();
+      this.onHUDUpdate?.();
+    }
+  }
+
+  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number }) {
     const held = this.inventory[this.selectedSlot];
     if (!held) return;
 
     // White wool is an inventory item but places as the real wool block.
-    const placeId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
+    let placeId: AnyItemId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
     // Materials such as leather and feathers are not placeable blocks.
     if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return;
+    if (placeId === BlockType.OAK_DOOR) {
+      this.tryPlaceDoor(hit, held);
+      return;
+    }
 
-    if (hit.ny === 1 && isSlabBlock(hit.id) && placeId === hit.id) {
+    const heldSlabBase = getSlabBaseBlock(placeId as BlockType);
+    const hitSlabBase = getSlabBaseBlock(hit.id);
+    const sameSlabType = isSlabBlock(placeId as BlockType) && isSlabBlock(hit.id) && heldSlabBase === hitSlabBase;
+    const hitIsUpper = getBlockOffsetY(hit.id) > 0;
+    const shouldCombineSlabs = sameSlabType && ((!hitIsUpper && hit.ny === 1) || (hitIsUpper && hit.ny === -1));
+    if (shouldCombineSlabs) {
       const intersectsPlayer =
         hit.x + 1 > this.pos.x - this.PW &&
         hit.x < this.pos.x + this.PW &&
@@ -2473,12 +2590,12 @@ export class MinecraftEngine {
         hit.z + 1 > this.pos.z - this.PW &&
         hit.z < this.pos.z + this.PW;
       if (intersectsPlayer) return;
-      const fullBlock = hit.id === BlockType.STONE_SLAB ? BlockType.STONE : BlockType.OAK_PLANKS;
+      const fullBlock = heldSlabBase === BlockType.STONE_SLAB ? BlockType.STONE : BlockType.OAK_PLANKS;
       this.world.setBlock(hit.x, hit.y, hit.z, fullBlock);
       this.onBlockChanged?.({ x: hit.x, y: hit.y, z: hit.z, blockId: fullBlock });
       this.rebuildVisibleWorld();
       this.rebuildTorchVisuals();
-      Sound.placeBlock(hit.id === BlockType.OAK_PLANKS_SLAB ? 'wood' : 'stone');
+      Sound.placeBlock(heldSlabBase === BlockType.OAK_PLANKS_SLAB ? 'wood' : 'stone');
       this.swingTimer = 0;
       if (this.gameMode === 'survival') {
         held.count--;
@@ -2486,6 +2603,14 @@ export class MinecraftEngine {
         this.onHUDUpdate?.();
       }
       return;
+    }
+
+    if (isSlabBlock(placeId as BlockType)) {
+      const impactY = this.getEyePos().y + this.getLookDir().y * hit.distance;
+      const upperHalf = hit.ny === -1 || (hit.ny === 0 && impactY - hit.y >= 0.5);
+      placeId = heldSlabBase === BlockType.STONE_SLAB
+        ? (upperHalf ? BlockType.STONE_SLAB_TOP : BlockType.STONE_SLAB)
+        : (upperHalf ? BlockType.OAK_PLANKS_SLAB_TOP : BlockType.OAK_PLANKS_SLAB);
     }
 
     const px = hit.x + hit.nx;
@@ -2499,8 +2624,8 @@ export class MinecraftEngine {
     const intersectsPlayer =
       px + 1 > this.pos.x - this.PW &&
       px < this.pos.x + this.PW &&
-      py + getBlockHeight(placeId as BlockType) > this.pos.y &&
-      py < this.pos.y + this.PH &&
+      py + getBlockOffsetY(placeId as BlockType) + getBlockHeight(placeId as BlockType) > this.pos.y &&
+      py + getBlockOffsetY(placeId as BlockType) < this.pos.y + this.PH &&
       pz + 1 > this.pos.z - this.PW &&
       pz < this.pos.z + this.PW;
 
@@ -2513,7 +2638,7 @@ export class MinecraftEngine {
     this.rebuildTorchVisuals();
 
     let mat: SoundMaterial = 'stone';
-    if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.OAK_PLANKS_SLAB || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
+    if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.OAK_PLANKS_SLAB || placeId === BlockType.OAK_PLANKS_SLAB_TOP || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
       mat = 'wood';
     Sound.placeBlock(mat);
     this.swingTimer = 0;
@@ -2521,6 +2646,7 @@ export class MinecraftEngine {
     if (this.gameMode === 'survival') {
       held.count--;
       if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+      this.updateHeldItemModel();
       this.onHUDUpdate?.();
     }
   }

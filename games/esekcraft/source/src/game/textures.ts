@@ -3,7 +3,7 @@
  * Generates 16x16 pixel-art tiles into a Three.js Texture Atlas & HTML Icon Cache
  */
 import * as THREE from 'three';
-import { BlockType, ItemType, AnyItemId, BlockDef, ItemDef } from './types';
+import { BlockType, ItemType, AnyItemId, BlockDef, ItemDef, getDoorState } from './types';
 
 // Pseudo-random helper for deterministic textures
 function mulberry32(a: number) {
@@ -78,6 +78,8 @@ export const TILE = {
   ITEM_OAK_DOOR: 51,
   WOOL: 48,
   SHEARS: 52,
+  DOOR_LOWER: 53,
+  DOOR_UPPER: 54,
 };
 
 export const BLOCK_DEFS: Record<number, BlockDef> = {
@@ -181,6 +183,18 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     requiredTool: 'axe',
     minHarvestLevel: 0,
     drop: BlockType.OAK_PLANKS_SLAB,
+  },
+  [BlockType.STONE_SLAB_TOP]: {
+    name: 'Üst Taş Yarım Basamak', top: TILE.STONE, bottom: TILE.STONE, side: TILE.STONE,
+    hardness: 1.5, requiredTool: 'pickaxe', minHarvestLevel: 0, drop: BlockType.STONE_SLAB,
+  },
+  [BlockType.OAK_PLANKS_SLAB_TOP]: {
+    name: 'Üst Meşe Tahta Yarım Basamak', top: TILE.PLANKS, bottom: TILE.PLANKS, side: TILE.PLANKS,
+    hardness: 1.8, requiredTool: 'axe', minHarvestLevel: 0, drop: BlockType.OAK_PLANKS_SLAB,
+  },
+  [BlockType.OAK_DOOR]: {
+    name: 'Meşe Kapı', top: TILE.PLANKS, bottom: TILE.PLANKS, side: TILE.PLANKS, front: TILE.DOOR_LOWER,
+    hardness: 3.0, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.OAK_DOOR, transparent: true,
   },
   [BlockType.BED]: {
     name: 'Yatak',
@@ -400,7 +414,6 @@ const ITEM_TILE_ENTRIES: Array<{
   { id: ItemType.IRON_LEGGINGS, name: 'Demir Pantolon', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.IRON_BOOTS, name: 'Demir Bot', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_CHESTPLATE, name: 'Elmas Zırh', tile: TILE.ITEM_DIAMOND },
-  { id: BlockType.OAK_DOOR, name: 'Meşe Kapı', tile: TILE.ITEM_OAK_DOOR },
   { id: ItemType.SHEARS, name: 'Makas', tile: TILE.SHEARS },
 ];
 
@@ -417,6 +430,18 @@ for (const e of ITEM_TILE_ENTRIES) {
     requiredTool: 'none',
     minHarvestLevel: 99,
     drop: null,
+  };
+}
+
+// Door states are real block shapes, not the item-only cube fallback. Upper and
+// open/facing variants share the correct procedural lower/upper atlas texture.
+for (let blockId = BlockType.OAK_DOOR; blockId <= BlockType.OAK_DOOR_TOP_OPEN_EAST; blockId++) {
+  const state = getDoorState(blockId);
+  if (!state) continue;
+  const tile = state.upper ? TILE.DOOR_UPPER : TILE.DOOR_LOWER;
+  BLOCK_DEFS[blockId] = {
+    name: 'Meşe Kapı', top: TILE.PLANKS, bottom: TILE.PLANKS, side: TILE.PLANKS, front: tile,
+    hardness: 3.0, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.OAK_DOOR, transparent: true,
   };
 }
 
@@ -1143,6 +1168,30 @@ export function initTextures() {
     return pick(rnd, ['#9c7f4e', '#a68754', '#8c7042', '#a18350']);
   });
 
+  // 53 Oak door lower half: oak planks, framed panels and a dark handle.
+  tile(TILE.DOOR_LOWER, (x, y) => {
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#51361c';
+    if (x === 1 || x === 14) return '#76512a';
+    if (y === 2 || y === 7 || y === 13) return '#805a2d';
+    if (x === 6 || x === 10) return '#9b713b';
+    if (x === 13 && y >= 6 && y <= 8) return '#392b1c';
+    if (y === 1 || y === 8 || y === 14) return '#b28a4d';
+    return pick(rnd, ['#a37b42', '#ad8549', '#98703a', '#b18a4d', '#9d7540']);
+  });
+  // 54 Oak door upper half: four inset glass panes in a dark oak frame.
+  tile(TILE.DOOR_UPPER, (x, y) => {
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#51361c';
+    if (x === 1 || x === 14 || y === 1 || y === 14) return '#76512a';
+    const inPane = (x >= 4 && x <= 6 || x >= 9 && x <= 11) && (y >= 3 && y <= 6 || y >= 9 && y <= 12);
+    if (inPane) {
+      if (x === 4 || x === 9 || y === 3 || y === 9) return '#6b4a27';
+      return (x + y) % 3 === 0 ? '#b8d7dc' : '#8fb9c7';
+    }
+    if (x === 7 || x === 8 || y === 7 || y === 8) return '#634522';
+    if (y === 2 || y === 13) return '#a77e43';
+    return pick(rnd, ['#9c743d', '#a98246', '#8e6838', '#aa8245']);
+  });
+
   // Create Three.js Texture
   atlasTexture = new THREE.CanvasTexture(atlasCanvas);
   atlasTexture.magFilter = THREE.NearestFilter;
@@ -1295,6 +1344,20 @@ export function generateAllItemIcons() {
     ctx.moveTo(16, 25); ctx.lineTo(28, 18); ctx.lineTo(28, 10);
     ctx.stroke();
     iconDataUrls[blockId] = canvas.toDataURL();
+  }
+
+  // Keep the inventory icon as one complete door sprite; the world itself uses
+  // separately textured upper and lower door blocks.
+  if (atlasCanvas) {
+    const doorCanvas = document.createElement('canvas');
+    doorCanvas.width = 32;
+    doorCanvas.height = 32;
+    const ctx = doorCanvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    const tx = (TILE.ITEM_OAK_DOOR % TILES_PER_ROW) * TILE_SIZE;
+    const ty = Math.floor(TILE.ITEM_OAK_DOOR / TILES_PER_ROW) * TILE_SIZE;
+    ctx.drawImage(atlasCanvas, tx, ty, TILE_SIZE, TILE_SIZE, 2, 2, 28, 28);
+    iconDataUrls[BlockType.OAK_DOOR] = doorCanvas.toDataURL();
   }
 
   // Draw standalone items (stick, tools, ores, ingots, food, armor)

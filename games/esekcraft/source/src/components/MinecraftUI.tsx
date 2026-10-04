@@ -13,6 +13,8 @@ import {
   CraftingRecipe,
   KeyBindings,
   DEFAULT_KEY_BINDINGS,
+  isDoorBlock,
+  isUpperSlabBlock,
 } from '../game/types';
 import {
   BLOCK_DEFS,
@@ -827,7 +829,10 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               <div className="absolute -top-28 left-0 right-0 bg-black/90 border-2 border-[#777] p-2 z-20">
                 <div className="text-xs text-yellow-200 font-bold mb-1">CREATIVE BLOK PALETİ — sınırsız seçim</div>
                 <div className="grid grid-cols-12 gap-1 max-h-24 overflow-y-auto">
-                  {Object.entries(BLOCK_DEFS).filter(([id]) => Number(id) > 0 && Number(id) < 100).map(([id, def]) => (
+                  {Object.entries(BLOCK_DEFS).filter(([id]) => {
+                    const blockId = Number(id) as BlockType;
+                    return blockId > 0 && blockId < 100 && !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR);
+                  }).map(([id, def]) => (
                     <button key={id} title={def.name} onClick={() => { engine.giveCreativeItem(Number(id) as AnyItemId); rerender(); }} className="mc-slot !w-9 !h-9 !p-0">
                       <img src={getItemIcon(Number(id) as AnyItemId)} alt={def.name} className="w-7 h-7 pixelated" />
                     </button>

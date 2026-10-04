@@ -37,10 +37,77 @@ export enum BlockType {
   WHITE_WOOL_BLOCK = 25,
   STONE_SLAB = 26,
   OAK_PLANKS_SLAB = 27,
+  STONE_SLAB_TOP = 28,
+  OAK_PLANKS_SLAB_TOP = 29,
+  OAK_DOOR_WEST = 30,
+  OAK_DOOR_SOUTH = 31,
+  OAK_DOOR_EAST = 32,
+  OAK_DOOR_TOP = 33,
+  OAK_DOOR_TOP_WEST = 34,
+  OAK_DOOR_TOP_SOUTH = 35,
+  OAK_DOOR_TOP_EAST = 36,
+  OAK_DOOR_OPEN = 37,
+  OAK_DOOR_OPEN_WEST = 38,
+  OAK_DOOR_OPEN_SOUTH = 39,
+  OAK_DOOR_OPEN_EAST = 40,
+  OAK_DOOR_TOP_OPEN = 41,
+  OAK_DOOR_TOP_OPEN_WEST = 42,
+  OAK_DOOR_TOP_OPEN_SOUTH = 43,
+  OAK_DOOR_TOP_OPEN_EAST = 44,
+}
+
+export type DoorFacing = 0 | 1 | 2 | 3; // north, west, south, east
+
+const DOOR_LOWER_CLOSED: readonly BlockType[] = [
+  BlockType.OAK_DOOR, BlockType.OAK_DOOR_WEST, BlockType.OAK_DOOR_SOUTH, BlockType.OAK_DOOR_EAST,
+];
+const DOOR_UPPER_CLOSED: readonly BlockType[] = [
+  BlockType.OAK_DOOR_TOP, BlockType.OAK_DOOR_TOP_WEST, BlockType.OAK_DOOR_TOP_SOUTH, BlockType.OAK_DOOR_TOP_EAST,
+];
+const DOOR_LOWER_OPEN: readonly BlockType[] = [
+  BlockType.OAK_DOOR_OPEN, BlockType.OAK_DOOR_OPEN_WEST, BlockType.OAK_DOOR_OPEN_SOUTH, BlockType.OAK_DOOR_OPEN_EAST,
+];
+const DOOR_UPPER_OPEN: readonly BlockType[] = [
+  BlockType.OAK_DOOR_TOP_OPEN, BlockType.OAK_DOOR_TOP_OPEN_WEST, BlockType.OAK_DOOR_TOP_OPEN_SOUTH, BlockType.OAK_DOOR_TOP_OPEN_EAST,
+];
+
+export function getDoorState(id: BlockType): { upper: boolean; open: boolean; facing: DoorFacing } | null {
+  for (let facing = 0; facing < 4; facing++) {
+    if (DOOR_LOWER_CLOSED[facing] === id) return { upper: false, open: false, facing: facing as DoorFacing };
+    if (DOOR_UPPER_CLOSED[facing] === id) return { upper: true, open: false, facing: facing as DoorFacing };
+    if (DOOR_LOWER_OPEN[facing] === id) return { upper: false, open: true, facing: facing as DoorFacing };
+    if (DOOR_UPPER_OPEN[facing] === id) return { upper: true, open: true, facing: facing as DoorFacing };
+  }
+  return null;
+}
+
+export function getDoorBlockId(upper: boolean, facing: DoorFacing, open: boolean): BlockType {
+  const states = open
+    ? (upper ? DOOR_UPPER_OPEN : DOOR_LOWER_OPEN)
+    : (upper ? DOOR_UPPER_CLOSED : DOOR_LOWER_CLOSED);
+  return states[facing];
+}
+
+export function isDoorBlock(id: BlockType): boolean {
+  return getDoorState(id) !== null;
+}
+
+export function isUpperSlabBlock(id: BlockType): boolean {
+  return id === BlockType.STONE_SLAB_TOP || id === BlockType.OAK_PLANKS_SLAB_TOP;
 }
 
 export function isSlabBlock(id: BlockType): boolean {
-  return id === BlockType.STONE_SLAB || id === BlockType.OAK_PLANKS_SLAB;
+  return id === BlockType.STONE_SLAB || id === BlockType.OAK_PLANKS_SLAB || isUpperSlabBlock(id);
+}
+
+export function getSlabBaseBlock(id: BlockType): BlockType {
+  if (id === BlockType.STONE_SLAB_TOP) return BlockType.STONE_SLAB;
+  if (id === BlockType.OAK_PLANKS_SLAB_TOP) return BlockType.OAK_PLANKS_SLAB;
+  return id;
+}
+
+export function getBlockOffsetY(id: BlockType): number {
+  return isUpperSlabBlock(id) ? 0.5 : 0;
 }
 
 export function getBlockHeight(id: BlockType): number {

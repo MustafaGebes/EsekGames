@@ -2,7 +2,7 @@
  * Minecraft Web - Voxel World, Generation, Ores & Meshing
  */
 import * as THREE from 'three';
-import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBlockHeight, isSlabBlock } from './types';
+import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBlockHeight, getBlockOffsetY, getDoorState, isDoorBlock, isSlabBlock } from './types';
 import { BLOCK_DEFS, TILE_SIZE, TILES_PER_ROW, ATLAS_SIZE, atlasTexture } from './textures';
 
 export const IDX = (x: number, y: number, z: number) => (y * SZ + z) * SX + x;
@@ -59,11 +59,12 @@ function intersectSlabRay(
   dir: { x: number; y: number; z: number },
   x: number,
   y: number,
-  z: number
+  z: number,
+  offsetY: number
 ): { distance: number; nx: number; ny: number; nz: number } | null {
   const bounds = [
     { origin: origin.x, dir: dir.x, min: x, max: x + 1, axis: 0 },
-    { origin: origin.y, dir: dir.y, min: y, max: y + 0.5, axis: 1 },
+    { origin: origin.y, dir: dir.y, min: y + offsetY, max: y + offsetY + 0.5, axis: 1 },
     { origin: origin.z, dir: dir.z, min: z, max: z + 1, axis: 2 },
   ];
   let enter = -Infinity;
@@ -143,7 +144,7 @@ export class VoxelWorld {
   public getTopSolid(x: number, z: number): number {
     for (let y = SY - 1; y >= 0; y--) {
       const b = this.getBlock(x, y, z);
-      if (b !== BlockType.AIR && b !== BlockType.OAK_LEAVES && b !== BlockType.TORCH) {
+      if (b !== BlockType.AIR && b !== BlockType.OAK_LEAVES && b !== BlockType.TORCH && !isDoorBlock(b)) {
         return y;
       }
     }
@@ -153,8 +154,8 @@ export class VoxelWorld {
   public getTopSurface(x: number, z: number): number {
     for (let y = SY - 1; y >= 0; y--) {
       const block = this.getBlock(x, y, z);
-      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES && block !== BlockType.TORCH) {
-        return y + getBlockHeight(block);
+      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES && block !== BlockType.TORCH && !isDoorBlock(block)) {
+        return y + getBlockOffsetY(block) + getBlockHeight(block);
       }
     }
     return 0;
@@ -321,7 +322,54 @@ export class VoxelWorld {
 
           const def = BLOCK_DEFS[block];
           if (!def) continue;
+
+          const doorState = getDoorState(block);
+          if (doorState) {
+            // Two one-block-high textured panels make the saved lower/upper door blocks
+            // render as one thin, hinged, openable two-block door.
+            const angle = (doorState.facing % 2 === 0 ? 0 : Math.PI / 2) + (doorState.open
+              ? ((doorState.facing === 0 || doorState.facing === 1) ? Math.PI / 2 : -Math.PI / 2)
+              : 0);
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const hingeX = 0.05;
+            const hingeZ = 0.5;
+            const doorWidth = 0.9;
+            const doorThickness = 0.12;
+
+            for (let f = 0; f < 6; f++) {
+              if ((!doorState.upper && f === 3) || (doorState.upper && f === 2)) continue;
+              const tileIdx = f === 3 ? def.top : f === 2 ? def.bottom : (f === 4 || f === 5) ? (def.front ?? def.side) : def.side;
+              const tx = tileIdx % TILES_PER_ROW;
+              const ty = Math.floor(tileIdx / TILES_PER_ROW);
+              const u0 = tx * tileUvSize;
+              const u1 = u0 + tileUvSize;
+              const v0 = 1 - (ty + 1) * tileUvSize;
+              const v1 = 1 - ty * tileUvSize;
+              const d = FACES[f].dir;
+              const corners = FACES[f].corners;
+              const nx = cos * d[0] + sin * d[2];
+              const nz = -sin * d[0] + cos * d[2];
+
+              for (let i = 0; i < 4; i++) {
+                const c = corners[i];
+                const localX = c[0] * doorWidth;
+                const localZ = (c[2] - 0.5) * doorThickness;
+                pos.push(x + hingeX + cos * localX + sin * localZ, y + c[1], z + hingeZ - sin * localX + cos * localZ);
+                norm.push(nx, d[1], nz);
+                uv.push(u0 + c[3] * (u1 - u0), v0 + c[4] * (v1 - v0));
+                const shade = FACE_SHADE[f];
+                col.push(shade, shade, shade);
+              }
+              idx.push(vc, vc + 1, vc + 2, vc + 2, vc + 1, vc + 3);
+              vc += 4;
+            }
+            continue;
+          }
+
           const blockHeight = getBlockHeight(block);
+          const blockBottom = getBlockOffsetY(block);
+          const blockTop = blockBottom + blockHeight;
 
           // Check all 6 faces
           for (let f = 0; f < 6; f++) {
@@ -330,21 +378,29 @@ export class VoxelWorld {
             const neighborInView = nx >= 0 && nx < SX && nz >= 0 && nz < SZ && (fullView || visible[nz * SX + nx] === 1);
             const neighbor = neighborInView ? this.getBlockMesh(nx, y + d[1], nz) : BlockType.AIR;
 
-            let faceLowerY = 0;
-            // Hide covered faces, but keep only the exposed upper portion beside a lower slab.
+            let faceLowerY = blockBottom;
+            let faceUpperY = blockTop;
+            // Hide only the part of a face which is actually covered by the adjacent block.
             if (neighbor !== BlockType.AIR) {
               const nDef = BLOCK_DEFS[neighbor];
               if (nDef?.transparent) {
                 if (def.transparent && neighbor === block) continue; // don't draw inner leaves
               } else if (d[1] === 0) {
-                const neighborHeight = getBlockHeight(neighbor);
-                if (neighborHeight >= blockHeight) continue;
-                faceLowerY = neighborHeight;
+                const neighborBottom = getBlockOffsetY(neighbor);
+                const neighborTop = neighborBottom + getBlockHeight(neighbor);
+                const overlapBottom = Math.max(blockBottom, neighborBottom);
+                const overlapTop = Math.min(blockTop, neighborTop);
+                if (overlapBottom <= blockBottom && overlapTop >= blockTop) continue;
+                if (overlapTop > overlapBottom) {
+                  if (overlapBottom <= blockBottom) faceLowerY = overlapTop;
+                  else if (overlapTop >= blockTop) faceUpperY = overlapBottom;
+                }
               } else if (d[1] === 1) {
-                // A lower slab has open space above its top, so the top face remains visible.
-                if (blockHeight >= 1) continue;
-              } else if (d[1] === -1 && getBlockHeight(neighbor) >= 1) {
-                continue;
+                const neighborBottom = 1 + getBlockOffsetY(neighbor);
+                if (neighborBottom <= blockTop) continue;
+              } else if (d[1] === -1) {
+                const neighborTop = -1 + getBlockOffsetY(neighbor) + getBlockHeight(neighbor);
+                if (neighborTop >= blockBottom) continue;
               }
             }
 
@@ -372,9 +428,9 @@ export class VoxelWorld {
 
             for (let i = 0; i < 4; i++) {
               const c = corners[i];
-              const localY = d[1] === 0 && faceLowerY > 0
-                ? faceLowerY + c[1] * (blockHeight - faceLowerY)
-                : c[1] * blockHeight;
+              const localY = d[1] === 0
+                ? faceLowerY + c[1] * (faceUpperY - faceLowerY)
+                : d[1] === 1 ? blockTop : blockBottom;
               pos.push(x + c[0], y + localY, z + c[2]);
               norm.push(d[0], d[1], d[2]);
               uv.push(u0 + c[3] * (u1 - u0), v0 + c[4] * (v1 - v0));
@@ -468,7 +524,7 @@ export class VoxelWorld {
     origin: { x: number; y: number; z: number },
     dir: { x: number; y: number; z: number },
     maxDistance = 5
-  ): { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType } | null {
+  ): { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number } | null {
     let x = Math.floor(origin.x);
     let y = Math.floor(origin.y);
     let z = Math.floor(origin.z);
@@ -495,10 +551,10 @@ export class VoxelWorld {
         const block = this.data[IDX(x, y, z)];
         if (block !== BlockType.AIR) {
           if (isSlabBlock(block)) {
-            const hit = intersectSlabRay(origin, dir, x, y, z);
-            if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block };
+            const hit = intersectSlabRay(origin, dir, x, y, z, getBlockOffsetY(block));
+            if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block, distance: hit.distance };
           } else {
-            return { x, y, z, nx, ny, nz, id: block };
+            return { x, y, z, nx, ny, nz, id: block, distance: t };
           }
         }
       }
