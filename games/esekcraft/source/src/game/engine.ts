@@ -2203,8 +2203,10 @@ export class MinecraftEngine {
     const held = this.inventory[this.selectedSlot];
     if (!held) return;
 
-    // Must be a block item
-    if (!BLOCK_DEFS[held.id] || Number(held.id) >= 100) return;
+    // White wool is an inventory item but places as the real wool block.
+    const placeId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
+    // Materials such as leather and feathers are not placeable blocks.
+    if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return;
 
     const px = hit.x + hit.nx;
     const py = hit.y + hit.ny;
@@ -2225,13 +2227,13 @@ export class MinecraftEngine {
     if (intersectsPlayer && held.id !== BlockType.TORCH) return;
 
     // Place block in world
-    this.world.setBlock(px, py, pz, held.id as BlockType);
-    this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: held.id as BlockType });
+    this.world.setBlock(px, py, pz, placeId as BlockType);
+    this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: placeId as BlockType });
     this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
 
     let mat: SoundMaterial = 'stone';
-    if (held.id === BlockType.OAK_LOG || held.id === BlockType.OAK_PLANKS || held.id === BlockType.CRAFTING_TABLE || held.id === BlockType.CHEST)
+    if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
       mat = 'wood';
     Sound.placeBlock(mat);
     this.swingTimer = 0;

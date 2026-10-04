@@ -229,17 +229,9 @@ export default function App() {
               sendOnlineMessage({ type: 'esekcraft_tile_state', furnaces: current.world.furnaces, chests: current.world.chests });
             }, 50);
           }
-          setGenProgress(100);
-          setGenText('Hazır!');
-
-          setTimeout(() => {
-            setAppState('in_game');
-            setUIState('playing');
-            eng.requestPointerLock();
-          }, 200);
-        }, 200);
-      }, 250);
-    }, 250);
+        }, 800);
+      }, 650);
+    }, 650);
   };
 
   const closeOnlineConnection = () => {
@@ -948,6 +940,9 @@ export default function App() {
             />
           </div>
           <div className="text-[#ddd] font-mono text-sm mt-3">{genText}</div>
+          <div className="mt-5 max-w-[390px] px-4 text-center text-xs leading-5 text-[#aeb7c4]">
+            Dünya arka planda yükleniyor. İlk girişte işlem uzun sürebilir; hazır olana kadar bu ekranı kapatma.
+          </div>
         </div>
       )}
 
