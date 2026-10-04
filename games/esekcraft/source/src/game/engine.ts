@@ -704,6 +704,14 @@ export class MinecraftEngine {
       door.rotation.set(-0.16, 0.32, -0.22);
       this.heldItemMesh = door as unknown as THREE.Mesh;
       this.handGroup.add(door);
+    // Sheared wool is placeable as a full block, so show the full block model in hand too.
+    } else if (id === ItemType.WHITE_WOOL) {
+      const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
+      this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
+      this.setupMeshUVs(geo, BlockType.WHITE_WOOL_BLOCK);
+      this.heldItemMesh.position.set(-0.02, 0.15, -0.06);
+      this.heldItemMesh.rotation.set(0.2, -0.45, 0.15);
+      this.handGroup.add(this.heldItemMesh);
     // If it's a block: render its own atlas-textured miniature block.
     } else if (BLOCK_DEFS[id] && Number(id) < 100 && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
       const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
@@ -737,8 +745,6 @@ export class MinecraftEngine {
         headColor = 0xcc6060;
       } else if (id === ItemType.RAW_CHICKEN || id === ItemType.COOKED_CHICKEN) {
         headColor = 0xdeaa88;
-      } else if (id === ItemType.WHITE_WOOL) {
-        headColor = 0xf0f0eb;
       } else if (id === ItemType.COAL || id === ItemType.CHARCOAL) {
         headColor = 0x222222;
       }
@@ -962,11 +968,6 @@ export class MinecraftEngine {
           feather.position.set(0, 0.17, 0); feather.rotation.z = -0.25; toolGroup.add(feather);
           const quill = addBoxPart(0.012, 0.35, 0.012, new THREE.MeshLambertMaterial({ color: 0xcfc8b8 }), 0, 0.17, 0.012);
           quill.rotation.z = -0.25;
-        } else if (id === ItemType.WHITE_WOOL) {
-          const wool = new THREE.MeshLambertMaterial({ color: 0xf0eee5 });
-          addBoxPart(0.22, 0.13, 0.18, wool, 0, 0.13, 0);
-          addBoxPart(0.18, 0.09, 0.16, wool, -0.02, 0.23, 0);
-          addBoxPart(0.13, 0.055, 0.13, wool, 0.025, 0.3, 0);
         } else if ([ItemType.IRON_HELMET, ItemType.IRON_CHESTPLATE, ItemType.IRON_LEGGINGS, ItemType.IRON_BOOTS, ItemType.DIAMOND_CHESTPLATE].includes(id as ItemType)) {
           const armorMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x40dce7 : 0xc4cbd0 });
           const trimMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x178e9d : 0x737b80 });

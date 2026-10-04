@@ -16,7 +16,7 @@
 - Bloklar: ilgili atlas dokusunu kullanan minyatür blok modeli; meşale kendi çubuk/alev modeliyle, meşe kapı ise çerçeveli ince kapı modeliyle gösterilir.
 - Malzemeler: kömür/odun kömürü, demir/altın külçe, ham demir/altın ve çakmak taşı birbirinden ayrı şekil ve renkler alır.
 - Yiyecekler: ekmek, elma ve sekiz çiğ/pişmiş et türü ayrı biçim/renk detaylarına sahiptir.
-- Diğerleri: deri, tüy, yün, makas ve her zırh parçası kendi siluetini taşır.
+- Diğerleri: deri, tüy, makas ve her zırh parçası kendi siluetini taşır. Yerleştirilebilir yün eşyası elde küçük bir yığın değil, gerçek yün blok dokusunu kullanan tam küp model olarak gösterilir.
 
 Model parçaları `THREE.Group` altında birleştirilerek elde birlikte konumlandırılır. Blok dünyasının birleştirilmiş mesh akışına dokunulmaz.
 
