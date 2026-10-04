@@ -123,7 +123,7 @@ export class VoxelWorld {
     for (let z = 0; z < SZ; z++) {
       for (let x = 0; x < SX; x++) {
         const heightNoise = (n1(x * 0.04, z * 0.04) * 1.0 + n2(x * 0.1, z * 0.1) * 0.4 + n3(x * 0.25, z * 0.25) * 0.15) / 1.55;
-        const groundHeight = Math.max(8, Math.min(SY - 10, Math.floor(14 + heightNoise * 18)));
+        const groundHeight = Math.max(10, Math.min(SY - 10, Math.floor(18 + heightNoise * 25)));
 
         // Desert beach biome patch
         const isSandBiome = n2(x * 0.05, z * 0.05) > 0.65;
@@ -141,13 +141,15 @@ export class VoxelWorld {
           } else {
             // Stone layer with Ore Veins
             const oreRnd = ((Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + this.seed) * 43758.5453) % 1 + 1) % 1;
-            if (y <= 12 && oreRnd < 0.015) {
+            // Y-level based distribution: deep diamond/gold, mid iron, upper coal.
+            const veinNoise = ((Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + this.seed) * 43758.5453) % 1 + 1) % 1;
+            if (y <= 10 && veinNoise < 0.022) {
               b = BlockType.DIAMOND_ORE;
-            } else if (y <= 24 && oreRnd < 0.025) {
+            } else if (y <= 24 && veinNoise < 0.038) {
               b = BlockType.GOLD_ORE;
-            } else if (y <= 36 && oreRnd < 0.055) {
+            } else if (y >= 8 && y <= 42 && veinNoise < 0.072) {
               b = BlockType.IRON_ORE;
-            } else if (oreRnd < 0.09) {
+            } else if (y >= 4 && veinNoise < 0.135) {
               b = BlockType.COAL_ORE;
             } else {
               b = BlockType.STONE;
@@ -158,7 +160,18 @@ export class VoxelWorld {
       }
     }
 
-    if (onProgress) onProgress(60, 'Ağaçlar ve bitkiler oluşturuluyor...');
+    // Carve deterministic underground cave pockets and tunnels below the surface.
+    for (let z = 2; z < SZ - 2; z++) {
+      for (let x = 2; x < SX - 2; x++) {
+        const surface = this.getTopSolid(x, z);
+        for (let y = 4; y < Math.min(surface - 2, SY - 4); y++) {
+          const tunnel = Math.sin(x * 0.29 + y * 0.61 + z * 0.37 + this.seed * 0.0001);
+          const chamber = Math.sin(x * 0.13 + y * 0.21 + z * 0.17 + this.seed * 0.00007);
+          if (tunnel > 0.78 && chamber > -0.25) this.data[IDX(x, y, z)] = BlockType.AIR;
+        }
+      }
+    }
+    if (onProgress) onProgress(60, 'Mağaralar, ağaçlar ve madenler oluşturuluyor...');
 
     // Trees
     for (let z = 3; z < SZ - 3; z++) {

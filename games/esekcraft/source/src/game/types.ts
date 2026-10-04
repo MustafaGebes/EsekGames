@@ -3,7 +3,7 @@
  */
 
 export const SX = 80;
-export const SY = 48;
+export const SY = 64;
 export const SZ = 80;
 export const MAX_STACK = 64;
 
@@ -33,6 +33,7 @@ export enum BlockType {
   MOSSY_COBBLE = 21,
   OBSIDIAN = 22,
   OAK_DOOR = 23,
+  BED = 24,
 }
 
 // Non-Block Items

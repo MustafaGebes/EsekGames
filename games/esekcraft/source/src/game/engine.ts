@@ -537,6 +537,7 @@ export class MinecraftEngine {
   }
   public start() {
     this.world.generate();
+    this.recoverFromBlockCollision();
     this.world.buildMesh(this.scene, this.worldMaterial);
     this.rebuildTorchVisuals();
     this.spawnMobs(16);
@@ -2013,6 +2014,17 @@ export class MinecraftEngine {
         }
       }
 
+      // Bed interaction: sleep only at night, then advance to sunrise.
+      if (hit.id === BlockType.BED) {
+        if (this.timeOfDay >= 0.25 && this.timeOfDay <= 0.75) {
+          this.timeOfDay = 0.76;
+          this.onToast?.('Uyudun. Sabah oldu!');
+          Sound.click();
+        } else {
+          this.onToast?.('Sadece gece uyuyabilirsin.');
+        }
+        return;
+      }
       // Check food consumption
       const held = this.inventory[this.selectedSlot];
       if (held) {
@@ -2408,6 +2420,19 @@ export class MinecraftEngine {
   }
 
   // ================= INVENTORY HELPERS =================
+  public giveCreativeItem(id: AnyItemId) {
+    if (this.gameMode !== 'creative') return;
+    const selected = this.inventory[this.selectedSlot];
+    if (selected && selected.id === id) {
+      selected.count = 64;
+    } else {
+      const left = this.addToInventory(id, 64);
+      if (left === 64) this.inventory[this.selectedSlot] = { id, count: 64 };
+    }
+    this.hp = this.maxHp;
+    this.hunger = this.maxHunger;
+    this.onHUDUpdate?.();
+  }
   public addToInventory(id: AnyItemId, count: number): number {
     // 1. Try stacking into existing matching slots
     for (let i = 0; i < 36 && count > 0; i++) {

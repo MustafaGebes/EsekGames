@@ -35,6 +35,10 @@ interface MinecraftUIProps {
   toastMessage: string | null;
   keyBindings?: KeyBindings;
   onSaveKeyBindings?: (binds: KeyBindings) => void;
+  onlinePlayers?: Record<string, any>;
+  onlineIsAdmin?: boolean;
+  onKickPlayer?: (id: string) => void;
+  onlineSelfId?: string | null;
 }
 
 const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mousePos }) => {
@@ -214,11 +218,16 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   toastMessage,
   keyBindings,
   onSaveKeyBindings,
+  onlinePlayers = {},
+  onlineIsAdmin = false,
+  onKickPlayer,
+  onlineSelfId = null,
 }) => {
   // Cursor item held in hand across all inventory/crafting menus
   const [cursorItem, setCursorItem] = useState<ItemStack | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showControlsModal, setShowControlsModal] = useState(false);
+  const [showPlayerList, setShowPlayerList] = useState(false);
 
   // 2x2 player crafting grid
   const [playerCraftGrid, setPlayerCraftGrid] = useState<(ItemStack | null)[]>(new Array(4).fill(null));
@@ -258,6 +267,18 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
     }
   }, [uiState, engine]);
 
+  // Minecraft-style TAB player list: hold Tab to show, release it to hide.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Tab' || (e.target as HTMLElement).tagName === 'INPUT') return;
+      e.preventDefault();
+      setShowPlayerList(true);
+    };
+    const up = (e: KeyboardEvent) => { if (e.code === 'Tab') setShowPlayerList(false); };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
+  }, []);
   // Listen to Inventory key (dynamic keybinding, default 'KeyE') to open/close inventory
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -603,9 +624,32 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
           {engine.damageFlashTimer > 0 && (
             <div className="absolute inset-0 bg-red-600/30 pointer-events-none transition-opacity duration-300" />
           )}
+          <div className="absolute top-3 left-3 px-2 py-1 bg-black/55 border border-white/20 text-white font-mono text-xs pointer-events-none">
+            XYZ: {Math.floor(engine.pos.x)} / {Math.floor(engine.pos.y)} / {Math.floor(engine.pos.z)}
+          </div>
+          {showPlayerList && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[520px] max-w-[94vw] bg-black/85 border-2 border-[#777] shadow-2xl p-3 pointer-events-auto">
+              <div className="text-center font-mono font-bold text-white mb-2">ONLINE OYUNCULAR</div>
+              <div className="flex flex-col gap-1">
+                {Object.entries(onlinePlayers).map(([id, player]: [string, any]) => (
+                  <div key={id} className="flex items-center justify-between px-2 py-1 bg-[#252525] border border-[#444] text-xs font-mono">
+                    <span className={player.alive === false ? 'text-red-400' : 'text-white'}>
+                      {player.name || 'Oyuncu'} {player.isAdmin ? <b className="text-yellow-300">[ADMIN]</b> : <span className="text-slate-400">[ÜYE]</span>}
+                    </span>
+                    {onlineIsAdmin && id !== onlineSelfId && (
+                      <button onClick={() => onKickPlayer?.(id)} className="text-red-300 hover:text-red-100 border border-red-700 px-2 py-0.5">At</button>
+                    )}
+                  </div>
+                ))}
+                {Object.keys(onlinePlayers).length === 0 && <div className="text-center text-slate-400">Oyuncu listesi bekleniyor...</div>}
+              </div>
+              <div className="text-center text-[10px] text-slate-400 mt-2">TAB basılı tutulurken gösterilir</div>
+            </div>
+          )}
 
           {/* Bottom HUD: Hearts, Armor, Hunger, Level & Hotbar */}
           <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
+            {engine.gameMode !== 'creative' && <>
             {/* Status Bars (Hearts, Armor, Hunger) */}
             {/* Status Bars (Hearts, Armor, Hunger) - Spread across hotbar width without overflowing */}
             <div className="w-[404px] max-w-[94vw] flex justify-between items-end px-1 pb-1">
@@ -674,6 +718,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                 <span className="w-9 text-right">{Math.ceil(engine.hunger)}/{engine.maxHunger}</span>
               </div>
             </div>
+            </>}
             {/* Experience Level & Bar */}
             <div className="relative w-[404px] max-w-[94vw] flex flex-col items-center">
               {engine.level > 0 && (
@@ -751,6 +796,18 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
           }}
         >
           <div className="mc-panel p-4 flex gap-4 relative" onMouseDown={(e) => e.stopPropagation()}>
+            {engine.gameMode === 'creative' && (
+              <div className="absolute -top-28 left-0 right-0 bg-black/90 border-2 border-[#777] p-2 z-20">
+                <div className="text-xs text-yellow-200 font-bold mb-1">CREATIVE BLOK PALETİ — sınırsız seçim</div>
+                <div className="grid grid-cols-12 gap-1 max-h-24 overflow-y-auto">
+                  {Object.entries(BLOCK_DEFS).filter(([id]) => Number(id) > 0 && Number(id) < 100).map(([id, def]) => (
+                    <button key={id} title={def.name} onClick={() => { engine.giveCreativeItem(Number(id) as AnyItemId); rerender(); }} className="mc-slot !w-9 !h-9 !p-0">
+                      <img src={getItemIcon(Number(id) as AnyItemId)} alt={def.name} className="w-7 h-7 pixelated" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Left Zone: Armor Slots */}
             <div className="flex flex-col gap-2">
               <div className="text-xs font-bold text-[#444444] mb-1">Zırh</div>

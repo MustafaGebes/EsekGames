@@ -160,6 +160,16 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     minHarvestLevel: 0,
     drop: BlockType.OAK_PLANKS,
   },
+  [BlockType.BED]: {
+    name: 'Yatak',
+    top: TILE.PLANKS,
+    bottom: TILE.PLANKS,
+    side: TILE.PLANKS,
+    hardness: 0.2,
+    requiredTool: 'none',
+    minHarvestLevel: 0,
+    drop: BlockType.BED,
+  },
   [BlockType.CRAFTING_TABLE]: {
     name: 'Çalışma Masası',
     top: TILE.CRAFT_TOP,

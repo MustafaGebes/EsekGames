@@ -51,6 +51,8 @@ export default function App() {
   const [showControlsModal, setShowControlsModal] = useState(false);
   // Online EsekCraft lobby state
   const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([]);
+  const [onlinePlayers, setOnlinePlayers] = useState<Record<string, any>>({});
+  const [onlineIsAdmin, setOnlineIsAdmin] = useState(false);
   const [selectedOnlineRoom, setSelectedOnlineRoom] = useState<string | null>(null);
   const [onlineMaxPlayers, setOnlineMaxPlayers] = useState(1);
   const onlineSocketRef = useRef<WebSocket | null>(null);
@@ -242,6 +244,8 @@ export default function App() {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     onlineRoomRef.current = null;
     onlinePlayerIdRef.current = null;
+    setOnlinePlayers({});
+    setOnlineIsAdmin(false);
   };
   const sendOnlineMessage = (payload: Record<string, unknown>) => {
     const ws = onlineSocketRef.current;
@@ -273,6 +277,7 @@ export default function App() {
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'init') onlinePlayerIdRef.current = message.id || null;
+        if (message.type === 'esekcraft_joined') { onlinePlayerIdRef.current = message.id || null; setOnlineIsAdmin(!!message.isAdmin); }
         if (message.type === 'rooms_list') setOnlineRooms(message.rooms || []);
         if (message.type === 'room_error') showToast(message.message || 'Sunucu işlemi başarısız.');
         if (message.type === 'room_created') {
@@ -288,8 +293,11 @@ export default function App() {
           launchWorld(roomToWorldMeta(room));
         }
         if (message.type === 'players' && onlineRoomRef.current && engineRef.current) {
+          setOnlinePlayers(message.players || {});
           engineRef.current.setRemotePlayers(message.players || {}, onlinePlayerIdRef.current || undefined);
         }
+        if (message.type === 'room_admin') setOnlineIsAdmin(!!message.isAdmin);
+        if (message.type === 'esekcraft_kicked') { showToast(message.message || 'Odadan çıkarıldın.'); handleSaveAndQuit(); return; }
         if (message.type === 'esekcraft_block_changes' && engineRef.current) {
           for (const change of message.changes || []) engineRef.current.applyRemoteBlockChange(Number(change.x), Number(change.y), Number(change.z), Number(change.blockId));
         }
@@ -436,6 +444,10 @@ export default function App() {
           toastMessage={toastMessage}
           keyBindings={keyBindings}
           onSaveKeyBindings={handleSaveKeyBindings}
+          onlinePlayers={onlinePlayers}
+          onlineIsAdmin={onlineIsAdmin}
+          onlineSelfId={onlinePlayerIdRef.current}
+          onKickPlayer={(id) => sendOnlineMessage({ type: 'esekcraft_kick', targetId: id })}
         />
       )}
 

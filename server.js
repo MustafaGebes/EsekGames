@@ -62,7 +62,10 @@ function roomPlayerCount(room) {
 function roomGameId(room) {
     return room && room.gameId === "esekcraft" ? "esekcraft" : "city";
 }
-function publicRoom(room) {
+function isRoomAdmin(player, room) {
+    return !!(player && room && roomGameId(room) === "esekcraft" && (room.hostId === player.id || (room.hostName && player.name === room.hostName)));
+}
+function publicRoom(room, viewer = null) {
     const map = ROOM_MAPS[room.mapId] || ROOM_MAPS.city;
     const host = players.get(room.hostId);
     const currentPlayers = roomPlayerCount(room);
@@ -77,7 +80,8 @@ function publicRoom(room) {
         mapIcon: map.icon,
         mapDescription: map.description,
         boundary: map.boundary,
-        hostName: host && host.name ? host.name : "Oyuncu",
+        hostName: room.hostName || (host && host.name ? host.name : "Oyuncu"),
+        isAdmin: viewer ? isRoomAdmin(viewer, room) : false,
         worldOptions: room.worldOptions || null,
         isOpen: currentPlayers < room.maxPlayers
     };
@@ -102,9 +106,16 @@ function removePlayerFromRoom(player) {
     player.mapId = null;
     if (!room) return;
     room.members.delete(player.id);
-    if (room.hostId === player.id) room.hostId = [...room.members][0] || null;
+    // The original host identity is preserved. If they reconnect with the same name,
+    // admin status returns; meanwhile the room intentionally has no active admin.
     room.lastActivityAt = Date.now();
     room.emptySince = room.members.size ? null : (room.emptySince || Date.now());
+    if (roomGameId(room) === "esekcraft") {
+        for (const id of room.members) {
+            const member = players.get(id);
+            if (member) sendTo(member, { type: "room_admin", isAdmin: isRoomAdmin(member, room) });
+        }
+    }
     broadcastRoomLists();
 }
 function getPlayerRoom(player) {
@@ -166,7 +177,7 @@ function handleCreateRoom(player, data) {
         id: makeRoomId(), gameId, name, maxPlayers, mapId,
         worldOptions: gameId === "esekcraft" ? sanitizeEsekCraftWorldOptions(data) : null,
         esekcraftBlocks: new Map(),
-        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(),
+        hostId: player.id, hostName: null, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(),
         lastActivityAt: Date.now(), emptySince: null
     };
     rooms.set(room.id, room);
@@ -182,6 +193,7 @@ function joinEsekCraftGame(player, data = {}) {
     if (roomPlayerCount(room) > room.maxPlayers) return;
     const platform = data.platform === "mobile" ? "mobile" : "pc";
     player.name = player.name || allocateGuestName();
+    if (!room.hostName) room.hostName = player.name;
     player.platform = platform;
     player.inGame = true;
     player.alive = true;
@@ -195,7 +207,7 @@ function joinEsekCraftGame(player, data = {}) {
     player.yaw = 0;
     player.pitch = 0;
     room.lastActivityAt = Date.now();
-    sendTo(player, { type: "esekcraft_joined", id: player.id, name: player.name, roomId: room.id });
+    sendTo(player, { type: "esekcraft_joined", id: player.id, name: player.name, roomId: room.id, isAdmin: isRoomAdmin(player, room) });
     const changes = [...(room.esekcraftBlocks || new Map())].map(([key, blockId]) => {
         const [x, y, z] = key.split(",").map(Number);
         return { x, y, z, blockId };
@@ -219,6 +231,7 @@ function handleEsekCraftAttack(player, data = {}) {
     let bestDistance = Infinity;
     for (const candidate of players.values()) {
         if (candidate.id === player.id || !candidate.inGame || !candidate.alive || candidate.roomId !== player.roomId) continue;
+        if (room.worldOptions?.gameMode === "creative") continue;
         const dx = candidate.x - player.x;
         const dz = candidate.z - player.z;
         const horizontalDistance = Math.hypot(dx, dz);
@@ -237,6 +250,18 @@ function handleEsekCraftAttack(player, data = {}) {
         type: "esekcraft_hit_confirmed", attackerId: player.id, targetId: target.id,
         damage, health: target.health, maxHealth: 20
     });
+}
+function handleEsekCraftKick(player, data = {}) {
+    const room = getPlayerRoom(player);
+    if (!player || !player.inGame || !room || roomGameId(room) !== "esekcraft" || !isRoomAdmin(player, room)) return;
+    const targetId = String(data.targetId || "");
+    const target = players.get(targetId);
+    if (!target || target.id === player.id || target.roomId !== room.id) return;
+    sendTo(target, { type: "esekcraft_kicked", message: "Oda yöneticisi tarafından çıkarıldın." });
+    if (target.inGame) leaveGame(target);
+    removePlayerFromRoom(target);
+    broadcastPlayers();
+    broadcastRoomLists();
 }
 function handleEsekCraftBlockChange(player, data = {}) {
     if (!player || !player.inGame) return;
@@ -1497,7 +1522,8 @@ function getPublicPlayer(p) {
         mapId: p.mapId,
         level: p.progress ? getPlayerLevel(p.progress.xp) : 1,
         equippedArmor: p.progress ? p.progress.equippedArmor : null,
-        alive: p.alive
+        alive: p.alive,
+        isAdmin: isRoomAdmin(p, getPlayerRoom(p))
     };
 }
 
@@ -2403,6 +2429,9 @@ wss.on("connection", (ws, req) => {
                 break;
             case "esekcraft_attack":
                 handleEsekCraftAttack(player, data);
+                break;
+            case "esekcraft_kick":
+                handleEsekCraftKick(player, data);
                 break;
             case "esekcraft_block_change":
                 handleEsekCraftBlockChange(player, data);
