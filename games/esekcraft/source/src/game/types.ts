@@ -115,6 +115,30 @@ export function getDoorLocalBounds(id: BlockType): DoorLocalBounds | null {
     : { minX: 0.4375, maxX: 0.5625, minZ: 0.05, maxZ: 0.95 };
 }
 
+/** Finds the adjacent, same-facing door leaf that forms a horizontal double door. */
+export function findAdjacentDoorPair(
+  getBlock: (x: number, y: number, z: number) => BlockType,
+  x: number,
+  y: number,
+  z: number,
+  facing: DoorFacing,
+): { x: number; z: number } | null {
+  const offsets = facing % 2 === 0
+    ? [{ x: -1, z: 0 }, { x: 1, z: 0 }]
+    : [{ x: 0, z: -1 }, { x: 0, z: 1 }];
+
+  for (const offset of offsets) {
+    const neighborX = x + offset.x;
+    const neighborZ = z + offset.z;
+    const lower = getDoorState(getBlock(neighborX, y, neighborZ));
+    const upper = getDoorState(getBlock(neighborX, y + 1, neighborZ));
+    if (lower && !lower.upper && lower.facing === facing && upper?.upper && upper.facing === facing) {
+      return { x: neighborX, z: neighborZ };
+    }
+  }
+  return null;
+}
+
 export function isDoorBlock(id: BlockType): boolean {
   return getDoorState(id) !== null;
 }

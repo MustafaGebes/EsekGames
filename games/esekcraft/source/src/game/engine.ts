@@ -25,6 +25,7 @@ import {
   getBlockOffsetY,
   getDoorBlockId,
   getDoorLocalBounds,
+  findAdjacentDoorPair,
   getDoorState,
   getSlabBaseBlock,
   isBedBlock,
@@ -2723,12 +2724,23 @@ export class MinecraftEngine {
     const upperState = getDoorState(upperBlock);
     if (upperBlock !== BlockType.AIR && (!upperState || !upperState.upper)) return;
     const open = !bottomState.open;
-    const bottomId = getDoorBlockId(false, bottomState.facing, open);
-    const topId = getDoorBlockId(true, bottomState.facing, open);
-    this.world.setBlock(hit.x, bottomY, hit.z, bottomId);
-    this.world.setBlock(hit.x, bottomY + 1, hit.z, topId);
-    this.onBlockChanged?.({ x: hit.x, y: bottomY, z: hit.z, blockId: bottomId });
-    this.onBlockChanged?.({ x: hit.x, y: bottomY + 1, z: hit.z, blockId: topId });
+    const doors = [{ x: hit.x, z: hit.z }];
+    const partner = findAdjacentDoorPair(
+      (x, y, z) => this.world.getBlock(x, y, z),
+      hit.x, bottomY, hit.z, bottomState.facing,
+    );
+    if (partner) doors.push(partner);
+
+    for (const door of doors) {
+      const state = getDoorState(this.world.getBlock(door.x, bottomY, door.z));
+      if (!state || state.upper) continue;
+      const bottomId = getDoorBlockId(false, state.facing, open);
+      const topId = getDoorBlockId(true, state.facing, open);
+      this.world.setBlock(door.x, bottomY, door.z, bottomId);
+      this.world.setBlock(door.x, bottomY + 1, door.z, topId);
+      this.onBlockChanged?.({ x: door.x, y: bottomY, z: door.z, blockId: bottomId });
+      this.onBlockChanged?.({ x: door.x, y: bottomY + 1, z: door.z, blockId: topId });
+    }
     this.rebuildVisibleWorld();
     Sound.click();
   }
