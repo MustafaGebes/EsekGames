@@ -177,7 +177,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     }
 
     scene.add(root);
-    return { root, torso, arms, legs };
+    return { root, torso, arms, legs, hitbox: { radius: 0.78, height: 2.05 } };
   }
 
   const nodes = new Map();
@@ -348,14 +348,18 @@ export function createCitySimulation(THREE, scene, options = {}) {
     return { ...model, id: building.id, name: building.title, building, point, gait: random() * Math.PI * 2 };
   });
 
-  function getNearestCitizen(position, maxDistance = 3.3) {
+  function getNearestCitizen(position, maxDistance = 4.6, forward = null) {
     if (!position) return null;
     let nearest = null;
     let bestDistance = maxDistance;
     for (const citizen of citizens) {
       if (!citizen.alive || !citizen.root.visible) continue;
-      const distance = Math.hypot(position.x - citizen.x, position.z - citizen.z);
-      if (distance <= bestDistance) { bestDistance = distance; nearest = citizen; }
+      const dx = citizen.x - position.x;
+      const dz = citizen.z - position.z;
+      const distance = Math.hypot(dx, dz);
+      const hitRadius = citizen.hitbox?.radius || 0.78;
+      const facing = forward ? (dx * forward.x + dz * forward.z) / Math.max(distance, 0.001) : 1;
+      if (distance <= bestDistance + hitRadius && facing >= 0.18 && distance < bestDistance) { bestDistance = distance; nearest = citizen; }
     }
     return nearest;
   }
@@ -421,6 +425,13 @@ export function createCitySimulation(THREE, scene, options = {}) {
     addBox(car, bodyMaterial, 1.78, 0.12, 3.15, 0, 1.055, -0.08);
     addBox(car, glassMaterial, 1.64, 0.68, 2.12, 0, 1.36, -0.19);
     addBox(car, bodyMaterial, 1.58, 0.1, 1.78, 0, 1.73, -0.22);
+    car.userData.collisionParts = [
+      { x: 0, y: .69, z: 0, w: 2.05, d: 4.3, h: .72 },
+      { x: 0, y: 1.055, z: -.08, w: 1.78, d: 3.15, h: .18 },
+      { x: 0, y: 1.36, z: -.19, w: 1.64, d: 2.12, h: .7 },
+      { x: 0, y: 1.73, z: -.22, w: 1.58, d: 1.78, h: .16 },
+      ...[-1, 1].flatMap(side => [-1, 1].map(end => ({ x: side * 1.02, y: .36, z: end * 1.35, w: .68, d: .22, h: .68 }))),
+    ];
     addBox(car, glassMaterial, 1.48, 0.48, 0.08, 0, 1.36, 0.91);
     addBox(car, glassMaterial, 1.46, 0.43, 0.08, 0, 1.34, -1.28);
     for (const side of [-1, 1]) {
@@ -562,6 +573,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
           along,
           speed: 5.0 + (vehicleIndex % 4) * 0.32,
           wheelRotation: 0,
+          lastImpactAt: -Infinity,
         });
         vehicleIndex += 1;
       }
@@ -582,6 +594,30 @@ export function createCitySimulation(THREE, scene, options = {}) {
       ? junctionKey(vehicle.line, nearest.coordinate)
       : junctionKey(nearest.coordinate, vehicle.line);
     return { ...nearest, key };
+  }
+
+  function getVehicleImpact(position, radius = 0.82) {
+    if (!position) return null;
+    for (const vehicle of vehicles) {
+      if (vehicle.lastImpactAt && elapsed - vehicle.lastImpactAt < 1.05) continue;
+      const yaw = vehicle.mesh.rotation.y;
+      const cos = Math.cos(yaw), sin = Math.sin(yaw);
+      for (const part of vehicle.mesh.userData.collisionParts || []) {
+        const cx = vehicle.mesh.position.x + cos * part.x + sin * part.z;
+        const cz = vehicle.mesh.position.z - sin * part.x + cos * part.z;
+        const halfX = (Math.abs(cos) * part.w + Math.abs(sin) * part.d) / 2 + radius;
+        const halfZ = (Math.abs(sin) * part.w + Math.abs(cos) * part.d) / 2 + radius;
+        const vertical = position.y + 1.25 >= part.y - part.h / 2 && position.y <= part.y + part.h / 2 + 0.35;
+        if (!vertical || Math.abs(position.x - cx) > halfX || Math.abs(position.z - cz) > halfZ) continue;
+        vehicle.lastImpactAt = elapsed;
+        const direction = vehicle.axis === 'NS' ? new THREE.Vector3(0, 0, vehicle.direction) : new THREE.Vector3(vehicle.direction, 0, 0);
+        const away = new THREE.Vector3(position.x - cx, 0, position.z - cz).normalize();
+        const impulse = direction.multiplyScalar(vehicle.speed * 1.25 + 3.8).add(away.multiplyScalar(2.2));
+        impulse.y = 4.2 + vehicle.speed * 0.18;
+        return { impulse, vehicle };
+      }
+    }
+    return null;
   }
 
   function updateVehicles(dt) {
@@ -753,6 +789,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     setCitizenStates,
     animateCitizenAttack,
     setPoliceWantedLevel,
+    getVehicleImpact,
     phaseAt,
     step: update,
     get elapsed() { return elapsed; },

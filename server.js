@@ -807,7 +807,15 @@ function handleCityCitizenHit(player, data) {
     if (!isCityGameplayPlayer(player)) return;
     const npcId = String(data && data.targetCitizenId || ""), npc = CITY_CITIZENS.get(npcId), room = getPlayerRoom(player);
     const state = room && room.cityCitizens && room.cityCitizens.get(npcId);
-    if (!npc || !state || !state.alive || Math.hypot(player.x - npc.x, player.z - npc.z) > 3.7) return;
+    if (!npc || !state || !state.alive) return;
+    const dx = npc.x - player.x;
+    const dz = npc.z - player.z;
+    const distance = Math.hypot(dx, dz);
+    const forwardX = Math.sin(Number(player.yaw) || 0);
+    const forwardZ = Math.cos(Number(player.yaw) || 0);
+    const facing = (dx * forwardX + dz * forwardZ) / Math.max(distance, 0.001);
+    // Torso hitbox: a little forgiving at the edge, but attacks must be in front.
+    if (distance > 4.6 || facing < 0.18) return;
     const now = Date.now();
     if (now - (player.lastCityAttackAt || 0) < 400) return;
     player.lastCityAttackAt = now;

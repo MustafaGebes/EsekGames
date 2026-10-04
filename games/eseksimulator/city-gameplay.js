@@ -320,7 +320,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     byId('cityBagTouch').classList.toggle('show', screen === 'game' && mode === 'mobile');
     if (screen !== 'game') closeAllOverlays();
   }
-  function attackTarget() { return citySimulation.getNearestCitizen(player.position, 3.4); }
+  function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestCitizen(player.position, 4.6, forward); }
 
   renderHud();
   return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, get profile() { return profile; } };
