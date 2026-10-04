@@ -102,6 +102,7 @@ export class MinecraftEngine {
   private visibleMeshCenter = { x: -999, z: -999 };
   private visibleMeshBuildId = 0;
   private isRebuildingVisibleMesh = false;
+  private pendingVisibleMeshRebuild = false;
 
   // Player State
   public pos = { x: 40.5, y: 30, z: 40.5 };
@@ -581,7 +582,7 @@ export class MinecraftEngine {
     if (next === this.renderDistance) return;
     this.renderDistance = next;
     this.visibleMeshCenter = { x: -999, z: -999 };
-    this.rebuildVisibleWorld();
+    this.rebuildVisibleWorldAdaptive(true);
     this.onHUDUpdate?.();
   }
   private rebuildVisibleWorld() {
@@ -591,8 +592,14 @@ export class MinecraftEngine {
     this.visibleMeshCenter = { x: cx, z: cz };
   }
 
-  private rebuildVisibleWorldAdaptive() {
-    if (this.isRebuildingVisibleMesh) return;
+  private rebuildVisibleWorldAdaptive(force = false) {
+    if (this.isRebuildingVisibleMesh) {
+      if (force) {
+        this.visibleMeshBuildId++;
+        this.pendingVisibleMeshRebuild = true;
+      }
+      return;
+    }
     const buildId = ++this.visibleMeshBuildId;
     const center = { x: this.pos.x, z: this.pos.z };
     this.isRebuildingVisibleMesh = true;
@@ -610,6 +617,10 @@ export class MinecraftEngine {
       console.error('EsekCraft visible mesh refresh failed:', error);
     }).finally(() => {
       this.isRebuildingVisibleMesh = false;
+      if (this.pendingVisibleMeshRebuild) {
+        this.pendingVisibleMeshRebuild = false;
+        requestAnimationFrame(() => this.rebuildVisibleWorldAdaptive());
+      }
     });
   }
 
@@ -627,10 +638,11 @@ export class MinecraftEngine {
 
         const centerX = this.pos.x;
         const centerZ = this.pos.z;
+        const startupRenderDistance = Math.min(this.renderDistance, 16);
         await this.world.buildMeshAdaptive(
           this.scene,
           this.worldMaterial,
-          this.renderDistance,
+          startupRenderDistance,
           centerX,
           centerZ,
           (pct, stage, fps) => onLoadingProgress?.(74 + pct * 0.24, stage, fps)
@@ -648,6 +660,9 @@ export class MinecraftEngine {
         window.setTimeout(() => {
           onLoadingProgress?.(100, 'Dünya hazır!', this.fps || 60);
           onReady?.();
+          if (startupRenderDistance < this.renderDistance) {
+            requestAnimationFrame(() => this.rebuildVisibleWorldAdaptive());
+          }
         }, remaining);
       } catch (error) {
         console.error('EsekCraft world loading failed:', error);
@@ -661,6 +676,8 @@ export class MinecraftEngine {
 
   public destroy() {
     cancelAnimationFrame(this.animFrameId);
+    this.visibleMeshBuildId++;
+    this.pendingVisibleMeshRebuild = false;
     this.sleepOverlay?.remove();
     this.sleepOverlay = null;
     this.bedSleepAnimation = null;
@@ -2607,7 +2624,6 @@ export class MinecraftEngine {
           const adjacentChest = this.world.getAdjacentChest(hit.x, hit.y, hit.z);
           if (this.isChestBlockedByCeiling(hit.x, hit.y, hit.z) ||
               (adjacentChest && this.isChestBlockedByCeiling(adjacentChest.x, adjacentChest.y, adjacentChest.z))) {
-            this.onToast?.('Sandığın üstünde açılmasını engelleyen bir blok var.');
             return;
           }
           this.currentChestPos = { x: hit.x, y: hit.y, z: hit.z };
@@ -2826,21 +2842,6 @@ export class MinecraftEngine {
       getBlockOffsetY(above) === 0 && getBlockHeight(above) >= 1;
   }
 
-  private canPlaceChest(x: number, y: number, z: number): boolean {
-    const neighbors = [{ x: -1, z: 0 }, { x: 1, z: 0 }, { x: 0, z: -1 }, { x: 0, z: 1 }];
-    const adjacent = neighbors.filter((offset) => this.world.getBlock(x + offset.x, y, z + offset.z) === BlockType.CHEST);
-    if (adjacent.length > 1) return false;
-    if (adjacent.length === 0) return true;
-
-    const partner = adjacent[0];
-    return neighbors.every((offset) => {
-      const neighborX = x + partner.x + offset.x;
-      const neighborZ = z + partner.z + offset.z;
-      if (neighborX === x && neighborZ === z) return true;
-      return this.world.getBlock(neighborX, y, neighborZ) !== BlockType.CHEST;
-    });
-  }
-
   private tryPlaceDoor(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
     const x = hit.x + hit.nx;
     const y = hit.y + hit.ny;
@@ -2998,11 +2999,6 @@ export class MinecraftEngine {
 
     if (!inBounds(px, py, pz)) return;
     if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return;
-    if (placeId === BlockType.CHEST && !this.canPlaceChest(px, py, pz)) {
-      this.onToast?.('Sandıklar en fazla ikili birleşebilir.');
-      return;
-    }
-
     // Check collision with player
     const intersectsPlayer =
       px + 1 > this.pos.x - this.PW &&
@@ -3015,7 +3011,9 @@ export class MinecraftEngine {
     if (intersectsPlayer && held.id !== BlockType.TORCH) return;
 
     // Place block in world
+    if (placeId === BlockType.CHEST) this.world.prepareChestPlacement(px, py, pz);
     this.world.setBlock(px, py, pz, placeId as BlockType);
+    if (placeId === BlockType.CHEST) this.world.registerPlacedChest(px, py, pz);
     this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: placeId as BlockType });
     this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();

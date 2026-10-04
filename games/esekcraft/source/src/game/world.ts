@@ -118,12 +118,73 @@ export class VoxelWorld {
   }
 
   public getAdjacentChest(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+    if (this.getBlock(x, y, z) !== BlockType.CHEST) return null;
+    const index = IDX(x, y, z);
+    const ownData = this.chests[index];
+    if (ownData?.pairedWith === null) return null;
+    if (typeof ownData?.pairedWith === 'number') {
+      const partnerIndex = ownData.pairedWith;
+      const partnerX = partnerIndex % SX;
+      const partnerZ = Math.floor(partnerIndex / SX) % SZ;
+      const partnerY = Math.floor(partnerIndex / (SX * SZ));
+      if (this.getBlock(partnerX, partnerY, partnerZ) === BlockType.CHEST) {
+        return { x: partnerX, y: partnerY, z: partnerZ };
+      }
+      delete ownData.pairedWith;
+    }
+
     for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
       if (this.getBlock(x + dx, y, z + dz) === BlockType.CHEST) {
+        const otherIndex = IDX(x + dx, y, z + dz);
+        const otherData = this.chests[otherIndex];
+        if (otherData?.pairedWith !== undefined && otherData.pairedWith !== index) continue;
+        this.linkChestPair(index, otherIndex);
         return { x: x + dx, y, z: z + dz };
       }
     }
     return null;
+  }
+
+  public prepareChestPlacement(x: number, y: number, z: number) {
+    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      if (this.getBlock(x + dx, y, z + dz) === BlockType.CHEST) {
+        this.getAdjacentChest(x + dx, y, z + dz);
+      }
+    }
+  }
+
+  public registerPlacedChest(x: number, y: number, z: number) {
+    const index = IDX(x, y, z);
+    const neighbors = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+      .map(([dx, dz]) => ({ x: x + dx, z: z + dz }))
+      .filter((pos) => this.getBlock(pos.x, y, pos.z) === BlockType.CHEST);
+    if (neighbors.length === 0) return;
+
+    const ownData = this.ensureChestData(index);
+    if (neighbors.length === 1) {
+      const partnerIndex = IDX(neighbors[0].x, y, neighbors[0].z);
+      if (this.chests[partnerIndex]?.pairedWith === undefined) {
+        this.linkChestPair(index, partnerIndex);
+        return;
+      }
+    }
+    // Keep this newly placed chest independent rather than creating a triple or L-shaped mega-chest.
+    ownData.pairedWith = null;
+  }
+
+  private ensureChestData(index: number): ChestData {
+    let data = this.chests[index];
+    if (!data || !Array.isArray(data.slots)) {
+      data = { slots: new Array(27).fill(null) };
+      this.chests[index] = data;
+    }
+    while (data.slots.length < 27) data.slots.push(null);
+    return data;
+  }
+
+  private linkChestPair(firstIndex: number, secondIndex: number) {
+    this.ensureChestData(firstIndex).pairedWith = secondIndex;
+    this.ensureChestData(secondIndex).pairedWith = firstIndex;
   }
 
   public getBlockMesh(x: number, y: number, z: number): BlockType {
@@ -151,6 +212,17 @@ export class VoxelWorld {
       delete this.furnaces[idx];
     }
     if (type !== BlockType.CHEST) {
+      const removedChest = this.chests[idx];
+      if (typeof removedChest?.pairedWith === 'number') {
+        const partnerData = this.chests[removedChest.pairedWith];
+        if (partnerData?.pairedWith === idx) delete partnerData.pairedWith;
+      }
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        if (!inBounds(x + dx, y, z + dz)) continue;
+        const neighborIndex = IDX(x + dx, y, z + dz);
+        const neighborData = this.chests[neighborIndex];
+        if (neighborData?.pairedWith === null) delete neighborData.pairedWith;
+      }
       delete this.chests[idx];
     }
   }
@@ -203,7 +275,7 @@ export class VoxelWorld {
         previousFrame = frameTime;
         fps = Math.round(1000 / frameMs);
         if (fps < 38) rowsPerFrame = Math.max(1, Math.floor(rowsPerFrame / 2));
-        else if (fps > 54) rowsPerFrame = Math.min(6, rowsPerFrame + 1);
+        else if (fps > 54) rowsPerFrame = Math.min(3, rowsPerFrame + 1);
 
         const pct = progressStart + ((row - start) / (end - start)) * (progressEnd - progressStart);
         onProgress?.(pct, stage, fps);
@@ -299,6 +371,13 @@ export class VoxelWorld {
       }
       return 0;
     };
+    const noiseAt = (x: number, y: number, z: number) =>
+      0.11 * Math.sin((x + this.seed * 0.000013) * 0.71 + y * 1.17 + z * 0.43) +
+      0.07 * Math.sin(x * 0.29 - y * 0.47 + (z + this.seed * 0.000019) * 0.83);
+    const randomAt = (key: number) => {
+      const sample = Math.sin(this.seed * 0.0001 + key * 127.1) * 43758.5453;
+      return sample - Math.floor(sample);
+    };
     const directions = [{ x: 0, z: 1 }, { x: 1, z: 0 }, { x: 0, z: -1 }, { x: -1, z: 0 }];
     let entrance = { x: centerX, z: centerZ + 8, inwardX: 0, inwardZ: -1, surfaceY: terrainTop(centerX, centerZ + 8) };
     let bestScore = -Infinity;
@@ -322,55 +401,83 @@ export class VoxelWorld {
       }
     }
 
-    const startFloor = entrance.surfaceY - 1;
-    const tunnelLength = 16;
-    for (let step = 0; step < tunnelLength; step++) {
-      const x = entrance.x + entrance.inwardX * step;
-      const z = entrance.z + entrance.inwardZ * step;
-      const surface = terrainTop(x, z);
-      const floorY = Math.max(3, Math.min(startFloor - Math.floor(step / 3), surface - 1));
-      for (let side = -1; side <= 1; side++) {
-        const px = x + (entrance.inwardX === 0 ? side : 0);
-        const pz = z + (entrance.inwardZ === 0 ? side : 0);
-        if (!inBounds(px, floorY, pz)) continue;
-        const columnSurface = terrainTop(px, pz);
-        const columnFloor = Math.max(2, Math.min(floorY, columnSurface - 1));
-        for (let treeY = columnSurface + 1; treeY <= Math.min(SY - 1, columnSurface + 8); treeY++) {
-          const vegetation = this.getBlock(px, treeY, pz);
-          if (vegetation === BlockType.OAK_LOG || vegetation === BlockType.OAK_LEAVES) {
-            this.data[IDX(px, treeY, pz)] = BlockType.AIR;
-          }
-        }
-        if (this.getBlock(px, columnFloor, pz) === BlockType.AIR) {
-          this.data[IDX(px, columnFloor, pz)] = BlockType.STONE;
-        }
-        for (let dy = 1; dy <= 3; dy++) {
-          const py = columnFloor + dy;
-          if (inBounds(px, py, pz) && this.getBlock(px, py, pz) !== BlockType.BEDROCK) {
-            this.data[IDX(px, py, pz)] = BlockType.AIR;
-          }
-        }
-      }
-    }
-
-    // Finish in a small irregular chamber that intersects the existing cave pockets.
-    const chamberX = entrance.x + entrance.inwardX * (tunnelLength - 1);
-    const chamberZ = entrance.z + entrance.inwardZ * (tunnelLength - 1);
-    const chamberFloor = Math.max(3, startFloor - Math.floor((tunnelLength - 1) / 3) - 1);
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2 && ((this.seed + dx * 7 + dz * 11) & 1) === 0) continue;
-        const x = chamberX + dx;
-        const z = chamberZ + dz;
-        const floorY = Math.max(2, Math.min(chamberFloor, terrainTop(x, z) - 1));
-        if (!inBounds(x, floorY, z)) continue;
-        if (this.getBlock(x, floorY, z) === BlockType.AIR) this.data[IDX(x, floorY, z)] = BlockType.STONE;
-        for (let dy = 1; dy <= 5; dy++) {
-          const y = floorY + dy;
-          if (inBounds(x, y, z) && this.getBlock(x, y, z) !== BlockType.BEDROCK) {
+    const sideX = -entrance.inwardZ;
+    const sideZ = entrance.inwardX;
+    const carveRaggedVolume = (
+      centerX: number, floorY: number, centerZ: number,
+      alongX: number, alongZ: number,
+      alongRadius: number, sideRadius: number, verticalRadius: number,
+    ) => {
+      const crossX = -alongZ;
+      const crossZ = alongX;
+      for (let along = -Math.ceil(alongRadius); along <= Math.ceil(alongRadius); along++) {
+        for (let across = -Math.ceil(sideRadius); across <= Math.ceil(sideRadius); across++) {
+          const x = centerX + alongX * along + crossX * across;
+          const z = centerZ + alongZ * along + crossZ * across;
+          if (!inBounds(x, floorY, z)) continue;
+          const surface = terrainTop(x, z);
+          for (let dy = 1; dy <= Math.ceil(verticalRadius * 2); dy++) {
+            const y = floorY + dy;
+            if (!inBounds(x, y, z)) continue;
+            const alongNorm = along / alongRadius;
+            const acrossNorm = across / sideRadius;
+            const verticalNorm = (dy - verticalRadius) / verticalRadius;
+            const shape = alongNorm * alongNorm + acrossNorm * acrossNorm + verticalNorm * verticalNorm;
+            if (shape > 1 + noiseAt(x, y, z)) continue;
+            const block = this.getBlock(x, y, z);
+            if (block === BlockType.BEDROCK || (y > surface && block !== BlockType.OAK_LOG && block !== BlockType.OAK_LEAVES)) continue;
             this.data[IDX(x, y, z)] = BlockType.AIR;
           }
         }
+      }
+    };
+
+    const startFloor = entrance.surfaceY - 1;
+    const tunnelLength = 25;
+    const path: Array<{ x: number; z: number; floorY: number }> = [];
+    // A broad, broken lip makes the entrance read as a natural hillside opening.
+    carveRaggedVolume(entrance.x, startFloor, entrance.z, entrance.inwardX, entrance.inwardZ, 3.2, 2.8, 3.1);
+
+    for (let step = 0; step < tunnelLength; step++) {
+      const bend = Math.round(Math.sin(step * 0.31 + this.seed * 0.00001) * 0.8);
+      const x = entrance.x + entrance.inwardX * step + sideX * bend;
+      const z = entrance.z + entrance.inwardZ * step + sideZ * bend;
+      const surface = terrainTop(x, z);
+      const floorJitter = Math.floor(randomAt(step + 11) * 3) - 1;
+      const floorY = Math.max(4, Math.min(startFloor - Math.floor(step / 4) + floorJitter, surface - 1));
+      path.push({ x, z, floorY });
+      const mouthFactor = step < 3 ? 2.35 - step * 0.28 : 1.45 + randomAt(step + 37) * 0.5;
+      const verticalRadius = step < 3 ? 2.9 - step * 0.2 : 1.75 + randomAt(step + 71) * 0.35;
+      carveRaggedVolume(x, floorY, z, entrance.inwardX, entrance.inwardZ, step < 3 ? 2.0 : 1.35, mouthFactor, verticalRadius);
+      if (this.getBlock(x, floorY, z) === BlockType.AIR) {
+        this.data[IDX(x, floorY, z)] = BlockType.STONE;
+      }
+    }
+
+    // Uneven rooms give the tunnel destinations rather than a uniform hallway.
+    for (const roomStep of [7, 16, 23]) {
+      const room = path[roomStep];
+      carveRaggedVolume(
+        room.x, room.floorY, room.z,
+        entrance.inwardX, entrance.inwardZ,
+        roomStep === 23 ? 4.2 : 3.2,
+        roomStep === 23 ? 3.8 : 3.0,
+        roomStep === 23 ? 3.0 : 2.6,
+      );
+    }
+
+    // Side branches split off at different levels and gently descend into the hill.
+    for (const branch of [{ step: 9, sign: 1, length: 9 }, { step: 17, sign: -1, length: 8 }]) {
+      const start = path[branch.step];
+      const branchX = sideX * branch.sign;
+      const branchZ = sideZ * branch.sign;
+      for (let step = 1; step <= branch.length; step++) {
+        const advance = Math.floor(step / 3);
+        const x = start.x + branchX * step + entrance.inwardX * advance;
+        const z = start.z + branchZ * step + entrance.inwardZ * advance;
+        const surface = terrainTop(x, z);
+        const floorY = Math.max(5, Math.min(start.floorY - Math.floor(step / 5), surface - 1));
+        carveRaggedVolume(x, floorY, z, branchX, branchZ, 1.25, 1.55 + randomAt(step + branch.step * 19) * 0.35, 1.65);
       }
     }
   }
@@ -483,23 +590,22 @@ export class VoxelWorld {
           }
 
           if (block === BlockType.CHEST) {
-            const hasNegativeX = this.getBlock(x - 1, y, z) === BlockType.CHEST;
-            const hasNegativeZ = this.getBlock(x, y, z - 1) === BlockType.CHEST;
+            const partner = this.getAdjacentChest(x, y, z);
             let originX = x;
             let originZ = z;
             let spanX = 1;
             let spanZ = 1;
-            if (hasNegativeX) {
-              if (visible[z * SX + x - 1]) continue;
-              originX = x - 1;
+            if (partner?.x !== undefined && partner.x !== x) {
+              if (partner.x < x) {
+                if (visible[partner.z * SX + partner.x]) continue;
+                originX = partner.x;
+              }
               spanX = 2;
-            } else if (hasNegativeZ) {
-              if (visible[(z - 1) * SX + x]) continue;
-              originZ = z - 1;
-              spanZ = 2;
-            } else if (this.getBlock(x + 1, y, z) === BlockType.CHEST) {
-              spanX = 2;
-            } else if (this.getBlock(x, y, z + 1) === BlockType.CHEST) {
+            } else if (partner) {
+              if (partner.z < z) {
+                if (visible[partner.z * SX + partner.x]) continue;
+                originZ = partner.z;
+              }
               spanZ = 2;
             }
             const chestTiles = [TILE.CHEST_SIDE, TILE.CHEST_SIDE, TILE.PLANKS, TILE.CHEST_TOP, TILE.CHEST_SIDE, TILE.CHEST_FRONT];
@@ -616,9 +722,9 @@ export class VoxelWorld {
             vc += 4;
           }
         }
+        // Yield each horizontal slice; a whole 80x80 layer can exceed one frame's budget.
+        yield y + (z + 1) / SZ;
       }
-      // A completed vertical layer is a safe yield point for the loading screen.
-      yield y + 1;
     }
 
     return { pos, norm, uv, col, idx };
@@ -664,24 +770,26 @@ export class VoxelWorld {
   ): Promise<void> {
     const builder = this.createMeshBuffers(renderDistance, centerX, centerZ);
     let result = builder.next();
-    let layersPerFrame = 1;
+    let sliceBudgetMs = 4;
     let previousFrame = performance.now();
     let fps = 60;
 
     while (!result.done) {
       if (!shouldInstall()) return;
-      let layers = 0;
-      while (!result.done && layers < layersPerFrame) {
+      const workStartedAt = performance.now();
+      let slices = 0;
+      while (!result.done && slices < 64 && (slices === 0 || performance.now() - workStartedAt < sliceBudgetMs)) {
         result = builder.next();
-        layers++;
+        slices++;
       }
+      const workMs = performance.now() - workStartedAt;
 
       const frameTime = await new Promise<number>((resolve) => requestAnimationFrame(resolve));
       const frameMs = Math.max(1, frameTime - previousFrame);
       previousFrame = frameTime;
       fps = Math.round(1000 / frameMs);
-      if (fps < 38) layersPerFrame = Math.max(1, Math.floor(layersPerFrame / 2));
-      else if (fps > 54) layersPerFrame = Math.min(5, layersPerFrame + 1);
+      if (fps < 42 || workMs > 8) sliceBudgetMs = Math.max(2, sliceBudgetMs * 0.75);
+      else if (fps > 56 && workMs < 3) sliceBudgetMs = Math.min(7, sliceBudgetMs + 0.5);
 
       const completedLayers = result.done ? SY : result.value;
       onProgress?.((completedLayers / SY) * 100, 'Görünür blok yüzeyleri hazırlanıyor...', fps);

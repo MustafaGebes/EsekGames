@@ -420,6 +420,8 @@ export interface FurnaceData {
 
 export interface ChestData {
   slots: (ItemStack | null)[];
+  /** Explicit partner block index; null marks a single chest beside an existing pair. */
+  pairedWith?: number | null;
 }
 
 export interface WorldMeta {
