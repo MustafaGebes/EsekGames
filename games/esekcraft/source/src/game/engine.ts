@@ -132,6 +132,7 @@ export class MinecraftEngine {
   public drops: DropItemEntity[] = [];
   public particles: ParticleEntity[] = [];
   public mobs: MobEntity[] = [];
+  private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean }>();
   public attackCooldown = 0;
 
   // Keys & Input
@@ -148,6 +149,7 @@ export class MinecraftEngine {
   public onUIStateChange?: (state: string) => void;
   public onHUDUpdate?: () => void;
   public onToast?: (msg: string) => void;
+  public onBlockChanged?: (change: { x: number; y: number; z: number; blockId: number }) => void;
 
   private lastTime = 0;
   private animFrameId = 0;
@@ -415,6 +417,63 @@ export class MinecraftEngine {
     this.inventory[2] = { id: BlockType.TORCH, count: 16 };
   }
 
+  public setRemotePlayers(players: Record<string, any>, selfId?: string) {
+    const active = new Set<string>();
+    for (const [id, data] of Object.entries(players || {})) {
+      if (id === selfId) continue;
+      const x = Number(data?.x), y = Number(data?.y), z = Number(data?.z);
+      if (![x, y, z].every(Number.isFinite)) continue;
+      active.add(id);
+      let remote = this.remotePlayers.get(id);
+      if (!remote) {
+        const mesh = this.createDonkeyModel();
+        mesh.scale.setScalar(0.92);
+        this.scene.add(mesh);
+        remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false };
+        this.remotePlayers.set(id, remote);
+        mesh.position.set(x, y, z);
+      }
+      remote.target.set(x, y, z);
+      remote.yaw = Number(data?.yaw) || 0;
+      remote.isMoving = !!data?.isMoving;
+      remote.isCrouching = !!data?.isCrouching;
+    }
+    for (const [id, remote] of this.remotePlayers) {
+      if (active.has(id)) continue;
+      this.scene.remove(remote.mesh);
+      this.disposeDropObject(remote.mesh);
+      this.remotePlayers.delete(id);
+    }
+  }
+  public clearRemotePlayers() {
+    for (const remote of this.remotePlayers.values()) {
+      this.scene.remove(remote.mesh);
+      this.disposeDropObject(remote.mesh);
+    }
+    this.remotePlayers.clear();
+  }
+  private updateRemotePlayers(dt: number) {
+    for (const remote of this.remotePlayers.values()) {
+      remote.mesh.position.lerp(remote.target, Math.min(1, dt * 12));
+      remote.mesh.rotation.y += (remote.yaw - remote.mesh.rotation.y) * Math.min(1, dt * 14);
+      remote.mesh.scale.y = 0.92 * (remote.isCrouching ? 0.72 : 1);
+      const ud = remote.mesh.userData;
+      const swing = remote.isMoving ? Math.sin(performance.now() * 0.012) * 0.48 : 0;
+      if (ud.legs?.length === 4) {
+        ud.legs[0].rotation.x = swing;
+        ud.legs[1].rotation.x = -swing;
+        ud.legs[2].rotation.x = -swing;
+        ud.legs[3].rotation.x = swing;
+      }
+    }
+  }
+  public applyRemoteBlockChange(x: number, y: number, z: number, blockId: number) {
+    if (![x, y, z, blockId].every(Number.isFinite)) return;
+    if (!inBounds(Math.floor(x), Math.floor(y), Math.floor(z))) return;
+    this.world.setBlock(Math.floor(x), Math.floor(y), Math.floor(z), blockId as BlockType);
+    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildTorchVisuals();
+  }
   public start() {
     this.world.generate();
     this.world.buildMesh(this.scene, this.worldMaterial);
@@ -430,6 +489,7 @@ export class MinecraftEngine {
       this.scene.remove(m.mesh);
     });
     this.mobs = [];
+    this.clearRemotePlayers();
     this.renderer.dispose();
   }
 
@@ -1957,6 +2017,7 @@ export class MinecraftEngine {
     }
 
     this.world.setBlock(hit.x, hit.y, hit.z, BlockType.AIR);
+    this.onBlockChanged?.({ x: hit.x, y: hit.y, z: hit.z, blockId: BlockType.AIR });
     this.world.buildMesh(this.scene, this.worldMaterial);
     this.rebuildTorchVisuals();
   }
@@ -1988,6 +2049,7 @@ export class MinecraftEngine {
 
     // Place block in world
     this.world.setBlock(px, py, pz, held.id as BlockType);
+    this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: held.id as BlockType });
     this.world.buildMesh(this.scene, this.worldMaterial);
     this.rebuildTorchVisuals();
 
@@ -2356,6 +2418,7 @@ export class MinecraftEngine {
       this.updatePlayer(dt);
       this.updateInteraction(dt);
       this.updateMobs(dt);
+      this.updateRemotePlayers(dt);
       this.updateDrops(dt);
       this.updateParticles(dt);
       this.updateDayNight(dt);

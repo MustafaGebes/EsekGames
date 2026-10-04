@@ -165,6 +165,7 @@ function handleCreateRoom(player, data) {
     const room = {
         id: makeRoomId(), gameId, name, maxPlayers, mapId,
         worldOptions: gameId === "esekcraft" ? sanitizeEsekCraftWorldOptions(data) : null,
+        esekcraftBlocks: new Map(),
         hostId: player.id, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(),
         lastActivityAt: Date.now(), emptySince: null
     };
@@ -174,6 +175,45 @@ function handleCreateRoom(player, data) {
     player.lobbyGame = gameId;
     sendTo(player, { type: "room_created", room: publicRoom(room) });
     broadcastRoomLists();
+}
+function joinEsekCraftGame(player, data = {}) {
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    if (roomPlayerCount(room) > room.maxPlayers) return;
+    const platform = data.platform === "mobile" ? "mobile" : "pc";
+    player.name = player.name || allocateGuestName();
+    player.platform = platform;
+    player.inGame = true;
+    player.alive = true;
+    player.mapId = "overworld";
+    player.x = 40.5;
+    player.y = 30;
+    player.z = 40.5;
+    player.yaw = 0;
+    player.pitch = 0;
+    room.lastActivityAt = Date.now();
+    sendTo(player, { type: "esekcraft_joined", id: player.id, name: player.name, roomId: room.id });
+    const changes = [...(room.esekcraftBlocks || new Map())].map(([key, blockId]) => {
+        const [x, y, z] = key.split(",").map(Number);
+        return { x, y, z, blockId };
+    });
+    if (changes.length) sendTo(player, { type: "esekcraft_block_changes", changes });
+    broadcastPlayers();
+    broadcastRoomLists();
+}
+function handleEsekCraftBlockChange(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const x = Math.floor(Number(data.x));
+    const y = Math.floor(Number(data.y));
+    const z = Math.floor(Number(data.z));
+    const blockId = Math.floor(Number(data.blockId));
+    if (![x, y, z, blockId].every(Number.isFinite) || x < 0 || x >= 256 || y < 0 || y >= 128 || z < 0 || z >= 256 || blockId < 0 || blockId > 255) return;
+    if (!room.esekcraftBlocks) room.esekcraftBlocks = new Map();
+    room.esekcraftBlocks.set(`${x},${y},${z}`, blockId);
+    room.lastActivityAt = Date.now();
+    broadcastToRoom(room.id, { type: "esekcraft_block_change", sourceId: player.id, x, y, z, blockId });
 }
 function handleJoinRoom(player, data) {
     if (!player || player.inGame) return;
@@ -205,7 +245,7 @@ function handleJoinRoom(player, data) {
         joinGame(player, { ...data, roomId: room.id });
         if (player.inGame) sendTo(player, { type: "building_door_states", doors: [...room.doorStates].map(([buildingId, open]) => ({ buildingId, open })) });
     } else {
-        sendTo(player, { type: "esekcraft_room_players", count: roomPlayerCount(room) });
+        joinEsekCraftGame(player, data);
     }
     broadcastRoomLists();
 }
@@ -2315,6 +2355,9 @@ wss.on("connection", (ws, req) => {
 
             case "move":
                 handleMove(player, data);
+                break;
+            case "esekcraft_block_change":
+                handleEsekCraftBlockChange(player, data);
                 break;
 
             case "building_door_state":

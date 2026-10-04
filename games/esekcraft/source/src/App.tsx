@@ -55,6 +55,8 @@ export default function App() {
   const [onlineMaxPlayers, setOnlineMaxPlayers] = useState(1);
   const onlineSocketRef = useRef<WebSocket | null>(null);
   const onlineRoomRef = useRef<OnlineRoom | null>(null);
+  const onlinePlayerIdRef = useRef<string | null>(null);
+  const onlineMoveTimerRef = useRef<number | null>(null);
   const [keyBindings, setKeyBindings] = useState<KeyBindings>(DEFAULT_KEY_BINDINGS);
 
   // New world form state
@@ -196,7 +198,24 @@ export default function App() {
             showToast(msg);
           };
 
+          eng.onBlockChanged = (change) => {
+            if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });
+          };
           eng.start();
+          if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
+          if (onlineRoomRef.current) {
+            onlineMoveTimerRef.current = window.setInterval(() => {
+              const current = engineRef.current;
+              if (!current || !onlineRoomRef.current) return;
+              sendOnlineMessage({
+                type: 'move', x: current.pos.x, y: current.pos.y, z: current.pos.z,
+                yaw: current.yaw, pitch: current.pitch,
+                isMoving: Math.hypot(current.vel.x, current.vel.z) > 0.05,
+                isCrouching: current.isSneaking, isSprinting: current.isSprinting,
+                isJumping: !current.onGround, platform: 'pc'
+              });
+            }, 50);
+          }
           setGenProgress(100);
           setGenText('Hazır!');
 
@@ -211,10 +230,15 @@ export default function App() {
   };
 
   const closeOnlineConnection = () => {
+    if (onlineMoveTimerRef.current !== null) {
+      window.clearInterval(onlineMoveTimerRef.current);
+      onlineMoveTimerRef.current = null;
+    }
     const ws = onlineSocketRef.current;
     onlineSocketRef.current = null;
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     onlineRoomRef.current = null;
+    onlinePlayerIdRef.current = null;
   };
   const sendOnlineMessage = (payload: Record<string, unknown>) => {
     const ws = onlineSocketRef.current;
@@ -245,13 +269,29 @@ export default function App() {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'init') onlinePlayerIdRef.current = message.id || null;
         if (message.type === 'rooms_list') setOnlineRooms(message.rooms || []);
         if (message.type === 'room_error') showToast(message.message || 'Sunucu işlemi başarısız.');
-        if (message.type === 'room_created' || message.type === 'room_joined') {
+        if (message.type === 'room_created') {
+          const room = message.room as OnlineRoom;
+          onlineRoomRef.current = room;
+          setSelectedOnlineRoom(room.id);
+          sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: room.id, platform: 'pc' });
+        }
+        if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
           onlineRoomRef.current = room;
           setSelectedOnlineRoom(room.id);
           launchWorld(roomToWorldMeta(room));
+        }
+        if (message.type === 'players' && onlineRoomRef.current && engineRef.current) {
+          engineRef.current.setRemotePlayers(message.players || {}, onlinePlayerIdRef.current || undefined);
+        }
+        if (message.type === 'esekcraft_block_changes' && engineRef.current) {
+          for (const change of message.changes || []) engineRef.current.applyRemoteBlockChange(Number(change.x), Number(change.y), Number(change.z), Number(change.blockId));
+        }
+        if (message.type === 'esekcraft_block_change' && engineRef.current) {
+          engineRef.current.applyRemoteBlockChange(Number(message.x), Number(message.y), Number(message.z), Number(message.blockId));
         }
       } catch {}
     };
