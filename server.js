@@ -741,6 +741,29 @@ function sendCityCitizenStates(player) {
     if (!room || room.mapId !== "city" || !room.cityCitizens) return;
     sendTo(player, { type: "city_citizens", citizens: [...room.cityCitizens.values()].map(citizen => ({ id: citizen.id, health: citizen.health, alive: citizen.alive, hostileUntil: citizen.hostileUntil })) });
 }
+function handleCityHide(player, data) {
+    if (!isCityGameplayPlayer(player)) return;
+    player.cityHidden = !!(data && data.hidden);
+    if (player.cityHidden) { player.cityLostSightAt = Date.now(); player.cityNextWantedDecayAt = Date.now() + 2500; }
+    sendCityState(player);
+}
+function handleCityPoliceVision(player, data) {
+    if (!isCityGameplayPlayer(player)) return;
+    const visible = !!(data && data.visible);
+    player.cityLostSightAt = visible ? 0 : Date.now();
+    if (!visible) player.cityNextWantedDecayAt = Date.now() + 2500;
+}
+function handleCityPoliceBulletHit(player) {
+    if (!isCityGameplayPlayer(player) || player.cityHidden || !player.cityWantedLevel) return;
+    const now = Date.now();
+    if (now - (player.cityLastPoliceBulletAt || 0) < 650) return;
+    player.cityLastPoliceBulletAt = now;
+    damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Polis kurşunu sana isabet etti.");
+}
+function handleCityPoliceHit(player) {
+    if (!isCityGameplayPlayer(player)) return;
+    addCityWanted(player, 1);
+}
 function addCityWanted(player, amount = 1) {
     const now = Date.now();
     player.cityWantedLevel = Math.max(0, Math.min(5, (player.cityWantedLevel || 0) + amount));
@@ -915,18 +938,18 @@ function tickCityGameplay() {
     }
     for (const player of players.values()) {
         if (!player.inGame || !player.alive || player.mapId !== "city") continue;
-        if (player.cityWantedLevel > 0 && now - (player.cityLastCrimeAt || now) >= 25000) {
-            if (!player.cityNextWantedDecayAt) player.cityNextWantedDecayAt = now + 12000;
+        const policeLostSight = !!player.cityHidden || (player.cityLostSightAt > 0 && now - player.cityLostSightAt < 6000);
+        if (player.cityWantedLevel > 0 && now - (player.cityLastCrimeAt || now) >= (policeLostSight ? 2500 : 25000)) {
+            if (!player.cityNextWantedDecayAt) player.cityNextWantedDecayAt = now + (policeLostSight ? 2500 : 12000);
             else if (now >= player.cityNextWantedDecayAt) {
                 player.cityWantedLevel = Math.max(0, player.cityWantedLevel - 1);
-                player.cityNextWantedDecayAt = player.cityWantedLevel ? now + 12000 : 0;
+                player.cityNextWantedDecayAt = player.cityWantedLevel ? now + (policeLostSight ? 2500 : 12000) : 0;
                 if (!player.cityWantedLevel) player.cityPoliceArrivalAt = 0;
                 sendCityState(player);
             }
         }
-        if (player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
+        if (!player.cityHidden && !policeLostSight && player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
             player.cityNextPoliceAttackAt = now + Math.max(1300, 2250 - player.cityWantedLevel * 150);
-            if (policeHasLineOfSight(player)) damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Polis kurşunu sana isabet etti.");
         }
     }
 }
@@ -1161,6 +1184,9 @@ function createPlayer(ws) {
         cityNextWantedDecayAt: 0,
         cityPoliceArrivalAt: 0,
         cityNextPoliceAttackAt: 0,
+        cityHidden: false,
+        cityLostSightAt: 0,
+        cityLastPoliceBulletAt: 0,
         cityDeathProcessed: false,
         lastCityAttackAt: 0,
 
@@ -2256,6 +2282,18 @@ wss.on("connection", (ws, req) => {
 
             case "attack":
                 handleAttack(player, data);
+                break;
+            case "city_hide":
+                handleCityHide(player, data);
+                break;
+            case "city_police_vision":
+                handleCityPoliceVision(player, data);
+                break;
+            case "city_police_bullet_hit":
+                handleCityPoliceBulletHit(player);
+                break;
+            case "city_police_hit":
+                handleCityPoliceHit(player);
                 break;
 
             case "city_shop_request":
