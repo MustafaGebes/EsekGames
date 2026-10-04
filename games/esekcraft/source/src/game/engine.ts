@@ -427,7 +427,6 @@ export class MinecraftEngine {
       let remote = this.remotePlayers.get(id);
       if (!remote) {
         const mesh = this.createDonkeyModel();
-        mesh.scale.setScalar(0.92);
         this.scene.add(mesh);
         remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false };
         this.remotePlayers.set(id, remote);
@@ -455,8 +454,12 @@ export class MinecraftEngine {
   private updateRemotePlayers(dt: number) {
     for (const remote of this.remotePlayers.values()) {
       remote.mesh.position.lerp(remote.target, Math.min(1, dt * 12));
-      remote.mesh.rotation.y += (remote.yaw - remote.mesh.rotation.y) * Math.min(1, dt * 14);
-      remote.mesh.scale.y = 0.92 * (remote.isCrouching ? 0.72 : 1);
+      const targetYaw = remote.yaw + Math.PI;
+      let yawDelta = targetYaw - remote.mesh.rotation.y;
+      while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
+      while (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
+      remote.mesh.rotation.y += yawDelta * Math.min(1, dt * 14);
+      remote.mesh.scale.y = remote.mesh.scale.x * (remote.isCrouching ? 0.72 : 1);
       const ud = remote.mesh.userData;
       const swing = remote.isMoving ? Math.sin(performance.now() * 0.012) * 0.48 : 0;
       if (ud.legs?.length === 4) {
@@ -495,109 +498,50 @@ export class MinecraftEngine {
 
   // ================= 3D MODELS (Donkey Character & Donkey Hoof Hand) =================
   private createDonkeyModel(): THREE.Group {
+    // EsekSimulator'deki okunaklı model oranları: gövde, eğimli boyun, burun ve uzun kulaklar.
+    // Modelin yüzü +Z eksenine bakar; EsekCraft ileri yönü -Z olduğu için model
+    // kullanım noktasında Math.PI ile çevrilir.
     const g = new THREE.Group();
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
-    const darkMat = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
-    const lightMat = new THREE.MeshLambertMaterial({ color: 0xc9c4bb });
+    const greyMat = new THREE.MeshLambertMaterial({ color: 0x808080 });
+    const muzzleMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     const blackMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
-
-    // Body (0.72 w, 0.62 h, 1.22 length)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.62, 1.22), bodyMat);
-    body.position.set(0, 0.95, 0);
-    g.add(body);
-
-    // Spine dark stripe
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.08, 1.24), darkMat);
-    spine.position.set(0, 1.26, 0);
-    g.add(spine);
-
-    // Neck
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.45, 0.38), bodyMat);
-    neck.position.set(0, 1.35, -0.58);
-    g.add(neck);
-
-    // Mane on neck
-    const mane = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 0.4), darkMat);
-    mane.position.set(0, 1.45, -0.48);
-    g.add(mane);
-
-    // Head Group (for nodding and ear physics)
+    const part = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y, z);
+      return mesh;
+    };
+    const bodyPivot = new THREE.Group();
+    bodyPivot.position.set(0, 1.12, 0);
+    bodyPivot.add(part(0.92, 0.76, 1.52, greyMat, 0, 0, 0));
+    g.add(bodyPivot);
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.5, 0.85);
-
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.55), bodyMat);
-    headGroup.add(head);
-
-    // Muzzle / Snout
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.28, 0.25), lightMat);
-    snout.position.set(0, -0.07, -0.36);
-    headGroup.add(snout);
-
-    // Nostrils
-    const nostril1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), blackMat);
-    nostril1.position.set(-0.1, -0.08, -0.49);
-    headGroup.add(nostril1);
-    const nostril2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), blackMat);
-    nostril2.position.set(0.1, -0.08, -0.49);
-    headGroup.add(nostril2);
-
-    // Eyes
-    const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), blackMat);
-    eye1.position.set(-0.19, 0.08, -0.15);
-    headGroup.add(eye1);
-    const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), blackMat);
-    eye2.position.set(0.19, 0.08, -0.15);
-    headGroup.add(eye2);
-
-    // Long Donkey Ears!
-    const ear1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.1), bodyMat);
-    ear1.position.set(-0.14, 0.42, 0.05);
-    headGroup.add(ear1);
-    const earInner1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), darkMat);
-    earInner1.position.set(-0.14, 0.42, 0.06);
-    headGroup.add(earInner1);
-
-    const ear2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.48, 0.1), bodyMat);
-    ear2.position.set(0.14, 0.42, 0.05);
-    headGroup.add(ear2);
-    const earInner2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.38, 0.06), darkMat);
-    earInner2.position.set(0.14, 0.42, 0.06);
-    headGroup.add(earInner2);
-
+    headGroup.position.set(0, 1.35, 0.53);
+    const neck = part(0.46, 0.68, 0.46, greyMat, 0, 0.30, 0);
+    neck.rotation.x = 0.3;
+    headGroup.add(neck);
+    headGroup.add(part(0.46, 0.46, 0.68, greyMat, 0, 0.68, 0.23));
+    headGroup.add(part(0.44, 0.30, 0.30, muzzleMat, 0, 0.60, 0.56));
+    headGroup.add(part(0.075, 0.075, 0.075, blackMat, 0.235, 0.76, 0.23));
+    headGroup.add(part(0.075, 0.075, 0.075, blackMat, -0.235, 0.76, 0.23));
+    const earLeft = part(0.12, 0.60, 0.15, greyMat, 0.19, 1.12, 0);
+    earLeft.rotation.set(-0.2, 0, -0.2);
+    const earRight = part(0.12, 0.60, 0.15, greyMat, -0.19, 1.12, 0);
+    earRight.rotation.set(-0.2, 0, 0.2);
+    headGroup.add(earLeft, earRight);
     g.add(headGroup);
-
-    // Tail
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.08), darkMat);
-    tail.position.set(0, 0.95, 0.68);
-    tail.rotation.x = 0.2;
-    g.add(tail);
-
-    // 4 Legs with dark hooves
     const legs: THREE.Group[] = [];
-    const legPositions = [
-      [-0.24, -0.45], // front-left
-      [0.24, -0.45],  // front-right
-      [-0.24, 0.45],  // back-left
-      [0.24, 0.45],   // back-right
-    ];
-
-    for (const p of legPositions) {
-      const lg = new THREE.Group();
-      lg.position.set(p[0], 0.68, p[1]);
-      const upper = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.62, 0.18), bodyMat);
-      upper.position.y = -0.31;
-      lg.add(upper);
-      const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.2), darkMat);
-      hoof.position.y = -0.64;
-      lg.add(hoof);
-      g.add(lg);
-      legs.push(lg);
+    for (const [x, y, z] of [[0.30, 0.76, 0.53], [-0.30, 0.76, 0.53], [0.30, 0.76, -0.53], [-0.30, 0.76, -0.53]]) {
+      const leg = new THREE.Group();
+      leg.position.set(x, y, z);
+      leg.add(part(0.23, 0.61, 0.23, greyMat, 0, -0.30, 0));
+      leg.add(part(0.25, 0.15, 0.25, blackMat, 0, -0.67, 0));
+      g.add(leg);
+      legs.push(leg);
     }
-
-    g.userData = { headGroup, legs };
+    g.scale.setScalar(0.76);
+    g.userData = { legs, headGroup, bodyPivot };
     return g;
   }
-
   // First Person Donkey Hoof Hand on the right side - authentically angled upward & inward like Minecraft
   private createFirstPersonHand(): THREE.Group {
     const group = new THREE.Group();
@@ -2514,7 +2458,7 @@ export class MinecraftEngine {
       this.handGroup.visible = false;
 
       this.donkey3P.position.set(this.pos.x, this.pos.y - (this.isSneaking ? 0.22 : 0), this.pos.z);
-      this.donkey3P.rotation.y = this.yaw;
+      this.donkey3P.rotation.y = this.yaw + Math.PI;
 
       // Animate Donkey limbs (4 legs + head)
       const ud = this.donkey3P.userData;
