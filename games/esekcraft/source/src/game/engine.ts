@@ -679,7 +679,32 @@ export class MinecraftEngine {
       torch.rotation.set(-0.16, 0.32, -0.22);
       this.heldItemMesh = torch as unknown as THREE.Mesh;
       this.handGroup.add(this.heldItemMesh);
-    // If it's a block: render miniature 3D block held by the hoof, tilted upright facing player
+    // A door is a thin, framed item rather than a solid miniature cube.
+    } else if (id === BlockType.OAK_DOOR) {
+      const door = new THREE.Group();
+      const wood = new THREE.MeshLambertMaterial({ color: 0x9b6a35 });
+      const darkWood = new THREE.MeshLambertMaterial({ color: 0x68421f });
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.43, 0.055), wood);
+      door.add(panel);
+      for (const x of [-0.105, 0.105]) {
+        const stile = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.44, 0.07), darkWood);
+        stile.position.x = x;
+        door.add(stile);
+      }
+      for (const y of [-0.19, 0.19]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.035, 0.075), darkWood);
+        rail.position.y = y;
+        door.add(rail);
+      }
+      const knob = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.035, 0.035), new THREE.MeshLambertMaterial({ color: 0xd0ad53 }));
+      knob.position.set(0.085, 0, 0.045);
+      door.add(knob);
+      door.scale.setScalar(0.85);
+      door.position.set(-0.02, 0.15, -0.06);
+      door.rotation.set(-0.16, 0.32, -0.22);
+      this.heldItemMesh = door as unknown as THREE.Mesh;
+      this.handGroup.add(door);
+    // If it's a block: render its own atlas-textured miniature block.
     } else if (BLOCK_DEFS[id] && Number(id) < 100 && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
       const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
       this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
@@ -720,6 +745,12 @@ export class MinecraftEngine {
 
       const woodHandleMat = new THREE.MeshLambertMaterial({ color: 0x6e4e20 });
       const toolMat = new THREE.MeshLambertMaterial({ color: headColor });
+      const addBoxPart = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        part.position.set(x, y, z);
+        toolGroup.add(part);
+        return part;
+      };
 
       // Wooden handle rod
       const handleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.52, 0.045), woodHandleMat);
@@ -830,6 +861,43 @@ export class MinecraftEngine {
           stick.rotation.z = -0.35;
           stick.position.set(0, 0.12, 0);
           toolGroup.add(stick);
+        } else if (id === ItemType.COAL || id === ItemType.CHARCOAL) {
+          const lumpMat = new THREE.MeshLambertMaterial({ color: id === ItemType.COAL ? 0x242326 : 0x39302a });
+          const lump = new THREE.Mesh(
+            id === ItemType.COAL ? new THREE.DodecahedronGeometry(0.13, 0) : new THREE.OctahedronGeometry(0.13),
+            lumpMat
+          );
+          lump.scale.set(id === ItemType.COAL ? 1 : 0.78, id === ItemType.COAL ? 0.82 : 1.08, 0.72);
+          lump.position.set(0, 0.14, 0);
+          lump.rotation.set(0.3, 0.4, -0.2);
+          toolGroup.add(lump);
+          if (id === ItemType.CHARCOAL) addBoxPart(0.035, 0.035, 0.035, new THREE.MeshLambertMaterial({ color: 0x786b5c }), 0.05, 0.21, 0.035);
+        } else if (id === ItemType.IRON_INGOT || id === ItemType.GOLD_INGOT) {
+          const shape = new THREE.Shape();
+          shape.moveTo(-0.13, -0.055);
+          shape.lineTo(-0.09, 0.055);
+          shape.lineTo(0.09, 0.055);
+          shape.lineTo(0.13, -0.055);
+          shape.closePath();
+          const ingot = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelSegments: 1, bevelSize: 0.012, bevelThickness: 0.012 }), toolMat);
+          ingot.position.set(0, 0.14, -0.02);
+          ingot.rotation.z = -0.08;
+          toolGroup.add(ingot);
+          addBoxPart(0.12, 0.018, 0.012, new THREE.MeshLambertMaterial({ color: id === ItemType.GOLD_INGOT ? 0xffed75 : 0xf7f7f7 }), 0, 0.18, 0.045);
+        } else if (id === ItemType.RAW_IRON || id === ItemType.RAW_GOLD) {
+          const oreMat = new THREE.MeshLambertMaterial({ color: id === ItemType.RAW_IRON ? 0x9b8671 : 0xb78a36 });
+          const raw = new THREE.Mesh(new THREE.DodecahedronGeometry(0.13, 0), oreMat);
+          raw.scale.set(1.05, 0.82, 0.76);
+          raw.position.set(0, 0.14, 0);
+          toolGroup.add(raw);
+          addBoxPart(0.065, 0.035, 0.025, new THREE.MeshLambertMaterial({ color: id === ItemType.RAW_IRON ? 0xd0b9a1 : 0xffd76a }), -0.015, 0.19, 0.075);
+        } else if (id === ItemType.FLINT) {
+          const flint = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), new THREE.MeshLambertMaterial({ color: 0x343b40 }));
+          flint.scale.set(1.15, 0.75, 0.68);
+          flint.rotation.set(0.25, 0.4, -0.28);
+          flint.position.set(0, 0.14, 0);
+          toolGroup.add(flint);
+          addBoxPart(0.045, 0.018, 0.025, new THREE.MeshLambertMaterial({ color: 0x81888a }), -0.035, 0.2, 0.065);
         } else if (id === ItemType.DIAMOND) {
           const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), toolMat);
           gem.position.set(0, 0.16, 0);
@@ -849,9 +917,41 @@ export class MinecraftEngine {
           const bladeA = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.32, 0.025), bladeMat);
           bladeA.position.set(-0.045, 0.2, 0); bladeA.rotation.z = -0.22; toolGroup.add(bladeA);
           const bladeB = bladeA.clone(); bladeB.position.x = 0.045; bladeB.rotation.z = 0.22; toolGroup.add(bladeB);
-        } else if ([ItemType.BREAD, ItemType.RAW_BEEF, ItemType.COOKED_STEAK, ItemType.RAW_PORKCHOP, ItemType.COOKED_PORKCHOP, ItemType.RAW_MUTTON, ItemType.COOKED_MUTTON, ItemType.RAW_CHICKEN, ItemType.COOKED_CHICKEN].includes(id as ItemType)) {
-          const food = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), toolMat);
-          food.scale.set(1.2, 0.7, 0.75); food.position.set(0, 0.14, 0); toolGroup.add(food);
+        } else if (id === ItemType.BREAD) {
+          const crust = new THREE.MeshLambertMaterial({ color: 0xc38a42 });
+          const crumb = new THREE.MeshLambertMaterial({ color: 0xf2d28a });
+          const loaf = addBoxPart(0.25, 0.12, 0.13, crust, 0, 0.14, 0);
+          loaf.scale.set(1, 0.9, 1);
+          addBoxPart(0.18, 0.055, 0.105, crumb, 0, 0.205, 0);
+          for (const x of [-0.055, 0, 0.055]) addBoxPart(0.012, 0.018, 0.11, crust, x, 0.234, 0);
+        } else if ([ItemType.RAW_BEEF, ItemType.COOKED_STEAK, ItemType.RAW_PORKCHOP, ItemType.COOKED_PORKCHOP, ItemType.RAW_MUTTON, ItemType.COOKED_MUTTON, ItemType.RAW_CHICKEN, ItemType.COOKED_CHICKEN].includes(id as ItemType)) {
+          const meatShapes: Record<number, { color: number; size: [number, number, number]; bone: boolean; char: boolean }> = {
+            [ItemType.RAW_BEEF]: { color: 0xb74747, size: [0.25, 0.13, 0.13], bone: false, char: false },
+            [ItemType.COOKED_STEAK]: { color: 0x713b24, size: [0.24, 0.14, 0.16], bone: false, char: true },
+            [ItemType.RAW_PORKCHOP]: { color: 0xe59a9d, size: [0.21, 0.13, 0.15], bone: true, char: false },
+            [ItemType.COOKED_PORKCHOP]: { color: 0xb96755, size: [0.22, 0.14, 0.14], bone: true, char: true },
+            [ItemType.RAW_MUTTON]: { color: 0x9f4242, size: [0.18, 0.17, 0.17], bone: true, char: false },
+            [ItemType.COOKED_MUTTON]: { color: 0x80513a, size: [0.19, 0.16, 0.16], bone: true, char: true },
+            [ItemType.RAW_CHICKEN]: { color: 0xe3b99b, size: [0.15, 0.2, 0.14], bone: true, char: false },
+            [ItemType.COOKED_CHICKEN]: { color: 0xc58a53, size: [0.16, 0.19, 0.15], bone: true, char: true },
+          };
+          const meat = meatShapes[id];
+          const flesh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshLambertMaterial({ color: meat.color }));
+          flesh.scale.set(meat.size[0] / 0.24, meat.size[1] / 0.24, meat.size[2] / 0.24);
+          flesh.position.set(0, 0.14, 0);
+          toolGroup.add(flesh);
+          if (meat.bone) {
+            const bone = new THREE.MeshLambertMaterial({ color: 0xf1e6cf });
+            addBoxPart(0.13, 0.035, 0.035, bone, 0.12, 0.12, 0);
+            const knob = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 5), bone);
+            knob.position.set(0.185, 0.12, 0);
+            toolGroup.add(knob);
+          }
+          if (meat.char) {
+            const grill = new THREE.MeshLambertMaterial({ color: 0x34251e });
+            addBoxPart(0.16, 0.018, 0.018, grill, -0.02, 0.19, 0.045);
+            addBoxPart(0.16, 0.018, 0.018, grill, 0.035, 0.16, -0.04);
+          }
         } else if (id === ItemType.LEATHER) {
           const hide = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.25), new THREE.MeshLambertMaterial({ color: 0x8b5a2b, side: THREE.DoubleSide }));
           hide.position.set(0, 0.16, 0); hide.rotation.z = -0.18; toolGroup.add(hide);
@@ -860,6 +960,34 @@ export class MinecraftEngine {
         } else if (id === ItemType.FEATHER) {
           const feather = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1f1e8, side: THREE.DoubleSide }));
           feather.position.set(0, 0.17, 0); feather.rotation.z = -0.25; toolGroup.add(feather);
+          const quill = addBoxPart(0.012, 0.35, 0.012, new THREE.MeshLambertMaterial({ color: 0xcfc8b8 }), 0, 0.17, 0.012);
+          quill.rotation.z = -0.25;
+        } else if (id === ItemType.WHITE_WOOL) {
+          const wool = new THREE.MeshLambertMaterial({ color: 0xf0eee5 });
+          addBoxPart(0.22, 0.13, 0.18, wool, 0, 0.13, 0);
+          addBoxPart(0.18, 0.09, 0.16, wool, -0.02, 0.23, 0);
+          addBoxPart(0.13, 0.055, 0.13, wool, 0.025, 0.3, 0);
+        } else if ([ItemType.IRON_HELMET, ItemType.IRON_CHESTPLATE, ItemType.IRON_LEGGINGS, ItemType.IRON_BOOTS, ItemType.DIAMOND_CHESTPLATE].includes(id as ItemType)) {
+          const armorMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x40dce7 : 0xc4cbd0 });
+          const trimMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x178e9d : 0x737b80 });
+          if (id === ItemType.IRON_HELMET) {
+            addBoxPart(0.24, 0.14, 0.2, armorMat, 0, 0.18, 0);
+            addBoxPart(0.28, 0.045, 0.23, trimMat, 0, 0.11, 0.015);
+            addBoxPart(0.18, 0.055, 0.035, armorMat, 0, 0.255, -0.015);
+          } else if (id === ItemType.IRON_CHESTPLATE || id === ItemType.DIAMOND_CHESTPLATE) {
+            addBoxPart(0.24, 0.24, 0.13, armorMat, 0, 0.14, 0);
+            addBoxPart(0.36, 0.09, 0.14, armorMat, 0, 0.28, 0);
+            addBoxPart(0.12, 0.055, 0.145, trimMat, 0, 0.29, 0.005);
+          } else if (id === ItemType.IRON_LEGGINGS) {
+            addBoxPart(0.28, 0.08, 0.14, trimMat, 0, 0.28, 0);
+            addBoxPart(0.12, 0.23, 0.14, armorMat, -0.075, 0.13, 0);
+            addBoxPart(0.12, 0.23, 0.14, armorMat, 0.075, 0.13, 0);
+          } else {
+            addBoxPart(0.13, 0.13, 0.22, armorMat, -0.075, 0.12, 0.015);
+            addBoxPart(0.13, 0.13, 0.22, armorMat, 0.075, 0.12, 0.015);
+            addBoxPart(0.15, 0.045, 0.24, trimMat, -0.075, 0.055, 0.025);
+            addBoxPart(0.15, 0.045, 0.24, trimMat, 0.075, 0.055, 0.025);
+          }
         } else {
           const itemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.16), toolMat);
           itemMesh.position.set(0, 0.14, 0); toolGroup.add(itemMesh);
