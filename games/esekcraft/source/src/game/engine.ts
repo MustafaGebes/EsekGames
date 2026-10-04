@@ -54,6 +54,8 @@ export interface DropItemEntity {
   vel: { x: number; y: number; z: number };
   age: number;
   baseY: number | null;
+  networkId?: string;
+  isRemote?: boolean;
 }
 
 export interface ParticleEntity {
@@ -174,6 +176,7 @@ export class MinecraftEngine {
 
   // Entities & Particles
   public drops: DropItemEntity[] = [];
+  private dropSequence = 0;
   public particles: ParticleEntity[] = [];
   public mobs: MobEntity[] = [];
   private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean; isDead: boolean }>();
@@ -189,6 +192,7 @@ export class MinecraftEngine {
   public isDead = false;
   public isGUIOpen = false;
   public onlineMode = false;
+  public networkPlayerId: string | null = null;
 
   // Callbacks to React UI
   public onUIStateChange?: (state: string) => void;
@@ -197,6 +201,9 @@ export class MinecraftEngine {
   public onBlockChanged?: (change: { x: number; y: number; z: number; blockId: number }) => void;
   public onAttackPlayer?: (payload: { targetId: string; weaponType: string }) => void;
   public onTileEntityChanged?: () => void;
+  public onItemDropSpawned?: (drop: { dropId: string; id: number; count: number; x: number; y: number; z: number; velocity: { x: number; y: number; z: number } }) => void;
+  public onItemDropUpdated?: (drop: { dropId: string; count: number }) => void;
+  public onItemDropRemoved?: (dropId: string) => void;
 
   private lastTime = 0;
   private animFrameId = 0;
@@ -587,10 +594,20 @@ export class MinecraftEngine {
     return best?.id || null;
   }
   public applyRemoteBlockChange(x: number, y: number, z: number, blockId: number) {
-    if (![x, y, z, blockId].every(Number.isFinite)) return;
-    if (!inBounds(Math.floor(x), Math.floor(y), Math.floor(z))) return;
-    this.world.setBlock(Math.floor(x), Math.floor(y), Math.floor(z), blockId as BlockType);
-    this.rebuildVisibleWorld();
+    this.applyRemoteBlockChanges([{ x, y, z, blockId }]);
+  }
+  public applyRemoteBlockChanges(changes: Array<{ x: number; y: number; z: number; blockId: number }>) {
+    let changed = false;
+    for (const change of changes) {
+      const { x, y, z, blockId } = change;
+      if (![x, y, z, blockId].every(Number.isFinite)) continue;
+      const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+      if (!inBounds(bx, by, bz)) continue;
+      this.world.setBlock(bx, by, bz, Math.floor(blockId) as BlockType);
+      changed = true;
+    }
+    if (!changed) return;
+    this.rebuildVisibleWorldAdaptive(true);
     this.rebuildTorchVisuals();
     this.recoverFromBlockCollision();
   }
@@ -3236,7 +3253,24 @@ export class MinecraftEngine {
     const flicker = Math.sin(this.torchTime * 11.0) * 0.08 + Math.sin(this.torchTime * 23.0) * 0.04;
     for (const light of this.torchLights) { const dx = light.position.x - this.pos.x; const dz = light.position.z - this.pos.z; light.visible = dx * dx + dz * dz < this.renderDistance * this.renderDistance; if (light.visible) light.intensity = 1.25 + flicker; }
   }
-  public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
+  public spawnDrop(
+    x: number,
+    y: number,
+    z: number,
+    id: AnyItemId,
+    count: number,
+    options: { networkId?: string; isRemote?: boolean; velocity?: { x: number; y: number; z: number } } = {},
+  ) {
+    const networkId = options.networkId || `${this.networkPlayerId || 'offline'}:${Date.now().toString(36)}:${(++this.dropSequence).toString(36)}:${Math.random().toString(36).slice(2, 6)}`;
+    const isRemote = options.isRemote === true;
+    const registerDrop = (mesh: THREE.Object3D, initialVelocity: { x: number; y: number; z: number }) => {
+      const velocity = options.velocity ? { ...options.velocity } : initialVelocity;
+      const drop: DropItemEntity = { id, count, mesh, vel: velocity, age: 0, baseY: null, networkId, isRemote };
+      this.drops.push(drop);
+      if (!isRemote && this.onlineMode) {
+        this.onItemDropSpawned?.({ dropId: networkId, id: Number(id), count, x, y, z, velocity: { ...velocity } });
+      }
+    };
     if (id === BlockType.BED) {
       const model = new THREE.Group();
       const wood = new THREE.MeshLambertMaterial({ color: 0x80512f });
@@ -3255,14 +3289,14 @@ export class MinecraftEngine {
       }
       model.position.set(x, y, z);
       this.scene.add(model);
-      this.drops.push({ id, count, mesh: model, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
+      registerDrop(model, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
     if (id === BlockType.TORCH) {
       const mesh = this.createTorchDrop();
       mesh.position.set(x, y, z);
       this.scene.add(mesh);
-      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
+      registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
     if (id === ItemType.WHITE_WOOL) {
@@ -3271,14 +3305,14 @@ export class MinecraftEngine {
       this.setupMeshUVs(geometry, BlockType.WHITE_WOOL_BLOCK);
       mesh.position.set(x, y, z);
       this.scene.add(mesh);
-      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 1.8, y: 0.05, z: (Math.random() - 0.5) * 1.8 }, age: 0, baseY: null });
+      registerDrop(mesh, { x: (Math.random() - 0.5) * 1.8, y: 0.05, z: (Math.random() - 0.5) * 1.8 });
       return;
     }
     const toolMesh = this.createToolDrop(id);
     if (toolMesh) {
       toolMesh.position.set(x, y, z);
       this.scene.add(toolMesh);
-      this.drops.push({ id, count, mesh: toolMesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
+      registerDrop(toolMesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
     const foodColors: Record<number, number> = {
@@ -3292,7 +3326,7 @@ export class MinecraftEngine {
       const geo = id === ItemType.FEATHER ? new THREE.PlaneGeometry(0.32, 0.42) : new THREE.SphereGeometry(0.18, 8, 6);
       const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: foodColors[id as number] }));
       mesh.position.set(x, y, z); this.scene.add(mesh);
-      this.drops.push({ id, count, mesh, vel: { x: (Math.random()-0.5)*1.8, y: 1.8, z: (Math.random()-0.5)*1.8 }, age: 0, baseY: null });
+      registerDrop(mesh, { x: (Math.random()-0.5)*1.8, y: 1.8, z: (Math.random()-0.5)*1.8 });
       return;
     }
     const mineralColors: Record<number, number> = {
@@ -3315,17 +3349,10 @@ export class MinecraftEngine {
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
 
-    this.drops.push({
-      id,
-      count,
-      mesh,
-      vel: {
-        x: (Math.random() - 0.5) * 2.8,
-        y: 0.05,
-        z: (Math.random() - 0.5) * 2.8,
-      },
-      age: 0,
-      baseY: null,
+    registerDrop(mesh, {
+      x: (Math.random() - 0.5) * 2.8,
+      y: 0.05,
+      z: (Math.random() - 0.5) * 2.8,
     });
   }
 
@@ -3344,6 +3371,28 @@ export class MinecraftEngine {
       const drop = this.drops[i];
       drop.age += dt;
 
+      // Remote copies are visual only; their owner is the only client allowed to collect them.
+      if (drop.isRemote) {
+        drop.vel.y -= 18 * dt;
+        let nx = drop.mesh.position.x + drop.vel.x * dt;
+        let ny = drop.mesh.position.y + drop.vel.y * dt;
+        let nz = drop.mesh.position.z + drop.vel.z * dt;
+        const by = Math.floor(ny - 0.15);
+        if (drop.vel.y < 0 && this.world.getBlockPhys(Math.floor(nx), by, Math.floor(nz)) !== BlockType.AIR) {
+          ny = by + 1 + 0.15;
+          drop.vel.y = 0;
+          drop.baseY = ny;
+          drop.vel.x *= 0.5;
+          drop.vel.z *= 0.5;
+        }
+        drop.mesh.position.set(nx, ny, nz);
+        if (drop.baseY !== null && drop.vel.y === 0) {
+          drop.mesh.position.y = drop.baseY + Math.sin(drop.age * 2.8) * 0.05;
+        }
+        drop.mesh.rotation.y += dt * 2.2;
+        continue;
+      }
+
       // Magnetize toward player if close
       const dx = this.pos.x - drop.mesh.position.x;
       const dy = this.pos.y + 0.8 - drop.mesh.position.y;
@@ -3359,6 +3408,7 @@ export class MinecraftEngine {
         if (dist < 0.9) {
           const remaining = this.addToInventory(drop.id, drop.count);
           if (remaining <= 0) {
+            if (this.onlineMode && drop.networkId) this.onItemDropRemoved?.(drop.networkId);
             this.scene.remove(drop.mesh);
             this.disposeDropObject(drop.mesh);
             this.drops.splice(i, 1);
@@ -3367,6 +3417,7 @@ export class MinecraftEngine {
             continue;
           }
           drop.count = remaining;
+          if (this.onlineMode && drop.networkId) this.onItemDropUpdated?.({ dropId: drop.networkId, count: remaining });
         }
       } else {
         // Physics for dropped item
@@ -3470,12 +3521,58 @@ export class MinecraftEngine {
   }
 
   public applyRemoteTileState(furnaces: Record<number, FurnaceData>, chests: Record<number, ChestData>) {
-    this.world.furnaces = furnaces || {};
-    this.world.chests = chests || {};
+    this.world.furnaces = { ...this.world.furnaces, ...(furnaces || {}) };
+    this.world.chests = { ...this.world.chests, ...(chests || {}) };
     this.onHUDUpdate?.();
+  }
+  public applyRemoteDrops(drops: unknown[]) {
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      if (!this.drops[i].isRemote) continue;
+      this.scene.remove(this.drops[i].mesh);
+      this.disposeDropObject(this.drops[i].mesh);
+      this.drops.splice(i, 1);
+    }
+    for (const drop of drops) this.applyRemoteItemDrop(drop);
+  }
+  public applyRemoteItemDrop(payload: unknown) {
+    if (!payload || typeof payload !== 'object') return;
+    const drop = payload as {
+      dropId?: unknown; id?: unknown; count?: unknown;
+      x?: unknown; y?: unknown; z?: unknown;
+      velocity?: { x?: unknown; y?: unknown; z?: unknown };
+    };
+    if (typeof drop.dropId !== 'string' || !drop.dropId) return;
+    const itemId = Number(drop.id);
+    const count = Math.max(1, Math.min(64, Math.floor(Number(drop.count))));
+    const x = Number(drop.x), y = Number(drop.y), z = Number(drop.z);
+    if (!Number.isFinite(itemId) || (!BLOCK_DEFS[itemId as BlockType] && !ITEM_DEFS[itemId as ItemType]) ||
+        !Number.isFinite(count) || ![x, y, z].every(Number.isFinite)) return;
+    if (this.drops.some((entry) => entry.isRemote && entry.networkId === drop.dropId)) return;
+    const velocity = drop.velocity && typeof drop.velocity === 'object' ? {
+      x: Number(drop.velocity.x) || 0,
+      y: Number(drop.velocity.y) || 0,
+      z: Number(drop.velocity.z) || 0,
+    } : { x: 0, y: 0.05, z: 0 };
+    this.spawnDrop(x, y, z, itemId as AnyItemId, count, {
+      networkId: drop.dropId,
+      isRemote: true,
+      velocity,
+    });
+  }
+  public updateRemoteDrop(dropId: string, count: number) {
+    const drop = this.drops.find((entry) => entry.isRemote && entry.networkId === dropId);
+    if (drop) drop.count = Math.max(1, Math.min(64, Math.floor(count)));
+  }
+  public removeRemoteDrop(dropId: string) {
+    const index = this.drops.findIndex((entry) => entry.isRemote && entry.networkId === dropId);
+    if (index < 0) return;
+    this.scene.remove(this.drops[index].mesh);
+    this.disposeDropObject(this.drops[index].mesh);
+    this.drops.splice(index, 1);
   }
   // ================= FURNACE TICKING =================
   private tickFurnaces(dt: number) {
+    let tileStateChanged = false;
     for (const key in this.world.furnaces) {
       const idx = Number(key);
       const f = this.world.furnaces[idx];
@@ -3499,6 +3596,7 @@ export class MinecraftEngine {
           f.burnTimeRemaining = fuelVal;
           f.maxBurnTime = fuelVal;
           isLit = true;
+          tileStateChanged = true;
         }
       }
 
@@ -3521,11 +3619,13 @@ export class MinecraftEngine {
           } else {
             f.output.count += smelt!.output.count;
           }
+          tileStateChanged = true;
         }
       } else if (!canSmelt) {
         f.cookProgress = Math.max(0, f.cookProgress - dt * 2);
       }
     }
+    if (tileStateChanged) this.onTileEntityChanged?.();
   }
 
   // ================= ANIMATION & CAMERA UPDATE =================

@@ -2,7 +2,7 @@
  * EsekCraft - Main Application Component
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { WorldMeta, BlockType, KeyBindings, DEFAULT_KEY_BINDINGS } from './game/types';
+import { WorldMeta, BlockType, KeyBindings, DEFAULT_KEY_BINDINGS, FurnaceData, ChestData } from './game/types';
 import { initTextures, getItemIcon } from './game/textures';
 import { initAudio, Sound, setMasterVolume } from './game/audio';
 import { MinecraftEngine } from './game/engine';
@@ -60,6 +60,10 @@ export default function App() {
   const onlineRoomRef = useRef<OnlineRoom | null>(null);
   const onlinePlayerIdRef = useRef<string | null>(null);
   const onlineMoveTimerRef = useRef<number | null>(null);
+  const pendingOnlineBlockChangesRef = useRef<Array<{ x: number; y: number; z: number; blockId: number }>>([]);
+  const worldReadyRef = useRef(false);
+  const pendingOnlineTileStateRef = useRef<{ furnaces: Record<number, FurnaceData>; chests: Record<number, ChestData> } | null>(null);
+  const pendingOnlineDropsRef = useRef<unknown[] | null>(null);
   const [keyBindings, setKeyBindings] = useState<KeyBindings>(DEFAULT_KEY_BINDINGS);
 
   // New world form state
@@ -161,6 +165,7 @@ export default function App() {
     setAppState('generating');
     setGenProgress(2);
     setGenText('Yükleme ekranı hazırlanıyor...');
+    worldReadyRef.current = false;
 
     // Paint the loading screen before constructing the engine and beginning staged work.
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -181,18 +186,45 @@ export default function App() {
       eng.isThirdPerson = thirdPerson;
       engineRef.current = eng;
       eng.onlineMode = !!onlineRoomRef.current;
+      eng.networkPlayerId = onlinePlayerIdRef.current;
 
       eng.onUIStateChange = (st) => setUIState(st);
       eng.onHUDUpdate = () => setHudRefresh((tick) => tick + 1);
       eng.onToast = (msg) => showToast(msg);
+      eng.onTileEntityChanged = () => persistActiveTileState(eng);
       eng.onBlockChanged = (change) => {
         if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });
+        else persistActiveTileState(eng);
       };
       eng.onAttackPlayer = (payload) => {
         if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_attack', ...payload });
       };
+      eng.onItemDropSpawned = (drop) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop', ...drop });
+      };
+      eng.onItemDropUpdated = (drop) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_update', ...drop });
+      };
+      eng.onItemDropRemoved = (dropId) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_remove', dropId });
+      };
+
+      if (pendingOnlineTileStateRef.current) {
+        const state = pendingOnlineTileStateRef.current;
+        eng.applyRemoteTileState(state.furnaces, state.chests);
+        pendingOnlineTileStateRef.current = null;
+      }
+      if (pendingOnlineDropsRef.current) {
+        eng.applyRemoteDrops(pendingOnlineDropsRef.current);
+        pendingOnlineDropsRef.current = null;
+      }
 
       eng.start(() => {
+        if (pendingOnlineBlockChangesRef.current.length > 0) {
+          eng.applyRemoteBlockChanges(pendingOnlineBlockChangesRef.current);
+          pendingOnlineBlockChangesRef.current = [];
+        }
+        worldReadyRef.current = true;
         setGenProgress(100);
         setGenText('Dünya hazır!');
         setAppState('in_game');
@@ -210,7 +242,6 @@ export default function App() {
               isCrouching: current.isSneaking, isSprinting: current.isSprinting,
               isJumping: !current.onGround, platform: 'pc'
             });
-            sendOnlineMessage({ type: 'esekcraft_tile_state', furnaces: current.world.furnaces, chests: current.world.chests });
           }, 50);
         }
       }, (progress, stage, fps) => {
@@ -230,6 +261,10 @@ export default function App() {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     onlineRoomRef.current = null;
     onlinePlayerIdRef.current = null;
+    pendingOnlineBlockChangesRef.current = [];
+    worldReadyRef.current = false;
+    pendingOnlineTileStateRef.current = null;
+    pendingOnlineDropsRef.current = null;
     setOnlinePlayers({});
     setOnlineIsAdmin(false);
   };
@@ -241,6 +276,41 @@ export default function App() {
     };
     if (ws.readyState === WebSocket.OPEN) send();
     else ws.addEventListener('open', send, { once: true });
+  };
+  const persistActiveTileState = (eng: MinecraftEngine) => {
+    const meta = activeMetaRef.current;
+    if (!meta) return;
+    const updatedMeta: WorldMeta = {
+      ...meta,
+      saved: Date.now(),
+      mods: { ...eng.world.mods },
+      furnaces: { ...eng.world.furnaces },
+      chests: { ...eng.world.chests },
+    };
+    activeMetaRef.current = updatedMeta;
+    if (onlineRoomRef.current) {
+      sendOnlineMessage({
+        type: 'esekcraft_tile_state',
+        furnaces: updatedMeta.furnaces,
+        chests: updatedMeta.chests,
+      });
+      return;
+    }
+
+    let savedWorlds = worlds;
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) savedWorlds = parsed;
+      }
+    } catch {}
+    const index = savedWorlds.findIndex((world) => world.id === updatedMeta.id);
+    const nextWorlds = [...savedWorlds];
+    if (index >= 0) nextWorlds[index] = updatedMeta;
+    else nextWorlds.push(updatedMeta);
+    setWorlds(nextWorlds);
+    try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(nextWorlds)); } catch {}
   };
   const roomToWorldMeta = (room: OnlineRoom): WorldMeta => {
     const options = room.worldOptions || { name: room.name, seed: `online-${room.id}`, difficulty: 1, gameMode: 'survival' as const };
@@ -260,10 +330,15 @@ export default function App() {
     onlineSocketRef.current = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: 'rooms_request', gameId: 'esekcraft' }));
     ws.onmessage = (event) => {
+      if (onlineSocketRef.current !== ws) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'init') onlinePlayerIdRef.current = message.id || null;
-        if (message.type === 'esekcraft_joined') { onlinePlayerIdRef.current = message.id || null; setOnlineIsAdmin(!!message.isAdmin); }
+        if (message.type === 'esekcraft_joined') {
+          onlinePlayerIdRef.current = message.id || null;
+          if (engineRef.current) engineRef.current.networkPlayerId = onlinePlayerIdRef.current;
+          setOnlineIsAdmin(!!message.isAdmin);
+        }
         if (message.type === 'rooms_list') setOnlineRooms(message.rooms || []);
         if (message.type === 'room_error') showToast(message.message || 'Sunucu işlemi başarısız.');
         if (message.type === 'room_created') {
@@ -274,6 +349,10 @@ export default function App() {
         }
         if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
+          pendingOnlineBlockChangesRef.current = [];
+          worldReadyRef.current = false;
+          pendingOnlineTileStateRef.current = null;
+          pendingOnlineDropsRef.current = null;
           onlineRoomRef.current = room;
           setSelectedOnlineRoom(room.id);
           launchWorld(roomToWorldMeta(room));
@@ -284,14 +363,47 @@ export default function App() {
         }
         if (message.type === 'room_admin') setOnlineIsAdmin(!!message.isAdmin);
         if (message.type === 'esekcraft_kicked') { showToast(message.message || 'Odadan çıkarıldın.'); handleSaveAndQuit(); return; }
-        if (message.type === 'esekcraft_block_changes' && engineRef.current) {
-          for (const change of message.changes || []) engineRef.current.applyRemoteBlockChange(Number(change.x), Number(change.y), Number(change.z), Number(change.blockId));
+        if (message.type === 'esekcraft_block_changes') {
+          const changes = (Array.isArray(message.changes) ? message.changes : []).map((change: any) => ({
+            x: Number(change.x), y: Number(change.y), z: Number(change.z), blockId: Number(change.blockId),
+          }));
+          if (engineRef.current && worldReadyRef.current) engineRef.current.applyRemoteBlockChanges(changes);
+          else pendingOnlineBlockChangesRef.current.push(...changes);
         }
-        if (message.type === 'esekcraft_tile_state' && engineRef.current) {
-          engineRef.current.applyRemoteTileState(message.furnaces || {}, message.chests || {});
+        if (message.type === 'esekcraft_tile_state') {
+          const state = { furnaces: message.furnaces || {}, chests: message.chests || {} };
+          if (engineRef.current) engineRef.current.applyRemoteTileState(state.furnaces, state.chests);
+          else pendingOnlineTileStateRef.current = state;
         }
-        if (message.type === 'esekcraft_block_change' && engineRef.current) {
-          engineRef.current.applyRemoteBlockChange(Number(message.x), Number(message.y), Number(message.z), Number(message.blockId));
+        if (message.type === 'esekcraft_drops_state') {
+          const drops = Array.isArray(message.drops) ? message.drops : [];
+          if (engineRef.current) engineRef.current.applyRemoteDrops(drops);
+          else pendingOnlineDropsRef.current = drops;
+        }
+        if (message.type === 'esekcraft_item_drop' && message.sourceId !== onlinePlayerIdRef.current) {
+          if (engineRef.current) engineRef.current.applyRemoteItemDrop(message.drop);
+          else pendingOnlineDropsRef.current = [...(pendingOnlineDropsRef.current || []), message.drop];
+        }
+        if (message.type === 'esekcraft_item_drop_update' && message.sourceId !== onlinePlayerIdRef.current) {
+          const dropId = String(message.dropId || '');
+          if (engineRef.current) engineRef.current.updateRemoteDrop(dropId, Number(message.count));
+          else if (pendingOnlineDropsRef.current) {
+            pendingOnlineDropsRef.current = pendingOnlineDropsRef.current.map((drop: any) =>
+              drop?.dropId === dropId ? { ...drop, count: Number(message.count) } : drop
+            );
+          }
+        }
+        if (message.type === 'esekcraft_item_drop_remove' && message.sourceId !== onlinePlayerIdRef.current) {
+          const dropId = String(message.dropId || '');
+          if (engineRef.current) engineRef.current.removeRemoteDrop(dropId);
+          else if (pendingOnlineDropsRef.current) {
+            pendingOnlineDropsRef.current = pendingOnlineDropsRef.current.filter((drop: any) => drop?.dropId !== dropId);
+          }
+        }
+        if (message.type === 'esekcraft_block_change') {
+          const change = { x: Number(message.x), y: Number(message.y), z: Number(message.z), blockId: Number(message.blockId) };
+          if (engineRef.current && worldReadyRef.current) engineRef.current.applyRemoteBlockChange(change.x, change.y, change.z, change.blockId);
+          else pendingOnlineBlockChangesRef.current.push(change);
         }
         if (message.type === 'esekcraft_attack' && engineRef.current && message.attackerId !== onlinePlayerIdRef.current) {
           engineRef.current.playRemoteAttack(String(message.attackerId));
@@ -928,6 +1040,9 @@ export default function App() {
           <div className="text-[#ddd] font-mono text-sm mt-3">{genText}</div>
           <div className="mt-5 max-w-[390px] px-4 text-center text-xs leading-5 text-[#aeb7c4]">
             Arazi ve bloklar FPS değerine göre parça parça hazırlanıyor. İlk görüntü tamamen yüklenince oyun açılacak.
+          </div>
+          <div className="mt-3 max-w-[390px] px-4 text-center text-xs leading-5 text-amber-300">
+            Uyarı: Oyun açıldıktan sonraki ilk birkaç dakika takılma veya FPS düşüşü olabilir; dünya arka planda yüklenirken performans kademeli olarak düzelebilir.
           </div>
         </div>
       )}

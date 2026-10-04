@@ -177,6 +177,8 @@ function handleCreateRoom(player, data) {
         id: makeRoomId(), gameId, name, maxPlayers, mapId,
         worldOptions: gameId === "esekcraft" ? sanitizeEsekCraftWorldOptions(data) : null,
         esekcraftBlocks: new Map(),
+        esekcraftTileState: { furnaces: {}, chests: {} },
+        esekcraftDrops: new Map(),
         hostId: player.id, hostName: null, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(),
         lastActivityAt: Date.now(), emptySince: null
     };
@@ -213,6 +215,9 @@ function joinEsekCraftGame(player, data = {}) {
         return { x, y, z, blockId };
     });
     if (changes.length) sendTo(player, { type: "esekcraft_block_changes", changes });
+    const tileState = room.esekcraftTileState || { furnaces: {}, chests: {} };
+    sendTo(player, { type: "esekcraft_tile_state", furnaces: tileState.furnaces, chests: tileState.chests });
+    sendTo(player, { type: "esekcraft_drops_state", drops: [...(room.esekcraftDrops || new Map()).values()] });
     broadcastPlayers();
     broadcastRoomLists();
 }
@@ -269,9 +274,67 @@ function handleEsekCraftTileState(player, data = {}) {
     if (!room || roomGameId(room) !== "esekcraft") return;
     const furnaces = data.furnaces && typeof data.furnaces === "object" ? data.furnaces : {};
     const chests = data.chests && typeof data.chests === "object" ? data.chests : {};
-    room.esekcraftTileState = { furnaces, chests };
+    const current = room.esekcraftTileState || { furnaces: {}, chests: {} };
+    room.esekcraftTileState = {
+        furnaces: { ...current.furnaces, ...furnaces },
+        chests: { ...current.chests, ...chests }
+    };
     room.lastActivityAt = Date.now();
-    broadcastToRoom(room.id, { type: "esekcraft_tile_state", sourceId: player.id, furnaces, chests });
+    broadcastToRoom(room.id, {
+        type: "esekcraft_tile_state", sourceId: player.id,
+        furnaces: room.esekcraftTileState.furnaces, chests: room.esekcraftTileState.chests
+    });
+}
+function handleEsekCraftItemDrop(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const id = Math.floor(Number(data.id));
+    const count = Math.max(1, Math.min(64, Math.floor(Number(data.count))));
+    const x = Number(data.x), y = Number(data.y), z = Number(data.z);
+    if (!dropId.startsWith(`${player.id}:`) || !Number.isInteger(id) || id < 0 || id > 255 ||
+        !Number.isInteger(count) || ![x, y, z].every(Number.isFinite) ||
+        x < -1 || x > 81 || y < -4 || y > 70 || z < -1 || z > 81) return;
+    const rawVelocity = data.velocity && typeof data.velocity === "object" ? data.velocity : {};
+    const velocity = {
+        x: Math.max(-5, Math.min(5, Number(rawVelocity.x) || 0)),
+        y: Math.max(-5, Math.min(5, Number(rawVelocity.y) || 0)),
+        z: Math.max(-5, Math.min(5, Number(rawVelocity.z) || 0))
+    };
+    if (!room.esekcraftDrops) room.esekcraftDrops = new Map();
+    if (!room.esekcraftDrops.has(dropId) && room.esekcraftDrops.size >= 500) {
+        const oldest = room.esekcraftDrops.keys().next().value;
+        if (oldest) room.esekcraftDrops.delete(oldest);
+    }
+    const drop = { dropId, id, count, x, y, z, velocity, ownerId: player.id };
+    room.esekcraftDrops.set(dropId, drop);
+    room.lastActivityAt = Date.now();
+    broadcastToRoom(room.id, { type: "esekcraft_item_drop", sourceId: player.id, drop });
+}
+function handleEsekCraftItemDropUpdate(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
+    if (!drop || drop.ownerId !== player.id) return;
+    const count = Math.floor(Number(data.count));
+    if (!Number.isInteger(count) || count < 1 || count > 64) return;
+    drop.count = count;
+    room.lastActivityAt = Date.now();
+    broadcastToRoom(room.id, { type: "esekcraft_item_drop_update", sourceId: player.id, dropId, count });
+}
+function handleEsekCraftItemDropRemove(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
+    if (!drop || drop.ownerId !== player.id) return;
+    room.esekcraftDrops.delete(dropId);
+    room.lastActivityAt = Date.now();
+    broadcastToRoom(room.id, { type: "esekcraft_item_drop_remove", sourceId: player.id, dropId });
 }
 function handleEsekCraftBlockChange(player, data = {}) {
     if (!player || !player.inGame) return;
@@ -281,11 +344,49 @@ function handleEsekCraftBlockChange(player, data = {}) {
     const y = Math.floor(Number(data.y));
     const z = Math.floor(Number(data.z));
     const blockId = Math.floor(Number(data.blockId));
-    if (![x, y, z, blockId].every(Number.isFinite) || x < 0 || x >= 256 || y < 0 || y >= 128 || z < 0 || z >= 256 || blockId < 0 || blockId > 255) return;
+    if (![x, y, z, blockId].every(Number.isFinite) || x < 0 || x >= 80 || y < 0 || y >= 64 || z < 0 || z >= 80 || blockId < 0 || blockId > 255) return;
     if (!room.esekcraftBlocks) room.esekcraftBlocks = new Map();
     room.esekcraftBlocks.set(`${x},${y},${z}`, blockId);
     room.lastActivityAt = Date.now();
     broadcastToRoom(room.id, { type: "esekcraft_block_change", sourceId: player.id, x, y, z, blockId });
+    const tileState = room.esekcraftTileState || (room.esekcraftTileState = { furnaces: {}, chests: {} });
+    const tileIndex = (y * 80 + z) * 80 + x;
+    let tileStateChanged = false;
+    if (blockId !== 10 && blockId !== 11 && tileState.furnaces[tileIndex] !== undefined) {
+        delete tileState.furnaces[tileIndex];
+        tileStateChanged = true;
+    }
+    if (blockId !== 12 && tileState.chests[tileIndex] !== undefined) {
+        const removedChest = tileState.chests[tileIndex];
+        if (Number.isInteger(removedChest && removedChest.pairedWith)) {
+            const partnerIndex = removedChest.pairedWith;
+            const partner = tileState.chests[partnerIndex];
+            if (partner && partner.pairedWith === tileIndex) {
+                const unpaired = { ...partner };
+                delete unpaired.pairedWith;
+                tileState.chests[partnerIndex] = unpaired;
+            }
+        }
+        delete tileState.chests[tileIndex];
+        for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const nx = x + dx, nz = z + dz;
+            if (nx < 0 || nx >= 80 || nz < 0 || nz >= 80) continue;
+            const neighborIndex = (y * 80 + nz) * 80 + nx;
+            const neighbor = tileState.chests[neighborIndex];
+            if (neighbor && neighbor.pairedWith === null) {
+                const unmarked = { ...neighbor };
+                delete unmarked.pairedWith;
+                tileState.chests[neighborIndex] = unmarked;
+            }
+        }
+        tileStateChanged = true;
+    }
+    if (tileStateChanged) {
+        broadcastToRoom(room.id, {
+            type: "esekcraft_tile_state", sourceId: player.id,
+            furnaces: tileState.furnaces, chests: tileState.chests
+        });
+    }
 }
 function handleJoinRoom(player, data) {
     if (!player || player.inGame) return;
@@ -2448,6 +2549,16 @@ wss.on("connection", (ws, req) => {
                 break;
             case "esekcraft_tile_state":
                 handleEsekCraftTileState(player, data);
+                break;
+
+            case "esekcraft_item_drop":
+                handleEsekCraftItemDrop(player, data);
+                break;
+            case "esekcraft_item_drop_update":
+                handleEsekCraftItemDropUpdate(player, data);
+                break;
+            case "esekcraft_item_drop_remove":
+                handleEsekCraftItemDropRemove(player, data);
                 break;
 
             case "building_door_state":

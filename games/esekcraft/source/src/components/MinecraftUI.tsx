@@ -1237,7 +1237,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                   <div className="flex flex-col items-center gap-2">
                     {/* Input slot */}
                     {renderSlot(f.input, (e) =>
-                      handleSlotClick(f.input, (s) => (f.input = s), e)
+                      handleSlotClick(f.input, (s) => { f.input = s; engine.onTileEntityChanged?.(); }, e)
                     )}
 
                     {/* Minecraft-style fuel gauge: remaining burn time / current fuel item burn time */}
@@ -1250,7 +1250,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
 
                     {/* Fuel slot */}
                     {renderSlot(f.fuel, (e) =>
-                      handleSlotClick(f.fuel, (s) => (f.fuel = s), e)
+                      handleSlotClick(f.fuel, (s) => { f.fuel = s; engine.onTileEntityChanged?.(); }, e)
                     )}
                   </div>
 
@@ -1270,7 +1270,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                   {/* Output Slot */}
                   {renderSlot(
                     f.output,
-                    (e) => handleSlotClick(f.output, (s) => (f.output = s), e),
+                    (e) => handleSlotClick(f.output, (s) => { f.output = s; engine.onTileEntityChanged?.(); }, e),
                     52
                   )}
                 </div>
@@ -1343,6 +1343,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                       handleSlotClick(stack, (s) => {
                         const data = chestData[Math.floor(i / 27)];
                         data.slots[i % 27] = s;
+                        engine.onTileEntityChanged?.();
                       }, e)
                     )
                   )}
