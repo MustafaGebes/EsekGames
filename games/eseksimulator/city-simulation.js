@@ -130,57 +130,42 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const hair = hairMaterials[styleIndex % hairMaterials.length];
     const skin = skinMaterials[styleIndex % skinMaterials.length];
     const shoe = shoeMaterials[styleIndex % shoeMaterials.length];
-
-    const torso = addBox(root, shirt, 0.43, 0.62, 0.27, 0, 1.08, 0);
-    addBox(root, beltMaterial, 0.44, 0.07, 0.29, 0, 0.77, 0);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.13, 7), skin);
-    neck.position.set(0, 1.46, 0);
-    neck.castShadow = false;
-    root.add(neck);
-    addSphere(root, skin, 0.18, 0, 1.63, 0.015, 0.93, 1.03, 0.9);
-    addSphere(root, hair, 0.18, 0, 1.72, -0.005, 1.02, 0.48, 1.0);
-    addBox(root, skin, 0.055, 0.075, 0.075, 0, 1.59, 0.165);
+    const capsule = (radius, length, material) => new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 4, 8), material);
+    const torso = capsule(.245, .48, shirt);
+    torso.scale.z = .72; torso.position.set(0, 1.12, 0); root.add(torso);
+    const pelvis = new THREE.Mesh(new THREE.SphereGeometry(.24, 10, 7), pants);
+    pelvis.scale.set(1, .58, .72); pelvis.position.set(0, .78, 0); root.add(pelvis);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(.07, .08, .13, 8), skin);
+    neck.position.set(0, 1.46, 0); root.add(neck);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(.19, 12, 8), skin);
+    head.scale.set(.92, 1.04, .9); head.position.set(0, 1.66, .015); root.add(head);
+    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(.19, 12, 6, 0, Math.PI * 2, 0, Math.PI * .54), hair);
+    hairCap.scale.set(1.02, .62, 1.0); hairCap.position.set(0, 1.75, -.02); root.add(hairCap);
     for (const side of [-1, 1]) {
-      addSphere(root, whiteEye, 0.027, side * 0.061, 1.655, 0.157);
-      addSphere(root, pupil, 0.012, side * 0.061, 1.653, 0.18);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(.027, 7, 5), whiteEye);
+      eye.scale.z = .45; eye.position.set(side * .065, 1.67, .17); root.add(eye);
+      const pupilMesh = new THREE.Mesh(new THREE.SphereGeometry(.013, 6, 5), pupil);
+      pupilMesh.scale.z = .35; pupilMesh.position.set(side * .065, 1.67, .188); root.add(pupilMesh);
     }
-
-    const arms = [];
-    const legs = [];
+    const arms = [], legs = [];
     for (const side of [-1, 1]) {
-      const arm = new THREE.Group();
-      arm.position.set(side * 0.255, 1.34, 0);
-      root.add(arm);
-      addBox(arm, shirt, 0.145, 0.34, 0.16, 0, -0.17, 0);
-      const forearm = new THREE.Group();
-      forearm.position.set(0, -0.33, 0);
-      arm.add(forearm);
-      addBox(forearm, shirt, 0.125, 0.29, 0.14, 0, -0.135, 0.015);
-      addSphere(forearm, skin, 0.07, 0, -0.29, 0.02, 0.86, 0.78, 0.8);
-      arms.push(arm);
-
-      const leg = new THREE.Group();
-      leg.position.set(side * 0.115, 0.76, 0);
-      root.add(leg);
-      addBox(leg, pants, 0.17, 0.39, 0.18, 0, -0.18, 0);
-      const lowerLeg = new THREE.Group();
-      lowerLeg.position.set(0, -0.36, 0);
-      leg.add(lowerLeg);
-      addBox(lowerLeg, pants, 0.145, 0.34, 0.155, 0, -0.16, 0);
-      addBox(lowerLeg, shoe, 0.19, 0.11, 0.29, 0, -0.34, 0.055);
-      legs.push(leg);
+      const arm = new THREE.Group(); arm.position.set(side * .265, 1.34, 0); root.add(arm);
+      const upper = capsule(.075, .23, shirt); upper.position.y = -.16; arm.add(upper);
+      const forearm = capsule(.065, .22, skin); forearm.position.set(0, -.43, .015); arm.add(forearm); arms.push(arm);
+      const leg = new THREE.Group(); leg.position.set(side * .115, .72, 0); root.add(leg);
+      const thigh = capsule(.09, .25, pants); thigh.position.y = -.17; leg.add(thigh);
+      const shin = capsule(.075, .22, pants); shin.position.y = -.48; leg.add(shin);
+      const shoeMesh = new THREE.Mesh(new THREE.BoxGeometry(.2, .1, .3), shoe); shoeMesh.position.set(0, -.72, .06); leg.add(shoeMesh); legs.push(leg);
     }
-
     if (styleIndex % 3 === 0) {
-      addBox(root, bagMaterials[styleIndex % bagMaterials.length], 0.3, 0.38, 0.13, 0, 1.12, -0.2);
-      addBox(root, bagMaterials[styleIndex % bagMaterials.length], 0.075, 0.42, 0.07, -0.15, 1.14, -0.13);
-      addBox(root, bagMaterials[styleIndex % bagMaterials.length], 0.075, 0.42, 0.07, 0.15, 1.14, -0.13);
+      const bag = new THREE.Mesh(new THREE.BoxGeometry(.28, .36, .12), bagMaterials[styleIndex % bagMaterials.length]);
+      bag.position.set(0, 1.12, -.2); root.add(bag);
     }
-
     scene.add(root);
-    const hitMaterials=[];root.traverse(node=>{if(!node.isMesh||!node.material)return;node.material=node.material.clone();hitMaterials.push({material:node.material,base:node.material.color.clone(),emissive:node.material.emissive?.clone()||null})});return { root, torso, arms, legs, hitbox: { radius: 0.95, height: 2.05 }, hitMaterials, hitFlashUntil: 0, hitTinted: false };
+    const hitMaterials = [];
+    root.traverse(node => { if (!node.isMesh || !node.material) return; node.material = node.material.clone(); hitMaterials.push({ material: node.material, base: node.material.color.clone(), emissive: node.material.emissive?.clone() || null }); });
+    return { root, torso, arms, legs, hitbox: { radius: .62, height: 2.12 }, hitMaterials, hitFlashUntil: 0, hitTinted: false, health: 3, alive: true, aiState: 'wander' };
   }
-
   const nodes = new Map();
   const nodeKey = (ix, iz, sx, sz) => `${ix},${iz},${sx},${sz}`;
   function getNode(ix, iz, sx, sz) {
@@ -334,6 +319,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
       walking: false,
       id: `pedestrian-${i}`,
       serverTargetId: null,
+      health: 3,
+      alive: true,
       behavior: i % 4 === 0 ? 'attack' : 'flee',
       panicUntil: 0,
       attackUntil: 0,
@@ -351,7 +338,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const point = building.shopkeeperPoint();
     model.root.position.set(point.x, 0.02, point.z);
     model.root.rotation.y = building.face;
-    return { ...model, id: building.id, name: building.title, building, point, serverTargetId: null, behavior: index % 3 === 0 ? 'attack' : 'flee', panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
+    return { ...model, id: building.id, name: building.title, building, point, serverTargetId: null, health: 3, alive: true, behavior: index % 3 === 0 ? 'attack' : 'flee', panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
   });
 
   function humanPosition(human) {
@@ -361,23 +348,27 @@ export function createCitySimulation(THREE, scene, options = {}) {
   function getNearestHuman(position, maxDistance = 5.0, forward = null) {
     if (!position) return null;
     let nearest = null;
-    let bestDistance = maxDistance;
+    let bestDistance = Infinity;
     const humans = [...citizens, ...shopkeepers, ...pedestrians];
     for (const human of humans) {
       if (human.alive === false || !human.root?.visible) continue;
       const point = humanPosition(human);
-      const dx = point.x - position.x;
-      const dz = point.z - position.z;
-      const distance = Math.hypot(dx, dz);
-      const hitRadius = human.hitbox?.radius || 0.95;
-      const facing = forward ? (dx * forward.x + dz * forward.z) / Math.max(distance, 0.001) : 1;
-      if (distance <= bestDistance + hitRadius && facing >= -0.35 && distance < bestDistance) { bestDistance = distance; nearest = human; }
+      const distance = Math.hypot(point.x - position.x, point.z - position.z);
+      const hitRadius = human.hitbox?.radius || .62;
+      if (distance <= maxDistance + hitRadius && distance < bestDistance) { bestDistance = distance; nearest = human; }
     }
     return nearest;
   }
   function getNearestCitizen(position, maxDistance = 4.6, forward = null) {
-    const target = getNearestHuman(position, maxDistance, forward);
-    return target && citizens.includes(target) ? target : null;
+    if (!position) return null;
+    let nearest = null; let bestDistance = maxDistance;
+    for (const citizen of citizens) {
+      if (!citizen.alive || !citizen.root.visible) continue;
+      const point = humanPosition(citizen);
+      const distance = Math.hypot(point.x - position.x, point.z - position.z);
+      if (distance <= bestDistance + (citizen.hitbox?.radius || .62)) { bestDistance = distance; nearest = citizen; }
+    }
+    return nearest;
   }
   function getNearestShopkeeper(position, maxDistance = 3.8) {
     if (!position) return null;
@@ -451,9 +442,14 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   function hitHuman(human) {
-    if (!human) return;
+    if (!human || human.alive === false) return;
     human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.28);
     human.attackFlash = 0.42;
+    if (!human.serverTargetId) {
+      human.health = Math.max(0, (Number(human.health) || 3) - 1);
+      if (human.health <= 0) { human.alive = false; human.root.visible = false; return; }
+    }
+    human.aiState = human.behavior === 'flee' ? 'flee' : 'attack';
     if (human.behavior === 'flee') human.panicUntil = elapsed + 3.8;
     else human.attackUntil = elapsed + 3.0;
   }
@@ -472,13 +468,13 @@ export function createCitySimulation(THREE, scene, options = {}) {
       const vehicleImpact = getVehicleImpact(person.root.position, .58);
       if (vehicleImpact) triggerHumanVehicleImpact(person, vehicleImpact);
       if (updateHumanRagdoll(person, dt)) continue;
-      if (target && person.panicUntil > elapsed) {
+      if (target && person.panicUntil > elapsed) { person.aiState = 'flee';
         const dx = person.root.position.x - target.x;
         const dz = person.root.position.z - target.z;
         const distance = Math.hypot(dx, dz) || 1;
         const step = 4.2 * dt;
         moveHumanAway(person, target, step);
-      } else if (target && person.attackUntil > elapsed) {
+      } else if (target && person.attackUntil > elapsed) { person.aiState = 'attack';
         person.root.rotation.y = Math.atan2(target.x - person.root.position.x, target.z - person.root.position.z);
       }
       person.gait += dt * (person.panicUntil > elapsed ? 9.5 : 1.6);
