@@ -331,6 +331,11 @@ export function createCitySimulation(THREE, scene, options = {}) {
       speed: 1.12 + random() * 0.34,
       gait: random() * Math.PI * 2,
       walking: false,
+      id: `pedestrian-${i}`,
+      serverTargetId: null,
+      behavior: i % 4 === 0 ? 'attack' : 'flee',
+      panicUntil: 0,
+      attackUntil: 0,
     });
   }
 
@@ -338,32 +343,41 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const model = makePerson(pedestrianCount + index);
     model.root.position.set(definition.x, 0.02, definition.z);
     model.root.rotation.y = definition.yaw || 0;
-    return { ...model, ...definition, health: 3, alive: true, hostileUntil: 0, gait: random() * Math.PI * 2 };
+    return { ...model, ...definition, serverTargetId: definition.id, behavior: definition.disposition === 'aggressive' || index % 3 === 0 ? 'attack' : 'flee', health: 3, alive: true, hostileUntil: 0, panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
   });
   const shopkeepers = shopBuildings.map((building, index) => {
     const model = makePerson(pedestrianCount + citizenDefinitions.length + index);
     const point = building.shopkeeperPoint();
     model.root.position.set(point.x, 0.02, point.z);
     model.root.rotation.y = building.face;
-    return { ...model, id: building.id, name: building.title, building, point, gait: random() * Math.PI * 2 };
+    return { ...model, id: building.id, name: building.title, building, point, serverTargetId: null, behavior: index % 3 === 0 ? 'attack' : 'flee', panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
   });
 
-  function getNearestCitizen(position, maxDistance = 4.6, forward = null) {
+  function humanPosition(human) {
+    if (human?.point) return human.point;
+    return human?.root?.position || human;
+  }
+  function getNearestHuman(position, maxDistance = 5.0, forward = null) {
     if (!position) return null;
     let nearest = null;
     let bestDistance = maxDistance;
-    for (const citizen of citizens) {
-      if (!citizen.alive || !citizen.root.visible) continue;
-      const dx = citizen.x - position.x;
-      const dz = citizen.z - position.z;
+    const humans = [...citizens, ...shopkeepers, ...pedestrians];
+    for (const human of humans) {
+      if (human.alive === false || !human.root?.visible) continue;
+      const point = humanPosition(human);
+      const dx = point.x - position.x;
+      const dz = point.z - position.z;
       const distance = Math.hypot(dx, dz);
-      const hitRadius = citizen.hitbox?.radius || 0.95;
+      const hitRadius = human.hitbox?.radius || 0.95;
       const facing = forward ? (dx * forward.x + dz * forward.z) / Math.max(distance, 0.001) : 1;
-      if (distance <= bestDistance + hitRadius && facing >= -0.35 && distance < bestDistance) { bestDistance = distance; nearest = citizen; }
+      if (distance <= bestDistance + hitRadius && facing >= -0.35 && distance < bestDistance) { bestDistance = distance; nearest = human; }
     }
     return nearest;
   }
-
+  function getNearestCitizen(position, maxDistance = 4.6, forward = null) {
+    const target = getNearestHuman(position, maxDistance, forward);
+    return target && citizens.includes(target) ? target : null;
+  }
   function getNearestShopkeeper(position, maxDistance = 3.8) {
     if (!position) return null;
     let nearest = null;
@@ -389,6 +403,14 @@ export function createCitySimulation(THREE, scene, options = {}) {
       if (snapshot) setCitizenState(snapshot);
     }
   }
+  function hitHuman(human) {
+    if (!human) return;
+    human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.28);
+    human.attackFlash = 0.42;
+    if (human.behavior === 'flee') human.panicUntil = elapsed + 3.8;
+    else human.attackUntil = elapsed + 3.0;
+  }
+
   function animateCitizenAttack(id) {
     const citizen = citizens.find((entry) => entry.id === id && entry.alive);
     if (!citizen) return;
@@ -400,8 +422,19 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const target = getPlayerPosition?.();
     for (const person of [...citizens, ...shopkeepers]) {
       if (!person.root.visible) continue;
-      person.gait += dt * 1.6;
-      const threat = person.attackFlash > 0;
+      if (target && person.panicUntil > elapsed) {
+        const dx = person.root.position.x - target.x;
+        const dz = person.root.position.z - target.z;
+        const distance = Math.hypot(dx, dz) || 1;
+        const step = 4.2 * dt;
+        person.root.position.x += dx / distance * step;
+        person.root.position.z += dz / distance * step;
+        person.root.rotation.y = Math.atan2(dx, dz);
+      } else if (target && person.attackUntil > elapsed) {
+        person.root.rotation.y = Math.atan2(target.x - person.root.position.x, target.z - person.root.position.z);
+      }
+      person.gait += dt * (person.panicUntil > elapsed ? 9.5 : 1.6);
+      const threat = person.attackFlash > 0 || person.attackUntil > elapsed;
       if (person.attackFlash > 0) person.attackFlash = Math.max(0, person.attackFlash - dt);
       const flashing = (person.hitFlashUntil || 0) > elapsed;
       if (flashing && !person.hitTinted) { person.hitMaterials?.forEach(entry => { entry.material.color.setHex(0xff3f38); if (entry.material.emissive) entry.material.emissive.setHex(0x66100b); }); person.hitTinted = true; }
@@ -657,7 +690,21 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   function updatePedestrian(pedestrian, dt) {
-    let budget = pedestrian.speed * dt;
+    const player = getPlayerPosition?.();
+    if (player && pedestrian.panicUntil > elapsed) {
+      const dx = pedestrian.root.position.x - player.x;
+      const dz = pedestrian.root.position.z - player.z;
+      const distance = Math.hypot(dx, dz) || 1;
+      const step = 4.8 * dt;
+      pedestrian.root.position.x += dx / distance * step;
+      pedestrian.root.position.z += dz / distance * step;
+      pedestrian.root.rotation.y = Math.atan2(dx, dz);
+      pedestrian.walking = true;
+    } else if (player && pedestrian.attackUntil > elapsed) {
+      pedestrian.root.rotation.y = Math.atan2(player.x - pedestrian.root.position.x, player.z - pedestrian.root.position.z);
+      pedestrian.walking = false;
+    }
+    let budget = pedestrian.panicUntil > elapsed || pedestrian.attackUntil > elapsed ? 0 : pedestrian.speed * dt;
     pedestrian.walking = false;
     for (let guard = 0; budget > 0.001 && guard < 8; guard += 1) {
       let edge = pedestrian.path[pedestrian.edgeIndex];
@@ -788,6 +835,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
     policeCar,
     policeOfficers,
     getNearestCitizen,
+    getNearestHuman,
+    hitHuman,
     getNearestShopkeeper,
     setCitizenState,
     setCitizenStates,
