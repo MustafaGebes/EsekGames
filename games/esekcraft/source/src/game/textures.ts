@@ -194,7 +194,7 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
   },
   [BlockType.WHITE_WOOL_BLOCK]: {
     name: 'Beyaz Yün Bloğu', top: TILE.ITEM_WHITE_WOOL, bottom: TILE.ITEM_WHITE_WOOL, side: TILE.ITEM_WHITE_WOOL,
-    hardness: 0.8, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.WHITE_WOOL_BLOCK,
+    hardness: 0.8, requiredTool: 'none', minHarvestLevel: 0, drop: ItemType.WHITE_WOOL,
   },
   [BlockType.CRAFTING_TABLE]: {
     name: 'Çalışma Masası',

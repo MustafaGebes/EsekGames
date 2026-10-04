@@ -492,46 +492,65 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   // Recipe Book Auto-Fill
   const handleSelectRecipe = (recipe: CraftingRecipe, isTable: boolean) => {
     if (!engine) return;
-
-    if (isTable) {
-      // Need 3x3 grid
-      const newGrid: (ItemStack | null)[] = new Array(9).fill(null);
-      // Place pattern into top-left
-      for (let r = 0; r < recipe.height; r++) {
-        for (let c = 0; c < recipe.width; c++) {
-          const id = recipe.pattern[r * recipe.width + c];
-          if (id) {
-            // Check if player has this item
-            const foundSlot = engine.inventory.find((st) => st && st.id === id && st.count > 0);
-            if (foundSlot) {
-              foundSlot.count--;
-              newGrid[r * 3 + c] = { id, count: 1 };
-            }
-          }
-        }
-      }
-      setTableCraftGrid(newGrid);
-    } else {
-      // 2x2 grid
-      if (recipe.width > 2 || recipe.height > 2) {
-        Sound.hit();
-        return; // Requires 3x3 crafting table!
-      }
-      const newGrid: (ItemStack | null)[] = new Array(4).fill(null);
-      for (let r = 0; r < recipe.height; r++) {
-        for (let c = 0; c < recipe.width; c++) {
-          const id = recipe.pattern[r * recipe.width + c];
-          if (id) {
-            const foundSlot = engine.inventory.find((st) => st && st.id === id && st.count > 0);
-            if (foundSlot) {
-              foundSlot.count--;
-              newGrid[r * 2 + c] = { id, count: 1 };
-            }
-          }
-        }
-      }
-      setPlayerCraftGrid(newGrid);
+    if (!isTable && (recipe.width > 2 || recipe.height > 2)) {
+      Sound.hit();
+      return; // Requires 3x3 crafting table!
     }
+
+    const gridSize = isTable ? 3 : 2;
+    const oldGrid = (isTable ? tableCraftGrid : playerCraftGrid).map((stack) => stack ? { ...stack } : null);
+    const remainingGrid = oldGrid.map((stack) => stack ? { ...stack } : null);
+    const nextInventory = engine.inventory.map((stack) => stack ? { ...stack } : null);
+    const nextGrid: (ItemStack | null)[] = new Array(gridSize * gridSize).fill(null);
+    const overflowDrops: ItemStack[] = [];
+
+    // Prefer reusing items already in the crafting grid, then take only the missing items from inventory.
+    const consumeOne = (id: AnyItemId): boolean => {
+      for (const source of [remainingGrid, nextInventory]) {
+        const index = source.findIndex((stack) => stack?.id === id && stack.count > 0);
+        if (index < 0) continue;
+        const stack = source[index]!;
+        stack.count--;
+        if (stack.count <= 0) source[index] = null;
+        return true;
+      }
+      return false;
+    };
+
+    for (let r = 0; r < recipe.height; r++) {
+      for (let c = 0; c < recipe.width; c++) {
+        const id = recipe.pattern[r * recipe.width + c];
+        if (id && consumeOne(id)) nextGrid[r * gridSize + c] = { id, count: 1 };
+      }
+    }
+
+    // Return anything left in the old grid to a staged inventory before committing.
+    const returnStack = (stack: ItemStack) => {
+      let remaining = stack.count;
+      for (let i = 0; i < nextInventory.length && remaining > 0; i++) {
+        const existing = nextInventory[i];
+        if (!existing || existing.id !== stack.id || existing.count >= 64) continue;
+        const added = Math.min(64 - existing.count, remaining);
+        existing.count += added;
+        remaining -= added;
+      }
+      for (let i = 0; i < nextInventory.length && remaining > 0; i++) {
+        if (nextInventory[i]) continue;
+        const added = Math.min(64, remaining);
+        nextInventory[i] = { ...stack, count: added };
+        remaining -= added;
+      }
+      if (remaining > 0) overflowDrops.push({ ...stack, count: remaining });
+    };
+    for (const stack of remainingGrid) if (stack && stack.count > 0) returnStack(stack);
+
+    for (let i = 0; i < engine.inventory.length; i++) engine.inventory[i] = nextInventory[i] ?? null;
+    for (const stack of overflowDrops) engine.spawnDrop(engine.pos.x, engine.pos.y + 1, engine.pos.z, stack.id, stack.count);
+    if (isTable) setTableCraftGrid(nextGrid);
+    else setPlayerCraftGrid(nextGrid);
+
+    engine.updateHeldItemModel();
+    engine.onHUDUpdate?.();
     Sound.click();
     rerender();
   };

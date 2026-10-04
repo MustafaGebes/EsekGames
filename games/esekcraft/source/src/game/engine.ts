@@ -2661,6 +2661,15 @@ export class MinecraftEngine {
       this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
       return;
     }
+    if (id === ItemType.WHITE_WOOL) {
+      const geometry = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+      const mesh = new THREE.Mesh(geometry, this.worldMaterial);
+      this.setupMeshUVs(geometry, BlockType.WHITE_WOOL_BLOCK);
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 1.8, y: 0.05, z: (Math.random() - 0.5) * 1.8 }, age: 0, baseY: null });
+      return;
+    }
     const toolMesh = this.createToolDrop(id);
     if (toolMesh) {
       toolMesh.position.set(x, y, z);
