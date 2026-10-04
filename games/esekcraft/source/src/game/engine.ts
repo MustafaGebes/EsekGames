@@ -80,6 +80,11 @@ export class MinecraftEngine {
   public isThirdPerson = false;
   public fov = 75;
   public mouseSensitivity = 1.0;
+  public renderDistance = 48;
+  public fps = 0;
+  private fpsFrames = 0;
+  private fpsClock = 0;
+  private visibleMeshChunk = { x: -999, z: -999 };
 
   // Player State
   public pos = { x: 40.5, y: 30, z: 40.5 };
@@ -174,7 +179,7 @@ export class MinecraftEngine {
     this.camera.rotation.order = 'YXZ';
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     canvasContainer.appendChild(this.renderer.domElement);
     this.scene.add(this.torchGroup);
@@ -533,14 +538,28 @@ export class MinecraftEngine {
     if (![x, y, z, blockId].every(Number.isFinite)) return;
     if (!inBounds(Math.floor(x), Math.floor(y), Math.floor(z))) return;
     this.world.setBlock(Math.floor(x), Math.floor(y), Math.floor(z), blockId as BlockType);
-    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
     this.recoverFromBlockCollision();
   }
+  public setRenderDistance(distance: number) {
+    const next = Math.max(16, Math.min(Math.max(SX, SZ), Math.round(distance)));
+    if (next === this.renderDistance) return;
+    this.renderDistance = next;
+    this.visibleMeshChunk = { x: -999, z: -999 };
+    this.rebuildVisibleWorld();
+    this.onHUDUpdate?.();
+  }
+  private rebuildVisibleWorld() {
+    const cx = this.pos.x; const cz = this.pos.z;
+    this.world.buildMesh(this.scene, this.worldMaterial, this.renderDistance, cx, cz);
+    this.visibleMeshChunk = { x: Math.floor(cx / 16), z: Math.floor(cz / 16) };
+  }
+
   public start() {
     this.world.generate();
     this.recoverFromBlockCollision();
-    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
     this.spawnMobs(30);
     this.lastTime = performance.now();
@@ -2146,7 +2165,7 @@ export class MinecraftEngine {
 
     this.world.setBlock(hit.x, hit.y, hit.z, BlockType.AIR);
     this.onBlockChanged?.({ x: hit.x, y: hit.y, z: hit.z, blockId: BlockType.AIR });
-    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
   }
 
@@ -2178,7 +2197,7 @@ export class MinecraftEngine {
     // Place block in world
     this.world.setBlock(px, py, pz, held.id as BlockType);
     this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: held.id as BlockType });
-    this.world.buildMesh(this.scene, this.worldMaterial);
+    this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
 
     let mat: SoundMaterial = 'stone';
@@ -2320,7 +2339,7 @@ export class MinecraftEngine {
   private updateTorchLights(dt: number) {
     this.torchTime += dt;
     const flicker = Math.sin(this.torchTime * 11.0) * 0.08 + Math.sin(this.torchTime * 23.0) * 0.04;
-    for (const light of this.torchLights) light.intensity = 1.25 + flicker;
+    for (const light of this.torchLights) { const dx = light.position.x - this.pos.x; const dz = light.position.z - this.pos.z; light.visible = dx * dx + dz * dz < this.renderDistance * this.renderDistance; if (light.visible) light.intensity = 1.25 + flicker; }
   }
   public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
     if (id === BlockType.TORCH) {
@@ -2392,7 +2411,7 @@ export class MinecraftEngine {
       if (this.world.getBlock(bx, by, bz) === BlockType.SAND && this.gameMode === 'survival') this.applyDamage(1, 'Kum altında boğuldun');
       for (let z = 1; z < SZ - 1; z++) for (let x = 1; x < SX - 1; x++) for (let y = 1; y < SY - 1; y++) {
         if (this.world.getBlock(x, y, z) === BlockType.SAND && this.world.getBlockPhys(x, y - 1, z) === BlockType.AIR) {
-          this.world.setBlock(x, y, z, BlockType.AIR); this.world.setBlock(x, y - 1, z, BlockType.SAND); this.world.buildMesh(this.scene, this.worldMaterial); break;
+          this.world.setBlock(x, y, z, BlockType.AIR); this.world.setBlock(x, y - 1, z, BlockType.SAND); this.rebuildVisibleWorld(); break;
         }
       }
     }
@@ -2604,6 +2623,11 @@ export class MinecraftEngine {
 
     this.updateWorldBorder(dt);
     this.updateCameraAndModels(dt);
+    const currentChunk = { x: Math.floor(this.pos.x / 16), z: Math.floor(this.pos.z / 16) };
+    if (currentChunk.x !== this.visibleMeshChunk.x || currentChunk.z !== this.visibleMeshChunk.z) this.rebuildVisibleWorld();
+    this.fpsFrames++;
+    this.fpsClock += dt;
+    if (this.fpsClock >= 0.5) { this.fps = Math.round(this.fpsFrames / this.fpsClock); this.fpsFrames = 0; this.fpsClock = 0; this.onHUDUpdate?.(); }
     this.renderer.render(this.scene, this.camera);
   };
 

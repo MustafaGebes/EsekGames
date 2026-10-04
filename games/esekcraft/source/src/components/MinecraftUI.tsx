@@ -624,8 +624,13 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
           {engine.damageFlashTimer > 0 && (
             <div className="absolute inset-0 bg-red-600/30 pointer-events-none transition-opacity duration-300" />
           )}
-          <div className="absolute top-3 left-3 px-2 py-1 bg-black/55 border border-white/20 text-white font-mono text-xs pointer-events-none">
-            XYZ: {Math.floor(engine.pos.x)} / {Math.floor(engine.pos.y)} / {Math.floor(engine.pos.z)}
+          <div className="absolute top-3 left-3 flex flex-col gap-1">
+            <div className="px-2 py-1 bg-black/55 border border-white/20 text-white font-mono text-xs pointer-events-none">
+              XYZ: {Math.floor(engine.pos.x)} / {Math.floor(engine.pos.y)} / {Math.floor(engine.pos.z)}
+            </div>
+            <div className={`w-fit px-2 py-1 bg-black/55 border font-mono text-xs pointer-events-none ${engine.fps < 30 ? 'border-red-500 text-red-300' : engine.fps < 55 ? 'border-yellow-500 text-yellow-200' : 'border-emerald-500 text-emerald-300'}`}>
+              FPS: {engine.fps || '--'}
+            </div>
           </div>
           {showPlayerList && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[520px] max-w-[94vw] bg-black/85 border-2 border-[#777] shadow-2xl p-3 pointer-events-auto">
@@ -1376,6 +1381,24 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                   className="w-28"
                 />
               </div>
+            </div>
+
+            {/* Render distance / chunk budget */}
+            <div className="w-full flex flex-col gap-1 my-1 p-2 bg-black/20 border border-[#888]">
+              <div className="flex justify-between items-center text-xs text-white">
+                <span>Chunk / Görüş Mesafesi: {engine.renderDistance} blok</span>
+                <span className="text-[10px] text-slate-300">16–80</span>
+              </div>
+              <input
+                type="range"
+                min="16"
+                max="80"
+                step="8"
+                value={engine.renderDistance}
+                onChange={(e) => { engine.setRenderDistance(Number(e.target.value)); rerender(); }}
+                className="w-full accent-emerald-500"
+              />
+              <span className="text-[10px] text-slate-300">Düşük değer daha az blok çizer ve FPS’i artırır.</span>
             </div>
 
             {/* Controls Rebinding Button */}

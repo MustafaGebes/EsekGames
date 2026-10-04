@@ -221,7 +221,7 @@ export class VoxelWorld {
   /**
    * Builds the combined mesh for all visible block faces in the world
    */
-  public buildMesh(scene: THREE.Scene, worldMaterial: THREE.Material) {
+  public buildMesh(scene: THREE.Scene, worldMaterial: THREE.Material, renderDistance = Math.max(SX, SZ), centerX = SX / 2, centerZ = SZ / 2) {
     const pos: number[] = [];
     const norm: number[] = [];
     const uv: number[] = [];
@@ -234,6 +234,7 @@ export class VoxelWorld {
     for (let y = 0; y < SY; y++) {
       for (let z = 0; z < SZ; z++) {
         for (let x = 0; x < SX; x++) {
+          if (renderDistance < Math.max(SX, SZ) && Math.hypot(x + 0.5 - centerX, z + 0.5 - centerZ) > renderDistance) continue;
           const block = this.data[IDX(x, y, z)];
           // Torches are rendered as dedicated models with point lights by the engine.
           if (block === BlockType.AIR || block === BlockType.TORCH) continue;
@@ -244,7 +245,9 @@ export class VoxelWorld {
           // Check all 6 faces
           for (let f = 0; f < 6; f++) {
             const d = FACES[f].dir;
-            const neighbor = this.getBlockMesh(x + d[0], y + d[1], z + d[2]);
+            const nx = x + d[0]; const nz = z + d[2];
+            const neighborInView = renderDistance >= Math.max(SX, SZ) || Math.hypot(nx + 0.5 - centerX, nz + 0.5 - centerZ) <= renderDistance;
+            const neighbor = neighborInView ? this.getBlockMesh(nx, y + d[1], nz) : BlockType.AIR;
 
             // If neighbor is solid, skip hidden face (unless neighbor is transparent and this isn't same transparent)
             if (neighbor !== BlockType.AIR) {
