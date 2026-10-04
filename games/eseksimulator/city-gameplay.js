@@ -1,0 +1,327 @@
+const DATA = window.EsekCityData;
+const byId = (id) => document.getElementById(id);
+
+export function createCityGameplay({ state, player, citySimulation, enterableWorld, send, showToast, toggleNearbyDoor, passNearbyDoor }) {
+  if (!DATA) throw new Error('EsekCityData yüklenmedi.');
+
+  const style = document.createElement('style');
+  style.textContent = `
+    #cityHud{position:fixed;right:18px;top:16px;z-index:6;display:none;min-width:178px;padding:11px 13px;border:1px solid #ffffff35;border-radius:14px;background:rgba(15,20,18,.88);box-shadow:0 10px 32px #0007;backdrop-filter:blur(12px);font-size:12px}
+    #cityHud.show{display:grid;gap:6px}.city-wallet{display:flex;justify-content:space-between;align-items:center;color:#e6c47e;font-weight:900}.city-wallet strong{font-size:17px;color:#fff1d0}.city-vitals{display:flex;justify-content:space-between;align-items:center;gap:9px}.city-hearts{display:flex;gap:2px;font-size:14px;line-height:1}.city-heart{color:#673735}.city-heart.full{color:#ff7469;text-shadow:0 0 8px #ef433f77}.city-stars{color:#635d53;letter-spacing:1px}.city-stars .wanted{color:#ffc64f;text-shadow:0 0 8px #ffb83277}
+    .city-overlay{position:fixed;inset:0;z-index:14;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(4,7,5,.78);backdrop-filter:blur(10px)}.city-overlay.open{display:flex}.city-panel{width:min(720px,100%);max-height:min(88dvh,780px);overflow:auto;padding:clamp(20px,4vw,32px);border:1px solid #f1d08e48;border-radius:22px;background:linear-gradient(150deg,#20251fef,#111512f5);box-shadow:0 30px 100px #000b;color:#f3ead7}.city-panel.narrow{width:min(510px,100%)}.city-panel h2{margin:0;color:#f2d08c;font-size:clamp(24px,4vw,34px);letter-spacing:-.04em}.city-subtitle{margin:8px 0 20px;color:#bdb9ac;line-height:1.5;font-size:13px}.city-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.city-close{width:38px;height:38px;border:1px solid #ffffff2c;border-radius:11px;background:#ffffff0b;color:#f4ead7;font-size:20px}.city-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:10px}.city-item{display:grid;grid-template-columns:42px 1fr;gap:3px 10px;padding:13px;border:1px solid #ffffff1b;border-radius:14px;background:#ffffff08}.city-item-icon{grid-row:span 3;display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:#e3b85b15;font-size:22px}.city-item-title{font-size:13px;font-weight:900}.city-item-description{min-height:30px;color:#aaa99d;font-size:11px;line-height:1.4}.city-item-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px}.city-price{color:#f1d08c;font-size:12px;font-weight:900}.city-action{min-height:34px;padding:0 12px;border:1px solid #e8bd6b77;border-radius:9px;background:#dca94920;color:#f7d99b;font-size:11px;font-weight:900}.city-action:disabled{opacity:.42;cursor:not-allowed}.city-empty{padding:22px;text-align:center;border:1px dashed #ffffff30;border-radius:13px;color:#aaa99d;line-height:1.55}.city-bag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}.city-bag-slot{min-height:102px;padding:12px;border:1px solid #ffffff20;border-radius:13px;background:#ffffff08}.city-bag-slot strong{display:block;margin:4px 0;font-size:12px}.city-bag-slot small{display:block;color:#aaa99d;font-size:11px}.city-bag-actions{display:flex;gap:6px;margin-top:9px}.city-bag-actions .city-action{flex:1;padding:0 7px}.city-talk-line{padding:18px;border-left:3px solid #e7b95f;background:#ffffff08;border-radius:0 12px 12px 0;color:#e8e0d1;line-height:1.6}.city-status{min-height:20px;margin-top:12px;color:#e6c47e;font-size:12px}.city-panel-foot{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}.city-panel-foot .city-action{min-width:104px;min-height:42px}.city-death-count{margin:14px 0;color:#ffb2a5;font-weight:850}.city-death-note{color:#bbb7aa;font-size:13px;line-height:1.55}
+    #cityBagTouch{position:fixed;left:12px;top:68px;z-index:8;display:none;min-width:56px;height:42px;padding:0 11px;border:1px solid #ffffff55;border-radius:12px;background:#111613df;color:#f2d08c;font-size:10px;font-weight:950;backdrop-filter:blur(10px);touch-action:manipulation}#cityBagTouch.show{display:block}
+    #cityInteractTouch{min-height:42px;padding:0 8px;border:1px solid #edc67599;border-radius:12px;background:#dca94924;color:#f6d99e;font-size:10px;font-weight:950;touch-action:manipulation}#cityInteractTouch[hidden]{display:none!important}
+    @media(max-width:760px){#cityHud{top:10px;right:10px;min-width:137px;padding:8px 10px;border-radius:12px;font-size:10px}.city-wallet strong{font-size:15px}.city-hearts{font-size:12px}.city-overlay{padding:10px}.city-panel{max-height:calc(100dvh - 20px);padding:18px;border-radius:18px}.city-panel-head{margin-bottom:5px}.city-subtitle{margin:7px 0 15px}.city-list{grid-template-columns:1fr 1fr;gap:7px}.city-item{grid-template-columns:30px 1fr;padding:9px;gap:4px 7px}.city-item-icon{width:29px;height:29px;font-size:17px}.city-item-title{font-size:11px}.city-item-description{font-size:10px;min-height:27px}.city-item-footer{align-items:flex-end}.city-price{font-size:10px}.city-item-footer .city-action{min-height:31px;padding:0 8px;font-size:10px}.city-bag-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.city-bag-slot{min-height:95px;padding:9px}.city-bag-actions .city-action{font-size:9px}.city-panel-foot .city-action{min-height:40px}}
+    @media(max-width:360px){#cityHud{min-width:126px}.city-list{grid-template-columns:1fr}.city-item-description{min-height:0}.city-bag-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  `;
+  document.head.appendChild(style);
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <aside id="cityHud" aria-live="polite">
+      <div class="city-wallet"><span>ŞEHİR CÜZDANI</span><strong>₺ <b id="cityCashValue">0</b></strong></div>
+      <div class="city-vitals"><div id="cityHearts" class="city-hearts" aria-label="Can"></div><div id="cityStars" class="city-stars" aria-label="Aranma seviyesi"></div></div>
+    </aside>
+    <button id="cityBagTouch" type="button" aria-label="Çantayı aç">ÇANTA</button>
+    <section id="cityShopOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel">
+      <div class="city-panel-head"><div><h2 id="cityShopTitle">Dükkân</h2><p id="cityShopSubtitle" class="city-subtitle">Tezgâhtaki ürünler</p></div><button class="city-close" data-close="shop" aria-label="Kapat">×</button></div>
+      <div id="cityShopItems" class="city-list"></div><div id="cityShopStatus" class="city-status"></div>
+      <div class="city-panel-foot"><button class="city-action" data-close="shop">KAPAT</button></div>
+    </div></section>
+    <section id="cityBagOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel">
+      <div class="city-panel-head"><div><h2>Çantan</h2><p class="city-subtitle">B ile aç/kapat · Çanta kapasitesi <span id="cityBagCapacity">12</span> eşya yuvası</p></div><button class="city-close" data-close="bag" aria-label="Kapat">×</button></div>
+      <div id="cityBagItems" class="city-bag-grid"></div><div id="cityBagStatus" class="city-status"></div>
+      <div class="city-panel-foot"><button class="city-action" data-close="bag">KAPAT</button></div>
+    </div></section>
+    <section id="cityTalkOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel narrow">
+      <div class="city-panel-head"><div><h2 id="cityTalkName">Mahalleli</h2><p id="cityTalkMood" class="city-subtitle"></p></div><button class="city-close" data-close="talk" aria-label="Kapat">×</button></div>
+      <div id="cityTalkLine" class="city-talk-line"></div><div id="cityTalkStatus" class="city-status"></div>
+      <div class="city-panel-foot"><button class="city-action" id="cityTalkAgain">KONUŞ</button><button class="city-action" data-close="talk">AYRIL</button></div>
+    </div></section>
+    <section id="cityHospitalOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel narrow">
+      <div class="city-panel-head"><div><h2>Şehir Hastanesi</h2><p class="city-subtitle">Sağlık görevlisi seni muayene edebilir.</p></div><button class="city-close" data-close="hospital" aria-label="Kapat">×</button></div>
+      <p class="city-talk-line">Hastanede tamamen iyileşmek için ₺35 öde. Ölürsen, ceza kesildikten sonra burada yeniden doğarsın.</p><div id="cityHospitalStatus" class="city-status"></div>
+      <div class="city-panel-foot"><button class="city-action" id="cityHospitalHeal">TEDAVİ OL · ₺35</button><button class="city-action" data-close="hospital">KAPAT</button></div>
+    </div></section>
+    <section id="cityDeathOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel narrow">
+      <div class="city-panel-head"><div><h2>Hastaneye kaldırıldın</h2><p class="city-subtitle">Şehir Hastanesi</p></div></div>
+      <p id="cityDeathReason" class="city-death-note">Canın tükendi.</p><p id="cityDeathFine" class="city-death-count">Hastane masrafı: ₺0</p>
+      <p class="city-death-note">Kısa süre sonra hastanede yeniden doğacaksın.</p><div class="city-panel-foot"><button id="cityRespawnNow" class="city-action">YENİDEN DOĞ</button></div>
+    </div></section>
+  `);
+
+  const hud = byId('cityHud');
+  const hearts = byId('cityHearts');
+  const heartNodes = Array.from({ length: 9 }, () => {
+    const node = document.createElement('span'); node.className = 'city-heart'; node.textContent = '♥'; hearts.appendChild(node); return node;
+  });
+  const doorControls = byId('doorControls');
+  const interactButton = document.createElement('button');
+  interactButton.id = 'cityInteractTouch'; interactButton.type = 'button'; interactButton.hidden = true; interactButton.textContent = 'ETKİLEŞ';
+  doorControls.insertBefore(interactButton, doorControls.firstChild);
+
+  const profile = { cash: 0, inventory: [], capacity: DATA.bagCapacity, health: 9, maxHealth: 9, wantedLevel: 0, equippedWeapon: null, equippedArmor: null };
+  let activeShopId = null;
+  let activeCitizenId = null;
+  let cityDeathTimer = null;
+  let respawnRequested = false;
+  let context = null;
+  let canonicalShopItems = null;
+
+  function isOverlayOpen() {
+    return ['cityShopOverlay', 'cityBagOverlay', 'cityTalkOverlay', 'cityHospitalOverlay', 'cityDeathOverlay'].some((id) => byId(id).classList.contains('open'));
+  }
+  function openOverlay(id) { const overlay = byId(id); overlay.classList.add('open'); overlay.setAttribute('aria-hidden', 'false'); }
+  function closeOverlay(id) { const overlay = byId(id); overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true'); }
+  function closeAllOverlays() { for (const id of ['cityShopOverlay', 'cityBagOverlay', 'cityTalkOverlay', 'cityHospitalOverlay']) closeOverlay(id); }
+
+  function renderHud() {
+    byId('cityCashValue').textContent = Math.max(0, Math.floor(profile.cash || 0)).toLocaleString('tr-TR');
+    const hp = Math.max(0, Number(profile.health) || 0);
+    const maxHp = Math.max(1, Number(profile.maxHealth) || 9);
+    const filledHearts = Math.ceil(Math.min(1, hp / maxHp) * 9);
+    heartNodes.forEach((node, index) => node.classList.toggle('full', index < filledHearts));
+    const wanted = Math.max(0, Math.min(5, Number(profile.wantedLevel) || 0));
+    byId('cityStars').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="${i < wanted ? 'wanted' : ''}">★</span>`).join('');
+    byId('cityBagCapacity').textContent = String(profile.capacity || DATA.bagCapacity);
+  }
+
+  function itemFor(id) { return DATA.items.find((item) => item.id === id); }
+  function renderShop() {
+    const shop = DATA.shops.find((entry) => entry.id === activeShopId);
+    if (!shop) return;
+    byId('cityShopTitle').textContent = shop.title;
+    byId('cityShopSubtitle').textContent = `Tezgâhtaki ürünler · Cüzdan: ₺${Math.floor(profile.cash).toLocaleString('tr-TR')}`;
+    const listed = canonicalShopItems || shop.items.map(itemFor).filter(Boolean);
+    const container = byId('cityShopItems'); container.replaceChildren();
+    if (!listed.length) { container.innerHTML = '<div class="city-empty">Bu dükkânda şu an ürün yok.</div>'; return; }
+    for (const item of listed) {
+      const card = document.createElement('article'); card.className = 'city-item';
+      const icon = document.createElement('div'); icon.className = 'city-item-icon'; icon.textContent = item.icon || '📦';
+      const title = document.createElement('strong'); title.className = 'city-item-title'; title.textContent = item.name;
+      const description = document.createElement('small'); description.className = 'city-item-description'; description.textContent = item.description || item.category || '';
+      const footer = document.createElement('div'); footer.className = 'city-item-footer';
+      const price = document.createElement('span'); price.className = 'city-price'; price.textContent = `₺${Number(item.price || 0).toLocaleString('tr-TR')}`;
+      const buy = document.createElement('button'); buy.className = 'city-action'; buy.type = 'button'; buy.textContent = 'SATIN AL'; buy.dataset.buyItem = item.id; buy.disabled = profile.cash < item.price;
+      footer.append(price, buy); card.append(icon, title, description, footer); container.appendChild(card);
+    }
+  }
+
+  function renderBag() {
+    const container = byId('cityBagItems'); container.replaceChildren();
+    const inventory = Array.isArray(profile.inventory) ? profile.inventory : [];
+    if (!inventory.length) { const empty = document.createElement('div'); empty.className = 'city-empty'; empty.textContent = 'Çantan boş. Bir dükkâna girip E ile alışveriş yapabilirsin.'; container.appendChild(empty); return; }
+    for (const entry of inventory) {
+      const item = itemFor(entry.id);
+      if (!item) continue;
+      const slot = document.createElement('article'); slot.className = 'city-bag-slot';
+      const icon = document.createElement('span'); icon.textContent = item.icon || '📦';
+      const title = document.createElement('strong'); title.textContent = `${item.name}${entry.quantity > 1 ? ` ×${entry.quantity}` : ''}`;
+      const kind = document.createElement('small'); kind.textContent = item.category || 'Eşya';
+      slot.append(icon, title, kind);
+      if (['weapon', 'armor', 'food'].includes(item.kind)) {
+        const actions = document.createElement('div'); actions.className = 'city-bag-actions';
+        const button = document.createElement('button'); button.className = 'city-action'; button.type = 'button'; button.dataset.itemAction = item.kind === 'food' ? 'use' : 'equip'; button.dataset.itemId = item.id;
+        const equipped = item.kind === 'weapon' ? profile.equippedWeapon === item.id : profile.equippedArmor === item.id;
+        button.textContent = item.kind === 'food' ? 'KULLAN' : (equipped ? 'KUŞANILDI' : 'KUŞAN');
+        if (equipped) button.disabled = true;
+        actions.appendChild(button); slot.appendChild(actions);
+      }
+      container.appendChild(slot);
+    }
+  }
+
+  function setProfile(snapshot = {}) {
+    profile.cash = Math.max(0, Number(snapshot.cash ?? profile.cash) || 0);
+    profile.inventory = Array.isArray(snapshot.inventory) ? snapshot.inventory.map((entry) => ({ id: String(entry.id), quantity: Math.max(1, Number(entry.quantity) || 1) })) : profile.inventory;
+    profile.capacity = Math.max(1, Number(snapshot.capacity) || DATA.bagCapacity);
+    profile.health = Math.max(0, Number(snapshot.health ?? profile.health) || 0);
+    profile.maxHealth = Math.max(1, Number(snapshot.maxHealth) || 9);
+    profile.wantedLevel = Math.max(0, Math.min(5, Number(snapshot.wantedLevel ?? profile.wantedLevel) || 0));
+    profile.equippedWeapon = snapshot.equippedWeapon ?? profile.equippedWeapon;
+    profile.equippedArmor = snapshot.equippedArmor ?? profile.equippedArmor;
+    citySimulation.setPoliceWantedLevel(profile.wantedLevel);
+    renderHud();
+    if (byId('cityBagOverlay').classList.contains('open')) renderBag();
+    if (byId('cityShopOverlay').classList.contains('open')) renderShop();
+  }
+
+  function openShop(shopkeeper) {
+    activeShopId = shopkeeper.id;
+    canonicalShopItems = null;
+    byId('cityShopStatus').textContent = 'Tezgâh hazırlanıyor…';
+    closeAllOverlays(); openOverlay('cityShopOverlay'); renderShop();
+    send('city_shop_request', { shopId: shopkeeper.id });
+  }
+  function openCitizen(citizen) {
+    activeCitizenId = citizen.id;
+    byId('cityTalkName').textContent = citizen.name;
+    const mood = citizen.disposition === 'friendly' ? 'Mahalleli · Dost canlısı' : (citizen.disposition === 'aggressive' ? 'Mahalleli · Tedirgin ve kavgacı' : 'Mahalleli · Tarafsız');
+    byId('cityTalkMood').textContent = mood;
+    byId('cityTalkLine').textContent = citizen.dialogue || 'Sana şöyle bir bakıp yoluna devam ediyor.';
+    byId('cityTalkStatus').textContent = '';
+    closeAllOverlays(); openOverlay('cityTalkOverlay');
+    send('city_npc_interact', { npcId: citizen.id });
+  }
+  function openHospital() {
+    byId('cityHospitalStatus').textContent = '';
+    closeAllOverlays(); openOverlay('cityHospitalOverlay');
+  }
+  function currentContext() {
+    const shopkeeper = citySimulation.getNearestShopkeeper(player.position, 3.9);
+    if (shopkeeper) return { kind: shopkeeper.id === 'city-hospital' ? 'hospital' : 'shop', actor: shopkeeper };
+    const citizen = citySimulation.getNearestCitizen(player.position, 3.4);
+    if (citizen) return { kind: 'citizen', actor: citizen };
+    return null;
+  }
+
+  function interact() {
+    if (isOverlayOpen()) return true;
+    if (state.screen !== 'game' || !state.playing || state.paused || !player.visible) return false;
+    context = currentContext();
+    if (context?.kind === 'shop') { openShop(context.actor); return true; }
+    if (context?.kind === 'citizen') { openCitizen(context.actor); return true; }
+    if (context?.kind === 'hospital') { openHospital(); return true; }
+    return false;
+  }
+  function toggleBag() {
+    if (state.screen !== 'game' || !state.playing || state.paused) return false;
+    if (byId('cityBagOverlay').classList.contains('open')) { closeOverlay('cityBagOverlay'); return true; }
+    closeAllOverlays(); renderBag(); openOverlay('cityBagOverlay'); return true;
+  }
+  function updateInteractionUi() {
+    context = state.screen === 'game' && state.playing && !state.paused ? currentContext() : null;
+    const nearbyDoor = context ? null : (state.screen === 'game' && state.playing && !state.paused ? enterableWorld.getNearbyDoor(player.position) : null);
+    const active = state.screen === 'game' && state.playing && !state.paused;
+    const showAction = active && !!context;
+    interactButton.hidden = !showAction;
+    interactButton.textContent = context?.kind === 'shop' ? 'ALIŞVERİŞ' : (context?.kind === 'citizen' ? 'KONUŞ' : (context?.kind === 'hospital' ? 'HASTANE' : 'ETKİLEŞ'));
+    doorControls.classList.toggle('show', active && state.mode === 'mobile' && (!!nearbyDoor || showAction));
+    return { context, nearbyDoor };
+  }
+
+  function handleEscape() {
+    if (!isOverlayOpen()) return false;
+    if (byId('cityDeathOverlay').classList.contains('open')) return true;
+    closeAllOverlays(); return true;
+  }
+  function handleKeydown(event) {
+    if (event.code === 'Escape' && handleEscape()) return true;
+    if (event.target?.tagName === 'INPUT') return false;
+    if (event.code === 'KeyB' && !event.repeat) return toggleBag();
+    if (event.code === 'KeyE' && !event.repeat) return interact();
+    return false;
+  }
+
+  function handleMessage(message) {
+    if (message.type === 'needs') {
+      setProfile({ health: message.health, maxHealth: message.maxHealth });
+      return;
+    }
+    if (message.type === 'city_state') {
+      setProfile(message.state || {});
+      return;
+    }
+    if (message.type === 'city_citizens') {
+      citySimulation.setCitizenStates(message.citizens || []);
+      return;
+    }
+    if (message.type === 'city_citizen_state') {
+      citySimulation.setCitizenState(message.citizen || {});
+      return;
+    }
+    if (message.type === 'city_citizen_attack') {
+      citySimulation.animateCitizenAttack(message.npcId);
+      return;
+    }
+    if (message.type === 'city_shop_open') {
+      activeShopId = message.shopId || activeShopId;
+      canonicalShopItems = Array.isArray(message.items) ? message.items : [];
+      byId('cityShopStatus').textContent = '';
+      renderShop();
+      return;
+    }
+    if (message.type === 'city_npc_dialogue') {
+      if (message.npcId === activeCitizenId && message.line) byId('cityTalkLine').textContent = message.line;
+      return;
+    }
+    if (message.type === 'city_action_result') {
+      const status = byId('cityShopOverlay').classList.contains('open') ? byId('cityShopStatus') : (byId('cityBagOverlay').classList.contains('open') ? byId('cityBagStatus') : byId('cityHospitalStatus'));
+      status.textContent = message.message || (message.ok ? 'Tamamlandı.' : 'İşlem yapılamadı.');
+      if (message.state) setProfile(message.state);
+      else renderHud();
+      if (byId('cityBagOverlay').classList.contains('open')) renderBag();
+      if (byId('cityShopOverlay').classList.contains('open')) renderShop();
+      return;
+    }
+    if (message.type === 'city_death') {
+      const fine = Math.max(0, Number(message.fine) || 0);
+      byId('cityDeathReason').textContent = message.reason || 'Canın tükendi.';
+      byId('cityDeathFine').textContent = `Hastane masrafı: ₺${fine.toLocaleString('tr-TR')}`;
+      closeAllOverlays(); openOverlay('cityDeathOverlay');
+      if (cityDeathTimer) clearTimeout(cityDeathTimer);
+      respawnRequested = false;
+      cityDeathTimer = setTimeout(requestRespawn, 5000);
+      return;
+    }
+    if (message.type === 'player_death' && message.id === state.myId) {
+      state.paused = true;
+      if (!byId('cityDeathOverlay').classList.contains('open')) {
+        byId('cityDeathReason').textContent = message.reason || 'Canın tükendi.';
+        byId('cityDeathFine').textContent = 'Hastane masrafı uygulanıyor…';
+        closeAllOverlays(); openOverlay('cityDeathOverlay');
+        cityDeathTimer = setTimeout(requestRespawn, 5000);
+      }
+      return;
+    }
+    if (message.type === 'respawned') {
+      if (cityDeathTimer) clearTimeout(cityDeathTimer);
+      cityDeathTimer = null; respawnRequested = false;
+      const spawn = message.spawn || DATA.hospitalSpawn;
+      player.position.set(Number(spawn.x) || 0, Number(spawn.y) || 0, Number(spawn.z) || 0);
+      player.visible = true; state.playing = true; state.paused = false; state.jumpY = 0; state.jumpVelocity = 0;
+      citySimulation.setPoliceWantedLevel(0);
+      closeOverlay('cityDeathOverlay');
+      if (message.state) setProfile({ health: message.state.health, maxHealth: message.state.maxHealth, wantedLevel: 0 });
+      showToast('Şehir Hastanesinde yeniden doğdun.');
+    }
+  }
+
+  function requestRespawn() {
+    if (respawnRequested || !state.playing) return;
+    respawnRequested = true;
+    send('respawn');
+  }
+
+  byId('cityShopItems').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-buy-item]');
+    if (!button || !activeShopId) return;
+    send('city_buy', { shopId: activeShopId, itemId: button.dataset.buyItem });
+  });
+  byId('cityBagItems').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-item-action]');
+    if (!button) return;
+    send(button.dataset.itemAction === 'use' ? 'city_use' : 'city_equip', { itemId: button.dataset.itemId });
+  });
+  byId('cityTalkAgain').addEventListener('click', () => { if (activeCitizenId) send('city_npc_interact', { npcId: activeCitizenId }); });
+  byId('cityHospitalHeal').addEventListener('click', () => send('city_hospital_heal'));
+  byId('cityRespawnNow').addEventListener('click', requestRespawn);
+  document.body.addEventListener('click', (event) => {
+    const close = event.target.closest('[data-close]');
+    if (close) { closeOverlay(({ shop: 'cityShopOverlay', bag: 'cityBagOverlay', talk: 'cityTalkOverlay', hospital: 'cityHospitalOverlay' })[close.dataset.close]); return; }
+  });
+  for (const id of ['cityShopOverlay', 'cityBagOverlay', 'cityTalkOverlay', 'cityHospitalOverlay']) {
+    byId(id).addEventListener('click', (event) => { if (event.target === byId(id)) closeOverlay(id); });
+  }
+  byId('cityBagTouch').addEventListener('click', toggleBag);
+  interactButton.addEventListener('click', () => interact());
+
+  function onScreenChange(screen, mode) {
+    hud.classList.toggle('show', screen === 'game');
+    byId('cityBagTouch').classList.toggle('show', screen === 'game' && mode === 'mobile');
+    if (screen !== 'game') closeAllOverlays();
+  }
+  function attackTarget() { return citySimulation.getNearestCitizen(player.position, 3.4); }
+
+  renderHud();
+  return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, get profile() { return profile; } };
+}

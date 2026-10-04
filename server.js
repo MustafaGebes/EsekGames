@@ -38,7 +38,7 @@ const ROOM_TTL_MS = 30 * 60 * 1000;
 const ROOM_MAX_PLAYERS = 10;
 const CITY_DOOR_IDS = new Set([
     "icecream-shop", "weapons-shop", "cafe", "market", "grocery",
-    "tool-shop", "clothing-shop", "home-one", "home-two"
+    "tool-shop", "clothing-shop", "home-one", "home-two", "city-hospital"
 ]);
 
 function normalizeRoomName(value) {
@@ -109,7 +109,7 @@ function handleBuildingDoorState(player, data) {
     room.lastActivityAt = now;
     broadcastToRoom(room.id, { type: "building_door_state", buildingId, open: data.open });
 }
-function handleAttack(player) {
+function handleAttack(player, data = {}) {
     const room = getPlayerRoom(player);
     if (!player || !player.inGame || !player.alive || !room || !room.members.has(player.id)) return;
     const now = Date.now();
@@ -117,6 +117,7 @@ function handleAttack(player) {
     player.lastAttackAt = now;
     room.lastActivityAt = now;
     broadcastToRoom(room.id, { type: "attack", id: player.id });
+    if (data && data.targetCitizenId) handleCityCitizenHit(player, data);
 }
 function handleRoomsRequest(player) {
     sendRoomList(player);
@@ -137,7 +138,7 @@ function handleCreateRoom(player, data) {
     if (player.roomId) removePlayerFromRoom(player);
     const room = {
         id: makeRoomId(), name, maxPlayers, mapId,
-        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), lastActivityAt: Date.now()
+        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(), lastActivityAt: Date.now()
     };
     rooms.set(room.id, room);
     player.roomId = room.id;
@@ -194,6 +195,10 @@ function clampPlayerToRoom(player, x, z) {
 
 const ROOT = __dirname;
 const RPG_DATA = require(path.join(ROOT, "games", "eseksimulator", "rpg-data.js"));
+const CITY_DATA = require(path.join(ROOT, "games", "eseksimulator", "city-data.js"));
+const CITY_ITEMS = new Map(CITY_DATA.items.map(item => [item.id, item]));
+const CITY_SHOPS = new Map(CITY_DATA.shops.map(shop => [shop.id, shop]));
+const CITY_CITIZENS = new Map(CITY_DATA.citizens.map(citizen => [citizen.id, citizen]));
 
 const DATA_DIR = path.join(ROOT, "data");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
@@ -603,7 +608,7 @@ function getArmorItem(progress) { const item = getCatalogItem(progress && progre
 function getBuffMultiplier(progress, key, now = Date.now()) { const buff = progress && progress.buffs && progress.buffs[key]; return buff && buff.expiresAt > now ? Math.max(0.5, Math.min(3, Number(buff.multiplier) || 1)) : 1; }
 function getMaxHealth(player) { const armor = getArmorItem(player && player.progress); return MAX_NEED + (armor ? Number(armor.healthBonus) || 0 : 0); }
 function createDefaultProgress() {
-    return { petId: null, stamina: 100, xp: 0, coins: RPG_DATA.startingCoins, bagLevel: 0, inventory: [], equippedWeapon: null, equippedArmor: null, ammo: 0, buffs: {} };
+    return { petId: null, stamina: 100, xp: 0, coins: RPG_DATA.startingCoins, bagLevel: 0, inventory: [], equippedWeapon: null, equippedArmor: null, ammo: 0, buffs: {}, cityCash: 0, cityInventory: [], cityEquippedWeapon: null, cityEquippedArmor: null, cityFriendlyGifts: [] };
 }
 function normalizeProgress(raw) {
     const p = createDefaultProgress();
@@ -635,6 +640,19 @@ function normalizeProgress(raw) {
     const maxStamina = 100 + (p.petId ? PET_TYPES[p.petId].maxStaminaBonus : 0) + (armor ? Number(armor.staminaBonus) || 0 : 0);
     const storedStamina = Number(raw.stamina);
     p.stamina = Number.isFinite(storedStamina) ? Math.max(0, Math.min(maxStamina, storedStamina)) : maxStamina;
+    p.cityCash = Math.max(CITY_DATA.cashMin, Math.min(CITY_DATA.cashMax, Math.floor(Number.isFinite(Number(raw.cityCash)) ? Number(raw.cityCash) : 0)));
+    const cityMerged = new Map();
+    for (const entry of Array.isArray(raw.cityInventory) ? raw.cityInventory : []) {
+        const item = CITY_ITEMS.get(String(entry && entry.id || ""));
+        if (!item) continue;
+        const quantity = item.stackable ? Math.max(1, Math.min(999, Math.floor(Number(entry.quantity) || 1))) : 1;
+        cityMerged.set(item.id, Math.min(item.stackable ? 999 : 1, (cityMerged.get(item.id) || 0) + quantity));
+    }
+    p.cityInventory = Array.from(cityMerged, ([id, quantity]) => ({ id, quantity })).slice(0, CITY_DATA.bagCapacity);
+    const hasCityKind = (id, kind) => !!id && p.cityInventory.some(entry => entry.id === id && entry.quantity > 0) && CITY_ITEMS.get(id)?.kind === kind;
+    p.cityEquippedWeapon = hasCityKind(raw.cityEquippedWeapon, "weapon") ? String(raw.cityEquippedWeapon) : null;
+    p.cityEquippedArmor = hasCityKind(raw.cityEquippedArmor, "armor") ? String(raw.cityEquippedArmor) : null;
+    p.cityFriendlyGifts = [...new Set((Array.isArray(raw.cityFriendlyGifts) ? raw.cityFriendlyGifts : []).map(String).filter(id => CITY_CITIZENS.has(id)))].slice(0, CITY_DATA.citizens.length);
     return p;
 }
 function loadProgressForKey(key) { return normalizeProgress(playerPetsStore.profiles[key]); }
@@ -643,6 +661,224 @@ function savePlayerProgress(player) {
     playerPetsStore.profiles[player.progressKey] = normalizeProgress(player.progress);
     persistPlayerPetsStore();
 }
+
+function createCityCitizenStates() {
+    return new Map(CITY_DATA.citizens.map(citizen => [citizen.id, {
+        id: citizen.id, health: CITY_DATA.npcHealth, alive: true, hostileUntil: 0,
+        respawnAt: 0, nextAttackAt: 0,
+        nextProvocationAt: Date.now() + 18000 + Math.floor(Math.random() * 22000),
+        reportedBy: new Set()
+    }]));
+}
+function getCitySnapshot(player) {
+    const progress = player && player.progress || createDefaultProgress();
+    return {
+        cash: progress.cityCash, inventory: progress.cityInventory.map(entry => ({ ...entry })),
+        capacity: CITY_DATA.bagCapacity, health: player.health, maxHealth: getMaxHealth(player),
+        wantedLevel: player.cityWantedLevel || 0,
+        equippedWeapon: progress.cityEquippedWeapon, equippedArmor: progress.cityEquippedArmor
+    };
+}
+function sendCityState(player) {
+    if (player && player.inGame && player.mapId === "city") sendTo(player, { type: "city_state", state: getCitySnapshot(player) });
+}
+function getCityBuildingPosition(id) {
+    const building = CITY_DATA.buildings.find(entry => entry.id === id);
+    const slot = building ? CITY_DATA.getBuildingSlot(building.slot) : null;
+    if (!slot) return null;
+    const clerkOffset = -slot.depth * 0.34;
+    return {
+        x: slot.x + Math.sin(slot.face) * clerkOffset,
+        z: slot.z + Math.cos(slot.face) * clerkOffset
+    };
+}
+function isCityGameplayPlayer(player) {
+    const room = getPlayerRoom(player);
+    return !!(player && player.inGame && player.alive && player.mapId === "city" && room && room.mapId === "city" && room.members.has(player.id));
+}
+function nearCityBuilding(player, id, radius = 5.2) {
+    const position = getCityBuildingPosition(id);
+    return !!position && Math.hypot(player.x - position.x, player.z - position.z) <= radius;
+}
+function sendCityActionResult(player, ok, message) {
+    sendTo(player, { type: "city_action_result", ok: !!ok, message: String(message || "").slice(0, 180), state: getCitySnapshot(player) });
+}
+function sendCityCitizenState(room, npcId) {
+    const citizen = room && room.cityCitizens && room.cityCitizens.get(npcId);
+    if (!citizen) return;
+    broadcastToRoom(room.id, { type: "city_citizen_state", citizen: { id: npcId, health: citizen.health, alive: citizen.alive, hostileUntil: citizen.hostileUntil } });
+}
+function sendCityCitizenStates(player) {
+    const room = getPlayerRoom(player);
+    if (!room || room.mapId !== "city" || !room.cityCitizens) return;
+    sendTo(player, { type: "city_citizens", citizens: [...room.cityCitizens.values()].map(citizen => ({ id: citizen.id, health: citizen.health, alive: citizen.alive, hostileUntil: citizen.hostileUntil })) });
+}
+function addCityWanted(player, amount = 1) {
+    const now = Date.now();
+    player.cityWantedLevel = Math.max(0, Math.min(5, (player.cityWantedLevel || 0) + amount));
+    player.cityLastCrimeAt = now;
+    player.cityNextWantedDecayAt = 0;
+    if (!player.cityPoliceArrivalAt || player.cityWantedLevel === amount) player.cityPoliceArrivalAt = now + 5500;
+    sendCityState(player);
+    return player.cityWantedLevel;
+}
+function handleCityShopRequest(player, data) {
+    if (!isCityGameplayPlayer(player)) return;
+    const shopId = String(data && data.shopId || "");
+    const shop = CITY_SHOPS.get(shopId);
+    if (!shop || !nearCityBuilding(player, shopId)) {
+        sendCityActionResult(player, false, "Alışveriş için dükkâna yaklaşmalısın."); return;
+    }
+    sendTo(player, { type: "city_shop_open", shopId, items: shop.items.map(id => CITY_ITEMS.get(id)).filter(Boolean), state: getCitySnapshot(player) });
+}
+function handleCityBuy(player, data) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    const shopId = String(data && data.shopId || ""), itemId = String(data && data.itemId || "");
+    const shop = CITY_SHOPS.get(shopId), item = CITY_ITEMS.get(itemId), progress = player.progress;
+    if (!shop || !nearCityBuilding(player, shopId)) { sendCityActionResult(player, false, "Alışveriş için dükkânın yanında olmalısın."); return; }
+    if (!item || !shop.items.includes(itemId)) { sendCityActionResult(player, false, "Bu ürün bu dükkânda satılmıyor."); return; }
+    const existing = progress.cityInventory.find(entry => entry.id === item.id);
+    if (existing && !item.stackable) { sendCityActionResult(player, false, "Bu eşyaya zaten sahipsin."); return; }
+    if (!existing && progress.cityInventory.length >= CITY_DATA.bagCapacity) { sendCityActionResult(player, false, "Çantan dolu. Önce bir eşyayı kullan veya çıkar."); return; }
+    if (progress.cityCash < item.price) { sendCityActionResult(player, false, `Yeterli paran yok. Fiyat ₺${item.price}.`); return; }
+    progress.cityCash -= item.price;
+    if (existing) existing.quantity = Math.min(999, existing.quantity + 1);
+    else progress.cityInventory.push({ id: item.id, quantity: 1 });
+    if (item.kind === "weapon" && !progress.cityEquippedWeapon) progress.cityEquippedWeapon = item.id;
+    if (item.kind === "armor" && !progress.cityEquippedArmor) progress.cityEquippedArmor = item.id;
+    savePlayerProgress(player);
+    sendCityActionResult(player, true, `${item.name} çantana eklendi.`);
+}
+function handleCityEquip(player, data) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    const itemId = String(data && data.itemId || ""), item = CITY_ITEMS.get(itemId), progress = player.progress;
+    if (!item || !progress.cityInventory.some(entry => entry.id === itemId)) { sendCityActionResult(player, false, "Bu eşya çantanda yok."); return; }
+    if (item.kind === "weapon") progress.cityEquippedWeapon = itemId;
+    else if (item.kind === "armor") progress.cityEquippedArmor = itemId;
+    else { sendCityActionResult(player, false, "Bu eşya kuşanılamaz."); return; }
+    savePlayerProgress(player);
+    sendCityActionResult(player, true, `${item.name} kuşanıldı.`);
+}
+function handleCityUse(player, data) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    const itemId = String(data && data.itemId || ""), item = CITY_ITEMS.get(itemId), progress = player.progress;
+    const entry = progress.cityInventory.find(value => value.id === itemId);
+    if (!item || item.kind !== "food" || !entry) { sendCityActionResult(player, false, "Kullanılabilir bir yiyecek seç."); return; }
+    if (player.health >= getMaxHealth(player) - 0.01) { sendCityActionResult(player, false, "Canın zaten dolu."); return; }
+    player.health = Math.min(getMaxHealth(player), player.health + Math.max(1, (Number(item.heal) || 0.25) * getMaxHealth(player)));
+    entry.quantity -= 1;
+    if (entry.quantity <= 0) progress.cityInventory = progress.cityInventory.filter(value => value.id !== itemId);
+    savePlayerProgress(player);
+    sendNeeds(player);
+    sendCityActionResult(player, true, `${item.name} kullandın; canın yenilendi.`);
+}
+function handleCityHospitalHeal(player) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    if (!nearCityBuilding(player, "city-hospital", 5.5)) { sendCityActionResult(player, false, "Tedavi için Şehir Hastanesinin içine girmelisin."); return; }
+    const cost = 35;
+    if (player.progress.cityCash < cost) { sendCityActionResult(player, false, `Tedavi ₺${cost}. Şu an paran yetmiyor.`); return; }
+    player.progress.cityCash -= cost;
+    player.health = getMaxHealth(player);
+    player.armor = 0;
+    savePlayerProgress(player);
+    sendNeeds(player);
+    sendCityActionResult(player, true, "Tedavi tamamlandı. Canın tamamen doldu.");
+}
+function handleCityNpcInteract(player, data) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    const npcId = String(data && data.npcId || ""), npc = CITY_CITIZENS.get(npcId);
+    const room = getPlayerRoom(player);
+    if (!npc || !room || Math.hypot(player.x - npc.x, player.z - npc.z) > 4.5) {
+        sendTo(player, { type: "city_npc_dialogue", npcId, line: "Biraz daha yaklaş ki seni duyabilsin." }); return;
+    }
+    let line = npc.dialogue;
+    if (npc.disposition === "friendly" && !player.progress.cityFriendlyGifts.includes(npcId)) {
+        player.progress.cityFriendlyGifts.push(npcId);
+        player.progress.cityCash = Math.min(CITY_DATA.cashMax, player.progress.cityCash + 5);
+        savePlayerProgress(player);
+        line += " Sana ₺5 mahalle harçlığı verdi.";
+        sendCityState(player);
+    } else if (npc.disposition === "aggressive") {
+        line += " Bu kişi gergin; mesafeni koru.";
+    }
+    sendTo(player, { type: "city_npc_dialogue", npcId, line });
+}
+function handleCityCitizenHit(player, data) {
+    if (!isCityGameplayPlayer(player)) return;
+    const npcId = String(data && data.targetCitizenId || ""), npc = CITY_CITIZENS.get(npcId), room = getPlayerRoom(player);
+    const state = room && room.cityCitizens && room.cityCitizens.get(npcId);
+    if (!npc || !state || !state.alive || Math.hypot(player.x - npc.x, player.z - npc.z) > 3.7) return;
+    const now = Date.now();
+    if (now - (player.lastCityAttackAt || 0) < 400) return;
+    player.lastCityAttackAt = now;
+    state.hostileUntil = now + 15000;
+    const weapon = CITY_ITEMS.get(player.progress && player.progress.cityEquippedWeapon);
+    const damage = Math.max(1, Math.min(12, Number(weapon && weapon.damage) || 1));
+    state.health = Math.max(0, state.health - damage);
+    if (!state.reportedBy.has(player.id)) {
+        state.reportedBy.add(player.id);
+        addCityWanted(player, 1);
+    }
+    broadcastToRoom(room.id, { type: "city_citizen_attack", npcId, attackerId: player.id });
+    if (state.health <= 0) {
+        state.alive = false;
+        state.respawnAt = now + CITY_DATA.npcRespawnMs;
+        state.hostileUntil = 0;
+        const cashDrop = Math.max(0, Math.floor(Number(npc.cashDrop) || 0));
+        player.progress.cityCash = Math.min(CITY_DATA.cashMax, player.progress.cityCash + cashDrop);
+        addCityWanted(player, 1);
+        savePlayerProgress(player);
+        sendCityActionResult(player, true, `${npc.name} yenildi; ₺${cashDrop} aldın. Aranma seviyesi yükseldi.`);
+    } else {
+        sendCityActionResult(player, true, `${npc.name} darbe aldı (${state.health}/${CITY_DATA.npcHealth} can).`);
+    }
+    sendCityCitizenState(room, npcId);
+    room.lastActivityAt = now;
+}
+function tickCityGameplay() {
+    const now = Date.now();
+    for (const room of rooms.values()) {
+        if (room.mapId !== "city" || !room.cityCitizens) continue;
+        const roomPlayers = [...room.members].map(id => players.get(id)).filter(player => player && player.inGame && player.alive && player.mapId === "city");
+        for (const [npcId, state] of room.cityCitizens) {
+            const npc = CITY_CITIZENS.get(npcId);
+            if (!npc) continue;
+            if (!state.alive && state.respawnAt <= now) {
+                state.health = CITY_DATA.npcHealth; state.alive = true; state.respawnAt = 0; state.hostileUntil = 0; state.nextAttackAt = 0; state.nextProvocationAt = now + 25000 + Math.floor(Math.random() * 25000); state.reportedBy.clear();
+                sendCityCitizenState(room, npcId);
+            }
+            if (!state.alive) continue;
+            if (npc.disposition === "neutral" && now >= state.nextProvocationAt) {
+                if (Math.random() < 0.35) state.hostileUntil = now + 9000;
+                state.nextProvocationAt = now + 45000 + Math.floor(Math.random() * 45000);
+            }
+            const isAggressive = npc.disposition === "aggressive" || state.hostileUntil > now;
+            if (!isAggressive || now < state.nextAttackAt) continue;
+            const target = roomPlayers.find(player => Math.hypot(player.x - npc.x, player.z - npc.z) <= 4.8);
+            if (!target) continue;
+            state.nextAttackAt = now + 1850;
+            broadcastToRoom(room.id, { type: "city_citizen_attack", npcId, targetId: target.id });
+            damagePlayer(target, 1.25, null, npc.name, `${npc.name} sana saldırdı.`);
+        }
+    }
+    for (const player of players.values()) {
+        if (!player.inGame || !player.alive || player.mapId !== "city") continue;
+        if (player.cityWantedLevel > 0 && now - (player.cityLastCrimeAt || now) >= 25000) {
+            if (!player.cityNextWantedDecayAt) player.cityNextWantedDecayAt = now + 12000;
+            else if (now >= player.cityNextWantedDecayAt) {
+                player.cityWantedLevel = Math.max(0, player.cityWantedLevel - 1);
+                player.cityNextWantedDecayAt = player.cityWantedLevel ? now + 12000 : 0;
+                if (!player.cityWantedLevel) player.cityPoliceArrivalAt = 0;
+                sendCityState(player);
+            }
+        }
+        if (player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
+            player.cityNextPoliceAttackAt = now + Math.max(1300, 2250 - player.cityWantedLevel * 150);
+            damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Şehir polisi seni etkisiz hale getirmeye çalışıyor.");
+        }
+    }
+}
+setInterval(tickCityGameplay, 700);
 function getMaxStamina(player) {
     const pet = player && player.progress && PET_TYPES[player.progress.petId], armor = getArmorItem(player && player.progress);
     return 100 + (pet ? pet.maxStaminaBonus : 0) + (armor ? Number(armor.staminaBonus) || 0 : 0);
@@ -868,6 +1104,13 @@ function createPlayer(ws) {
         nextArmorPickupAt: 0,
         nextBearBiteAt: 0,
         lastDamageAt: Date.now(),
+        cityWantedLevel: 0,
+        cityLastCrimeAt: 0,
+        cityNextWantedDecayAt: 0,
+        cityPoliceArrivalAt: 0,
+        cityNextPoliceAttackAt: 0,
+        cityDeathProcessed: false,
+        lastCityAttackAt: 0,
 
         roomId: null,
         mapId: "farm",
@@ -1227,6 +1470,8 @@ function joinGame(player, data) {
     });
 
     sendRpgState(player);
+    sendCityState(player);
+    sendCityCitizenStates(player);
     sendHostileDonkeyStates(player);
 
     sendTo(player, { type: "chat_history", messages: getRoomChatHistory(player.roomId).slice(-CHAT_HISTORY_LIMIT) });
@@ -1249,7 +1494,9 @@ function leaveGame(player) {
 // ============================================================
 
 function applyPlayerDamage(target, amount) {
-    const damage = Math.max(0, Number(amount) || 0) * getPetDamageTakenMultiplier(target);
+    const cityArmor = target && target.mapId === "city" && target.progress ? CITY_ITEMS.get(target.progress.cityEquippedArmor) : null;
+    const cityArmorMultiplier = cityArmor && cityArmor.kind === "armor" ? 1 - Math.max(0, Math.min(0.75, Number(cityArmor.damageReduction) || 0)) : 1;
+    const damage = Math.max(0, Number(amount) || 0) * getPetDamageTakenMultiplier(target) * cityArmorMultiplier;
     if (damage <= 0) return;
     target.lastDamageAt = Date.now();
     const armor = clampNeed(target.armor);
@@ -1277,9 +1524,23 @@ function damagePlayer(target, amount, attackerId, killerName, reason) {
     });
 
     sendNeeds(target);
+    if (target.mapId === "city") sendCityState(target);
 
     if (target.health <= 0) {
         target.alive = false;
+        if (target.mapId === "city" && !target.cityDeathProcessed) {
+            target.cityDeathProcessed = true;
+            const cash = Math.max(0, Math.floor(Number(target.progress && target.progress.cityCash) || 0));
+            const fine = cash > 0 ? Math.min(cash, Math.max(1, Math.ceil(cash * 0.15))) : 0;
+            if (target.progress) target.progress.cityCash = Math.max(0, cash - fine);
+            target.cityWantedLevel = 0;
+            target.cityPoliceArrivalAt = 0;
+            target.cityNextPoliceAttackAt = 0;
+            target.cityNextWantedDecayAt = 0;
+            savePlayerProgress(target);
+            sendCityState(target);
+            sendTo(target, { type: "city_death", fine, cash: target.progress ? target.progress.cityCash : 0, reason: reason || (killerName ? `${killerName} seni yendi.` : "Canın tükendi.") });
+        }
 
         broadcastToRoom(target.roomId, {
             type: "player_death",
@@ -1845,9 +2106,15 @@ function handleWeaponAttack(player, data) {
 }
 
 function handleRespawn(player) {
-    if (!player.inGame) return;
+    if (!player || !player.inGame || player.alive) return;
 
     player.alive = true;
+    player.cityDeathProcessed = false;
+    player.cityWantedLevel = 0;
+    player.cityLastCrimeAt = 0;
+    player.cityNextWantedDecayAt = 0;
+    player.cityPoliceArrivalAt = 0;
+    player.cityNextPoliceAttackAt = 0;
     player.health = getMaxHealth(player);
     player.hunger = MAX_NEED;
     player.thirst = MAX_NEED;
@@ -1857,13 +2124,14 @@ function handleRespawn(player) {
         player.progress.stamina = getMaxStamina(player);
     }
 
-    player.x = SPAWN.x;
-    player.y = SPAWN.y;
-    player.z = SPAWN.z;
+    const respawnSpawn = player.mapId === "city" ? CITY_DATA.hospitalSpawn : SPAWN;
+    player.x = respawnSpawn.x;
+    player.y = respawnSpawn.y;
+    player.z = respawnSpawn.z;
 
     sendTo(player, {
         type: "respawned",
-        spawn: { x: SPAWN.x, y: SPAWN.y, z: SPAWN.z },
+        spawn: { x: respawnSpawn.x, y: respawnSpawn.y, z: respawnSpawn.z },
         state: {
             health: player.health, maxHealth: getMaxHealth(player), armor: player.armor, hunger: player.hunger, thirst: player.thirst,
             stamina: player.progress ? player.progress.stamina : 100,
@@ -1871,6 +2139,7 @@ function handleRespawn(player) {
         }
     });
 
+    sendCityState(player);
     broadcastPlayers();
 }
 
@@ -1934,7 +2203,26 @@ wss.on("connection", (ws, req) => {
                 break;
 
             case "attack":
-                handleAttack(player);
+                handleAttack(player, data);
+                break;
+
+            case "city_shop_request":
+                handleCityShopRequest(player, data);
+                break;
+            case "city_buy":
+                handleCityBuy(player, data);
+                break;
+            case "city_equip":
+                handleCityEquip(player, data);
+                break;
+            case "city_use":
+                handleCityUse(player, data);
+                break;
+            case "city_npc_interact":
+                handleCityNpcInteract(player, data);
+                break;
+            case "city_hospital_heal":
+                handleCityHospitalHeal(player);
                 break;
 
             case "chat":

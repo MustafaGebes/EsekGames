@@ -8,6 +8,7 @@ export const ENTERABLE_BUILDING_CATALOG = Object.freeze([
   { slot: '3:4:2', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', accent: 0xa386b6, awning: 0x78618b },
   { slot: '2:2:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', accent: 0xa87b5d, awning: 0x766354 },
   { slot: '4:4:0', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', accent: 0x78909a, awning: 0x586e76 },
+  { slot: '2:2:0', id: 'city-hospital', title: 'Şehir Hastanesi', sign: 'HASTANE', kind: 'hospital', accent: 0xc75048, awning: 0xe2d9c8 },
 ]);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -127,6 +128,23 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       return;
     }
 
+    if (kind === 'hospital') {
+      const counterZ = -depth * 0.16;
+      box(root, Math.min(width - 2.0, 4.8), 0.94, 0.82, materials.counter, 0, 0.52, counterZ);
+      box(root, Math.min(width - 1.9, 4.9), 0.12, 0.94, materials.trim, 0, 1.05, counterZ);
+      addLocalCollider(building, 0, counterZ, Math.min(width - 1.8, 5.0), 1.0);
+      for (const x of [-2.15, 2.15]) {
+        box(root, 1.52, 0.24, 2.15, materials.wood, x, 0.18, -2.25);
+        box(root, 1.44, 0.16, 1.92, materials.cream, x, 0.38, -2.25);
+        box(root, 1.46, 0.22, 0.46, materials.fabric, x, 0.54, -3.04);
+        addLocalCollider(building, x, -2.25, 1.62, 2.3);
+      }
+      box(root, 0.92, 1.55, 0.68, materials.wood, width * 0.34, 0.78, 1.42);
+      box(root, 1.0, 0.12, 0.74, materials.trim, width * 0.34, 1.58, 1.42);
+      addLocalCollider(building, width * 0.34, 1.42, 1.05, 0.8);
+      return;
+    }
+
     const displayWidth = kind === 'cafe' ? 1.0 : 0.62;
     box(root, counterWidth, 0.94, displayWidth, materials.counter, 0, 0.52, counterZ);
     box(root, counterWidth + 0.08, 0.12, displayWidth + 0.12, materials.trim, 0, 1.05, counterZ);
@@ -229,7 +247,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
 
     const plaster = new THREE.MeshStandardMaterial({ color: building.color, roughness: 0.9 });
     const innerWall = new THREE.MeshStandardMaterial({ color: 0xd8d0bf, roughness: 0.96 });
-    const floor = new THREE.MeshStandardMaterial({ color: building.kind === 'home' ? 0x8e775e : 0x8f8b7b, roughness: 0.96 });
+    const floor = new THREE.MeshStandardMaterial({ color: building.kind === 'home' ? 0x8e775e : (building.kind === 'hospital' ? 0xd5d1c5 : 0x8f8b7b), roughness: 0.96 });
     const trim = new THREE.MeshStandardMaterial({ color: 0x544a3d, roughness: 0.8 });
     const awning = new THREE.MeshStandardMaterial({ color: building.awning, roughness: 0.82 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x6b9da2, emissive: 0x12292a, metalness: 0.12, roughness: 0.24, transparent: true, opacity: 0.54, depthWrite: false });
@@ -294,6 +312,11 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 4.5), 0.58), signMaterial(building.sign, building.accent));
     sign.position.set(0, 2.92, front + 0.22);
     root.add(sign);
+    if (building.kind === 'hospital') {
+      const crossRed = new THREE.MeshStandardMaterial({ color: 0xc75048, emissive: 0x37110e, roughness: 0.55 });
+      box(root, 0.24, 0.78, 0.12, crossRed, 0, 3.55, front + 0.18);
+      box(root, 0.78, 0.24, 0.12, crossRed, 0, 3.55, front + 0.18);
+    }
 
     for (const x of [-building.width / 2 + 0.16, building.width / 2 - 0.16]) {
       box(root, 0.12, wallHeight, 0.32, trim, x, wallHeight / 2, front - 0.02);
@@ -329,6 +352,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     addFurniture(root, building, materials, addLocalCollider);
     building.localPoint = (x, z) => localPoint(building, x, z);
     building.worldPoint = (x, z) => worldPoint(building, x, z);
+    building.shopkeeperPoint = () => worldPoint(building, 0, -building.depth * 0.34);
     building.contains = (position) => {
       const local = localPoint(building, position.x, position.z);
       return Math.abs(local.x) < building.width / 2 - wallThickness - 0.42
