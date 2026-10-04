@@ -359,6 +359,20 @@ export function createCitySimulation(THREE, scene, options = {}) {
     }
     return nearest;
   }
+  function getHumansInRange(position, maxDistance = 5.6) {
+    if (!position) return [];
+    const humans = [...citizens, ...shopkeepers, ...pedestrians];
+    return humans.filter(human => {
+      if (human.alive === false || !human.root?.visible) return false;
+      const point = humanPosition(human);
+      return Math.hypot(point.x - position.x, point.z - position.z) <= maxDistance + (human.hitbox?.radius || .62);
+    });
+  }
+  function hitHumansInRange(position, maxDistance = 5.6) {
+    const targets = getHumansInRange(position, maxDistance);
+    targets.forEach(hitHuman);
+    return targets;
+  }
   function getNearestCitizen(position, maxDistance = 4.6, forward = null) {
     if (!position) return null;
     let nearest = null; let bestDistance = maxDistance;
@@ -914,7 +928,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
     policeOfficers,
     getNearestCitizen,
     getNearestHuman,
+    getHumansInRange,
     hitHuman,
+    hitHumansInRange,
     getNearestShopkeeper,
     setCitizenState,
     setCitizenStates,
