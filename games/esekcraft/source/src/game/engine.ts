@@ -84,7 +84,7 @@ export class MinecraftEngine {
   public fps = 0;
   private fpsFrames = 0;
   private fpsClock = 0;
-  private visibleMeshChunk = { x: -999, z: -999 };
+  private visibleMeshCenter = { x: -999, z: -999 };
 
   // Player State
   public pos = { x: 40.5, y: 30, z: 40.5 };
@@ -546,14 +546,14 @@ export class MinecraftEngine {
     const next = Math.max(16, Math.min(Math.max(SX, SZ), Math.round(distance)));
     if (next === this.renderDistance) return;
     this.renderDistance = next;
-    this.visibleMeshChunk = { x: -999, z: -999 };
+    this.visibleMeshCenter = { x: -999, z: -999 };
     this.rebuildVisibleWorld();
     this.onHUDUpdate?.();
   }
   private rebuildVisibleWorld() {
     const cx = this.pos.x; const cz = this.pos.z;
     this.world.buildMesh(this.scene, this.worldMaterial, this.renderDistance, cx, cz);
-    this.visibleMeshChunk = { x: Math.floor(cx / 16), z: Math.floor(cz / 16) };
+    this.visibleMeshCenter = { x: cx, z: cz };
   }
 
   public start(onReady?: () => void) {
@@ -680,7 +680,7 @@ export class MinecraftEngine {
       this.heldItemMesh = torch as unknown as THREE.Mesh;
       this.handGroup.add(this.heldItemMesh);
     // If it's a block: render miniature 3D block held by the hoof, tilted upright facing player
-    } else if (BLOCK_DEFS[id] && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
+    } else if (BLOCK_DEFS[id] && Number(id) < 100 && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
       const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
       this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
       this.setupMeshUVs(geo, id);
@@ -852,6 +852,11 @@ export class MinecraftEngine {
         } else if ([ItemType.BREAD, ItemType.RAW_BEEF, ItemType.COOKED_STEAK, ItemType.RAW_PORKCHOP, ItemType.COOKED_PORKCHOP, ItemType.RAW_MUTTON, ItemType.COOKED_MUTTON, ItemType.RAW_CHICKEN, ItemType.COOKED_CHICKEN].includes(id as ItemType)) {
           const food = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), toolMat);
           food.scale.set(1.2, 0.7, 0.75); food.position.set(0, 0.14, 0); toolGroup.add(food);
+        } else if (id === ItemType.LEATHER) {
+          const hide = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.25), new THREE.MeshLambertMaterial({ color: 0x8b5a2b, side: THREE.DoubleSide }));
+          hide.position.set(0, 0.16, 0); hide.rotation.z = -0.18; toolGroup.add(hide);
+          const edge = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.025, 0.035), new THREE.MeshLambertMaterial({ color: 0x5b3519 }));
+          edge.position.set(0, 0.03, 0); toolGroup.add(edge);
         } else if (id === ItemType.FEATHER) {
           const feather = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1f1e8, side: THREE.DoubleSide }));
           feather.position.set(0, 0.17, 0); feather.rotation.z = -0.25; toolGroup.add(feather);
@@ -1571,7 +1576,7 @@ export class MinecraftEngine {
 
     const sunX = Math.sin(angle) * sunDist;
     const sunY = Math.cos(angle) * sunDist;
-    const sunZ = 20;
+    const sunZ = -Math.cos(angle) * 80;
 
     this.sunMesh.position.set(this.pos.x + sunX, this.pos.y + sunY, this.pos.z + sunZ);
     this.moonMesh.position.set(this.pos.x - sunX, this.pos.y - sunY, this.pos.z - sunZ);
@@ -2186,7 +2191,7 @@ export class MinecraftEngine {
     if (!held) return;
 
     // Must be a block item
-    if (!BLOCK_DEFS[held.id]) return;
+    if (!BLOCK_DEFS[held.id] || Number(held.id) >= 100) return;
 
     const px = hit.x + hit.nx;
     const py = hit.y + hit.ny;
@@ -2635,8 +2640,9 @@ export class MinecraftEngine {
 
     this.updateWorldBorder(dt);
     this.updateCameraAndModels(dt);
-    const currentChunk = { x: Math.floor(this.pos.x / 16), z: Math.floor(this.pos.z / 16) };
-    if (currentChunk.x !== this.visibleMeshChunk.x || currentChunk.z !== this.visibleMeshChunk.z) this.rebuildVisibleWorld();
+    // Recenter the visible chunk ring before the player reaches its edge.
+    // This makes nearby chunks appear while walking instead of waiting for a hard chunk boundary.
+    if (Math.hypot(this.pos.x - this.visibleMeshCenter.x, this.pos.z - this.visibleMeshCenter.z) > 8) this.rebuildVisibleWorld();
     this.fpsFrames++;
     this.fpsClock += dt;
     if (this.fpsClock >= 0.5) { this.fps = Math.round(this.fpsFrames / this.fpsClock); this.fpsFrames = 0; this.fpsClock = 0; this.onHUDUpdate?.(); }
