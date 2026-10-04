@@ -80,7 +80,7 @@ export class MinecraftEngine {
   public isThirdPerson = false;
   public fov = 75;
   public mouseSensitivity = 1.0;
-  public renderDistance = 48;
+  public renderDistance = 40;
   public fps = 0;
   private fpsFrames = 0;
   private fpsClock = 0;
@@ -557,13 +557,19 @@ export class MinecraftEngine {
   }
 
   public start() {
-    this.world.generate();
-    this.recoverFromBlockCollision();
-    this.rebuildVisibleWorld();
-    this.rebuildTorchVisuals();
-    this.spawnMobs(30);
-    this.lastTime = performance.now();
-    this.animate(this.lastTime);
+    // Let the React loading screen paint before the synchronous voxel generator/mesh work.
+    // A double RAF prevents the first world build from blocking the initial frame.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      this.world.generate();
+      this.recoverFromBlockCollision();
+      requestAnimationFrame(() => {
+        this.rebuildVisibleWorld();
+        this.rebuildTorchVisuals();
+        this.spawnMobs(30);
+        this.lastTime = performance.now();
+        this.animate(this.lastTime);
+      });
+    }));
   }
 
   public destroy() {
@@ -1996,10 +2002,14 @@ export class MinecraftEngine {
         const currentItem = this.inventory[this.selectedSlot];
         const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
 
+        const handBreakable = [BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES, BlockType.WHITE_WOOL_BLOCK].includes(hit.id);
         if (this.gameMode === 'creative') {
           toolSpeed = 100; // instant break
         } else if (itemDef?.tool && itemDef.tool.type === bDef.requiredTool) {
           toolSpeed = itemDef.tool.speed;
+        } else if (handBreakable) {
+          // Dirt, grass, sand, leaves and wool are intentionally breakable by hand.
+          toolSpeed = 1.0;
         } else if (bDef.requiredTool !== 'none') {
           toolSpeed = 0.18;
         }
@@ -2136,7 +2146,8 @@ export class MinecraftEngine {
 
       // Tool harvest requirement check
       let canHarvest = true;
-      if (bDef.requiredTool !== 'none') {
+      const handBreakable = [BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES, BlockType.WHITE_WOOL_BLOCK].includes(hit.id);
+      if (bDef.requiredTool !== 'none' && !handBreakable) {
         canHarvest = itemDef?.tool?.type === bDef.requiredTool && (itemDef.tool.harvestLevel ?? 0) >= bDef.minHarvestLevel;
       }
 
