@@ -2,7 +2,7 @@
  * Minecraft Web - Voxel World, Generation, Ores & Meshing
  */
 import * as THREE from 'three';
-import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBedState, getBlockHeight, getBlockOffsetY, getDoorState, isBedBlock, isDoorBlock, isSlabBlock } from './types';
+import { SX, SY, SZ, BlockType, FurnaceData, ChestData, getBedState, getBlockHeight, getBlockOffsetY, getDoorLocalBounds, getDoorState, isBedBlock, isDoorBlock, isSlabBlock } from './types';
 import { BLOCK_DEFS, TILE, TILE_SIZE, TILES_PER_ROW, ATLAS_SIZE, atlasTexture } from './textures';
 
 export const IDX = (x: number, y: number, z: number) => (y * SZ + z) * SX + x;
@@ -61,12 +61,16 @@ function intersectPartialBlockRay(
   y: number,
   z: number,
   offsetY: number,
-  height: number
+  height: number,
+  minX = 0,
+  maxX = 1,
+  minZ = 0,
+  maxZ = 1,
 ): { distance: number; nx: number; ny: number; nz: number } | null {
   const bounds = [
-    { origin: origin.x, dir: dir.x, min: x, max: x + 1, axis: 0 },
+    { origin: origin.x, dir: dir.x, min: x + minX, max: x + maxX, axis: 0 },
     { origin: origin.y, dir: dir.y, min: y + offsetY, max: y + offsetY + height, axis: 1 },
-    { origin: origin.z, dir: dir.z, min: z, max: z + 1, axis: 2 },
+    { origin: origin.z, dir: dir.z, min: z + minZ, max: z + maxZ, axis: 2 },
   ];
   let enter = -Infinity;
   let exit = Infinity;
@@ -317,8 +321,10 @@ export class VoxelWorld {
       x: number, y: number, z: number,
       minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number,
       faceTiles: readonly number[],
+      skipFaces: readonly number[] = [],
     ) => {
       for (let f = 0; f < 6; f++) {
+        if (skipFaces.includes(f)) continue;
         const tileIdx = faceTiles[f];
         const tx = tileIdx % TILES_PER_ROW;
         const ty = Math.floor(tileIdx / TILES_PER_ROW);
@@ -356,45 +362,23 @@ export class VoxelWorld {
 
           const doorState = getDoorState(block);
           if (doorState) {
-            // Two one-block-high textured panels make the saved lower/upper door blocks
-            // render as one thin, hinged, openable two-block door.
-            const angle = (doorState.facing % 2 === 0 ? 0 : Math.PI / 2) + (doorState.open
-              ? ((doorState.facing === 0 || doorState.facing === 1) ? Math.PI / 2 : -Math.PI / 2)
-              : 0);
-            const cos = Math.cos(angle);
-            const sin = Math.sin(angle);
-            const hingeX = 0.05;
-            const hingeZ = 0.5;
-            const doorWidth = 0.9;
-            const doorThickness = 0.12;
-
-            for (let f = 0; f < 6; f++) {
-              if ((!doorState.upper && f === 3) || (doorState.upper && f === 2)) continue;
-              const tileIdx = f === 3 ? def.top : f === 2 ? def.bottom : (f === 4 || f === 5) ? (def.front ?? def.side) : def.side;
-              const tx = tileIdx % TILES_PER_ROW;
-              const ty = Math.floor(tileIdx / TILES_PER_ROW);
-              const u0 = tx * tileUvSize;
-              const u1 = u0 + tileUvSize;
-              const v0 = 1 - (ty + 1) * tileUvSize;
-              const v1 = 1 - ty * tileUvSize;
-              const d = FACES[f].dir;
-              const corners = FACES[f].corners;
-              const nx = cos * d[0] + sin * d[2];
-              const nz = -sin * d[0] + cos * d[2];
-
-              for (let i = 0; i < 4; i++) {
-                const c = corners[i];
-                const localX = c[0] * doorWidth;
-                const localZ = (c[2] - 0.5) * doorThickness;
-                pos.push(x + hingeX + cos * localX + sin * localZ, y + c[1], z + hingeZ - sin * localX + cos * localZ);
-                norm.push(nx, d[1], nz);
-                uv.push(u0 + c[3] * (u1 - u0), v0 + c[4] * (v1 - v0));
-                const shade = FACE_SHADE[f];
-                col.push(shade, shade, shade);
-              }
-              idx.push(vc, vc + 1, vc + 2, vc + 2, vc + 1, vc + 3);
-              vc += 4;
+            const bounds = getDoorLocalBounds(block)!;
+            const widthAlongX = (doorState.facing % 2 === 0) !== doorState.open;
+            const frontTile = def.front ?? def.side;
+            const doorTiles = [def.side, def.side, def.bottom, def.top, def.side, def.side];
+            if (widthAlongX) {
+              doorTiles[4] = frontTile;
+              doorTiles[5] = frontTile;
+            } else {
+              doorTiles[0] = frontTile;
+              doorTiles[1] = frontTile;
             }
+            emitTexturedBox(
+              x, y, z,
+              bounds.minX, bounds.maxX, 0, 1, bounds.minZ, bounds.maxZ,
+              doorTiles,
+              doorState.upper ? [2] : [3],
+            );
             continue;
           }
 
@@ -612,7 +596,14 @@ export class VoxelWorld {
       if (inBounds(x, y, z)) {
         const block = this.data[IDX(x, y, z)];
         if (block !== BlockType.AIR) {
-          if (isSlabBlock(block) || isBedBlock(block)) {
+          if (isDoorBlock(block)) {
+            const bounds = getDoorLocalBounds(block)!;
+            const hit = intersectPartialBlockRay(
+              origin, dir, x, y, z, 0, 1,
+              bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ,
+            );
+            if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block, distance: hit.distance };
+          } else if (isSlabBlock(block) || isBedBlock(block)) {
             const hit = intersectPartialBlockRay(origin, dir, x, y, z, getBlockOffsetY(block), getBlockHeight(block));
             if (hit && hit.distance <= maxDistance) return { x, y, z, nx: hit.nx, ny: hit.ny, nz: hit.nz, id: block, distance: hit.distance };
           } else {

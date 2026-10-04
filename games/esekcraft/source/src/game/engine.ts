@@ -24,6 +24,7 @@ import {
   getBlockHeight,
   getBlockOffsetY,
   getDoorBlockId,
+  getDoorLocalBounds,
   getDoorState,
   getSlabBaseBlock,
   isBedBlock,
@@ -1916,7 +1917,14 @@ export class MinecraftEngine {
         for (let x = x0; x <= x1; x++) {
           const block = this.world.getBlockPhys(x, y, z);
           const doorState = getDoorState(block);
-          if (block === BlockType.AIR || block === BlockType.TORCH || doorState?.open) continue;
+          if (block === BlockType.AIR || block === BlockType.TORCH) continue;
+          if (doorState) {
+            const bounds = getDoorLocalBounds(block)!;
+            const overlapsDoor = px + this.PW > x + bounds.minX && px - this.PW < x + bounds.maxX &&
+              pz + this.PW > z + bounds.minZ && pz - this.PW < z + bounds.maxZ;
+            if (overlapsDoor && y >= crouchTop - 0.0001 && y < standingTop && y + 1 > crouchTop) return true;
+            continue;
+          }
           const blockBottom = y + getBlockOffsetY(block);
           const blockTop = blockBottom + getBlockHeight(block);
           if (blockBottom >= crouchTop - 0.0001 && blockBottom < standingTop && blockTop > crouchTop) return true;
@@ -1940,9 +1948,17 @@ export class MinecraftEngine {
         for (let x = x0; x <= x1; x++) {
           const b = this.world.getBlockPhys(x, y, z);
           const state = getDoorState(b);
+          if (b === BlockType.AIR || b === BlockType.TORCH) continue;
+          if (state) {
+            const bounds = getDoorLocalBounds(b)!;
+            const overlapsDoor = px + this.PW > x + bounds.minX && px - this.PW < x + bounds.maxX &&
+              pz + this.PW > z + bounds.minZ && pz - this.PW < z + bounds.maxZ;
+            if (overlapsDoor && py < y + 1 && py + playerHeight > y) return true;
+            continue;
+          }
           const blockBottom = y + getBlockOffsetY(b);
           const blockTop = blockBottom + getBlockHeight(b);
-          if (b !== BlockType.AIR && b !== BlockType.TORCH && !state?.open && py < blockTop && py + playerHeight > blockBottom) return true;
+          if (py < blockTop && py + playerHeight > blockBottom) return true;
         }
       }
     }
@@ -2365,12 +2381,10 @@ export class MinecraftEngine {
       this.highlightBox.visible = true;
       const doorState = getDoorState(hit.id);
       if (doorState) {
-        const angle = (doorState.facing % 2 === 0 ? 0 : Math.PI / 2) + (doorState.open
-          ? ((doorState.facing === 0 || doorState.facing === 1) ? Math.PI / 2 : -Math.PI / 2)
-          : 0);
-        this.highlightBox.scale.set(0.9, 1, 0.14);
-        this.highlightBox.rotation.set(0, angle, 0);
-        this.highlightBox.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+        const bounds = getDoorLocalBounds(hit.id)!;
+        this.highlightBox.scale.set(bounds.maxX - bounds.minX, 1, bounds.maxZ - bounds.minZ);
+        this.highlightBox.rotation.set(0, 0, 0);
+        this.highlightBox.position.set(hit.x + (bounds.minX + bounds.maxX) / 2, hit.y + 0.5, hit.z + (bounds.minZ + bounds.maxZ) / 2);
       } else {
         const hitHeight = getBlockHeight(hit.id);
         const hitBottom = getBlockOffsetY(hit.id);
@@ -2468,7 +2482,18 @@ export class MinecraftEngine {
 
         const stage = Math.min(9, Math.floor(this.breakProgress * 10));
         this.crackMesh.visible = true;
-        this.crackMesh.position.set(hit.x + 0.5, hit.y + getBlockOffsetY(hit.id) + getBlockHeight(hit.id) / 2, hit.z + 0.5);
+        const doorBounds = getDoorLocalBounds(hit.id);
+        if (doorBounds) {
+          this.crackMesh.scale.set(doorBounds.maxX - doorBounds.minX, 1, doorBounds.maxZ - doorBounds.minZ);
+          this.crackMesh.position.set(
+            hit.x + (doorBounds.minX + doorBounds.maxX) / 2,
+            hit.y + 0.5,
+            hit.z + (doorBounds.minZ + doorBounds.maxZ) / 2,
+          );
+        } else {
+          this.crackMesh.scale.set(1, 1, 1);
+          this.crackMesh.position.set(hit.x + 0.5, hit.y + getBlockOffsetY(hit.id) + getBlockHeight(hit.id) / 2, hit.z + 0.5);
+        }
         if (this.crackMesh.material instanceof THREE.MeshBasicMaterial) {
           this.crackMesh.material.map = crackTextures[stage];
           this.crackMesh.material.needsUpdate = true;
@@ -2608,14 +2633,17 @@ export class MinecraftEngine {
 
     const doorState = getDoorState(hit.id);
     if (doorState) {
+      const bounds = getDoorLocalBounds(hit.id)!;
+      const centerX = hit.x + (bounds.minX + bounds.maxX) / 2;
+      const centerZ = hit.z + (bounds.minZ + bounds.maxZ) / 2;
       const bottomY = doorState.upper ? hit.y - 1 : hit.y;
       const bottomId = this.world.getBlock(hit.x, bottomY, hit.z);
       const bottomState = getDoorState(bottomId);
       if (bottomState && !bottomState.upper) {
         Sound.breakBlock('wood');
-        this.spawnBlockDebris(hit.x + 0.5, bottomY + 1, hit.z + 0.5, BlockType.OAK_DOOR);
+        this.spawnBlockDebris(centerX, bottomY + 1, centerZ, BlockType.OAK_DOOR);
         if (this.gameMode === 'survival') {
-          this.spawnDrop(hit.x + 0.5, bottomY + 0.2, hit.z + 0.5, BlockType.OAK_DOOR, 1);
+          this.spawnDrop(centerX, bottomY + 0.2, centerZ, BlockType.OAK_DOOR, 1);
         }
         for (const [y, shouldBeUpper] of [[bottomY, false], [bottomY + 1, true]] as const) {
           const part = getDoorState(this.world.getBlock(hit.x, y, hit.z));
@@ -2716,16 +2744,17 @@ export class MinecraftEngine {
     const supportDef = BLOCK_DEFS[support];
     if (!supportDef || supportDef.transparent || getBlockHeight(support) < 1) return;
 
+    const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as DoorFacing;
+    const doorBounds = getDoorLocalBounds(getDoorBlockId(false, facing, false))!;
     const intersectsPlayer = (cellY: number) =>
-      x + 1 > this.pos.x - this.PW &&
-      x < this.pos.x + this.PW &&
+      x + doorBounds.maxX > this.pos.x - this.PW &&
+      x + doorBounds.minX < this.pos.x + this.PW &&
       cellY + 1 > this.pos.y &&
       cellY < this.pos.y + this.getPlayerHeight() &&
-      z + 1 > this.pos.z - this.PW &&
-      z < this.pos.z + this.PW;
+      z + doorBounds.maxZ > this.pos.z - this.PW &&
+      z + doorBounds.minZ < this.pos.z + this.PW;
     if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return;
 
-    const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as DoorFacing;
     const bottomId = getDoorBlockId(false, facing, false);
     const topId = getDoorBlockId(true, facing, false);
     this.world.setBlock(x, y, z, bottomId);

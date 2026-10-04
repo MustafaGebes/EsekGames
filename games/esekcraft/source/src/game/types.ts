@@ -95,6 +95,33 @@ export function getDoorBlockId(upper: boolean, facing: DoorFacing, open: boolean
   return states[facing];
 }
 
+export interface DoorLocalBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** Shared thin-panel bounds for the door mesh, raycast, outline and player collision. */
+export function getDoorLocalBounds(id: BlockType): DoorLocalBounds | null {
+  const state = getDoorState(id);
+  if (!state) return null;
+
+  const closed: readonly DoorLocalBounds[] = [
+    { minX: 0.05, maxX: 0.95, minZ: 0.875, maxZ: 1 },
+    { minX: 0.875, maxX: 1, minZ: 0.05, maxZ: 0.95 },
+    { minX: 0.05, maxX: 0.95, minZ: 0, maxZ: 0.125 },
+    { minX: 0, maxX: 0.125, minZ: 0.05, maxZ: 0.95 },
+  ];
+  const open: readonly DoorLocalBounds[] = [
+    { minX: 0, maxX: 0.125, minZ: 0.05, maxZ: 0.95 },
+    { minX: 0.05, maxX: 0.95, minZ: 0.875, maxZ: 1 },
+    { minX: 0.875, maxX: 1, minZ: 0.05, maxZ: 0.95 },
+    { minX: 0.05, maxX: 0.95, minZ: 0, maxZ: 0.125 },
+  ];
+  return (state.open ? open : closed)[state.facing];
+}
+
 export function isDoorBlock(id: BlockType): boolean {
   return getDoorState(id) !== null;
 }
