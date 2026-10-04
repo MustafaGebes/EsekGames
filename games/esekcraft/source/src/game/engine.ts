@@ -132,7 +132,7 @@ export class MinecraftEngine {
   public drops: DropItemEntity[] = [];
   public particles: ParticleEntity[] = [];
   public mobs: MobEntity[] = [];
-  private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean }>();
+  private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean; isDead: boolean }>();
   public attackCooldown = 0;
 
   // Keys & Input
@@ -429,7 +429,7 @@ export class MinecraftEngine {
       if (!remote) {
         const mesh = this.createDonkeyModel();
         this.scene.add(mesh);
-        remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false };
+        remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false, isDead: false };
         this.remotePlayers.set(id, remote);
         mesh.position.set(x, y, z);
       }
@@ -437,6 +437,7 @@ export class MinecraftEngine {
       remote.yaw = Number(data?.yaw) || 0;
       remote.isMoving = !!data?.isMoving;
       remote.isCrouching = !!data?.isCrouching;
+      remote.isDead = data?.alive === false;
     }
     for (const [id, remote] of this.remotePlayers) {
       if (active.has(id)) continue;
@@ -455,6 +456,14 @@ export class MinecraftEngine {
   private updateRemotePlayers(dt: number) {
     for (const remote of this.remotePlayers.values()) {
       remote.mesh.position.lerp(remote.target, Math.min(1, dt * 12));
+      if (remote.isDead) {
+        remote.mesh.position.y = remote.target.y + 0.22;
+        remote.mesh.rotation.z += (-Math.PI / 2 - remote.mesh.rotation.z) * Math.min(1, dt * 10);
+        remote.mesh.userData.hitUntil = 0;
+        continue;
+      }
+      remote.mesh.position.y = remote.target.y;
+      remote.mesh.rotation.z += (0 - remote.mesh.rotation.z) * Math.min(1, dt * 10);
       const targetYaw = remote.yaw + Math.PI;
       let yawDelta = targetYaw - remote.mesh.rotation.y;
       while (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
@@ -504,6 +513,7 @@ export class MinecraftEngine {
     const dir = this.getLookDir();
     let best: { id: string; distance: number } | null = null;
     for (const [id, remote] of this.remotePlayers) {
+      if (remote.isDead) continue;
       const dx = remote.target.x - eye.x;
       const dy = (remote.target.y + 0.95) - eye.y;
       const dz = remote.target.z - eye.z;
@@ -523,6 +533,7 @@ export class MinecraftEngine {
     this.world.setBlock(Math.floor(x), Math.floor(y), Math.floor(z), blockId as BlockType);
     this.world.buildMesh(this.scene, this.worldMaterial);
     this.rebuildTorchVisuals();
+    this.recoverFromBlockCollision();
   }
   public start() {
     this.world.generate();
@@ -1562,6 +1573,26 @@ export class MinecraftEngine {
   }
 
   // ================= PHYSICS & PLAYER MOVEMENT =================
+  private recoverFromBlockCollision() {
+    if (!this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) return;
+    const origin = { ...this.pos };
+    const directions = [[0, 0], [0.42, 0], [-0.42, 0], [0, 0.42], [0, -0.42], [0.72, 0.72], [-0.72, 0.72], [0.72, -0.72], [-0.72, -0.72]];
+    for (const yOffset of [0, 0.25, 0.55, 0.9, 1.3]) {
+      for (const [dx, dz] of directions) {
+        const candidate = { x: origin.x + dx, y: origin.y + yOffset, z: origin.z + dz };
+        if (candidate.x < this.PW + 0.1 || candidate.x > SX - this.PW - 0.1 || candidate.z < this.PW + 0.1 || candidate.z > SZ - this.PW - 0.1) continue;
+        if (!this.checkCollision(candidate.x, candidate.y, candidate.z)) {
+          this.pos = candidate;
+          this.vel.y = 0;
+          this.onGround = yOffset === 0;
+          return;
+        }
+      }
+    }
+    // Son çare: bulunduğu sütunun güvenli üstüne çıkar.
+    const top = this.world.getTopSolid(Math.floor(origin.x), Math.floor(origin.z));
+    this.pos = { x: origin.x, y: Math.max(origin.y, top + 1.05), z: origin.z };
+  }
   private checkCollision(px: number, py: number, pz: number): boolean {
     const x0 = Math.floor(px - this.PW);
     const x1 = Math.floor(px + this.PW);
@@ -1793,6 +1824,7 @@ export class MinecraftEngine {
   public handleNetworkDeath(reason = 'Öldün!') {
     this.hp = 0;
     this.isDead = true;
+    this.donkey3P.rotation.z = -Math.PI / 2;
     this.damageFlashTimer = 0;
     this.exitPointerLock();
     this.onToast?.(reason);
@@ -1803,6 +1835,7 @@ export class MinecraftEngine {
     this.isDead = false;
     this.hp = this.maxHp;
     this.hunger = this.maxHunger;
+    this.donkey3P.rotation.z = 0;
     this.vel = { x: 0, y: 0, z: 0 };
     if (spawn && Number.isFinite(spawn.x) && Number.isFinite(spawn.y) && Number.isFinite(spawn.z)) {
       this.pos = { x: spawn.x, y: spawn.y, z: spawn.z };
@@ -2549,20 +2582,21 @@ export class MinecraftEngine {
       this.donkey3P.visible = true;
       this.handGroup.visible = false;
 
-      this.donkey3P.position.set(this.pos.x, this.pos.y - (this.isSneaking ? 0.22 : 0), this.pos.z);
+      this.donkey3P.position.set(this.pos.x, this.pos.y + (this.isDead ? 0.22 : (this.isSneaking ? -0.22 : 0)), this.pos.z);
       this.donkey3P.rotation.y = this.yaw + Math.PI;
+      this.donkey3P.rotation.z += ((this.isDead ? -Math.PI / 2 : 0) - this.donkey3P.rotation.z) * Math.min(1, dt * 12);
 
       // Animate Donkey limbs (4 legs + head)
       const ud = this.donkey3P.userData;
       const swing = Math.sin(this.walkPhase) * 0.65 * Math.min(1, Math.hypot(this.vel.x, this.vel.z) / 3);
-      if (ud.legs && ud.legs.length === 4) {
+      if (!this.isDead && ud.legs && ud.legs.length === 4) {
         // Front-left, front-right (swinging with mine/attack), back-left, back-right
         ud.legs[0].rotation.x = swing;
         ud.legs[1].rotation.x = this.swingTimer >= 0 ? -Math.sin((this.swingTimer / 0.3) * Math.PI) * 1.5 : -swing;
         ud.legs[2].rotation.x = -swing;
         ud.legs[3].rotation.x = swing;
       }
-      if (ud.headGroup) {
+      if (!this.isDead && ud.headGroup) {
         ud.headGroup.rotation.x = this.isSneaking ? 0.35 : (this.swingTimer >= 0 ? Math.sin((this.swingTimer / 0.3) * Math.PI) * 0.3 : 0);
       }
 

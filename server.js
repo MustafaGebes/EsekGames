@@ -1779,6 +1779,7 @@ function damageAnimal(animalId, amount) {
 
 function handleMove(player, data) {
     if (!player.inGame) return;
+    if (player.mapId === "overworld" && !player.alive) return;
 
     const now = Date.now();
     if (now - player.lastMoveAcceptedAt < MOVE_MIN_INTERVAL_MS) return;
