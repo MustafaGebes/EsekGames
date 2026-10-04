@@ -2003,24 +2003,33 @@ export class MinecraftEngine {
           this.breakProgress = 0;
         }
 
-        // Calculate break speed based on tool
+        // Minecraft-style break timing:
+        // correct tool/hand: hardness * 30 ticks; wrong tool: hardness * 100 ticks.
+        // With 20 ticks per second this becomes hardness*1.5s or hardness*5s.
         let toolSpeed = 1.0;
+        let canHarvest = false;
         const currentItem = this.inventory[this.selectedSlot];
         const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
 
-        const handBreakable = [BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES, BlockType.WHITE_WOOL_BLOCK].includes(hit.id);
+        const handBreakable = [
+          BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
+          BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS,
+          BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
+        ].includes(hit.id);
         if (this.gameMode === 'creative') {
           toolSpeed = 100; // instant break
+          canHarvest = true;
         } else if (itemDef?.tool && itemDef.tool.type === bDef.requiredTool) {
           toolSpeed = itemDef.tool.speed;
-        } else if (handBreakable) {
-          // Dirt, grass, sand, leaves and wool are intentionally breakable by hand.
+          canHarvest = true;
+        } else if (handBreakable || bDef.requiredTool === 'none') {
+          // Dirt, wood, wool and other naturally hand-breakable blocks keep their drops.
           toolSpeed = 1.0;
-        } else if (bDef.requiredTool !== 'none') {
-          toolSpeed = 0.18;
+          canHarvest = true;
         }
 
-        this.breakProgress += (dt * toolSpeed) / bDef.hardness;
+        const timingFactor = canHarvest ? 1.5 : 5.0;
+        this.breakProgress += (dt * toolSpeed) / (bDef.hardness * timingFactor);
         if (this.swingTimer < 0) this.swingTimer = 0;
 
         const stage = Math.min(9, Math.floor(this.breakProgress * 10));
@@ -2152,7 +2161,11 @@ export class MinecraftEngine {
 
       // Tool harvest requirement check
       let canHarvest = true;
-      const handBreakable = [BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES, BlockType.WHITE_WOOL_BLOCK].includes(hit.id);
+      const handBreakable = [
+        BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.OAK_LEAVES,
+        BlockType.WHITE_WOOL_BLOCK, BlockType.OAK_LOG, BlockType.OAK_PLANKS,
+        BlockType.BED, BlockType.CRAFTING_TABLE, BlockType.CHEST,
+      ].includes(hit.id);
       if (bDef.requiredTool !== 'none' && !handBreakable) {
         canHarvest = itemDef?.tool?.type === bDef.requiredTool && (itemDef.tool.harvestLevel ?? 0) >= bDef.minHarvestLevel;
       }
