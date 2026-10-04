@@ -30,6 +30,7 @@ export default function App() {
   >('boot');
 
   const [uiState, setUIState] = useState<string>('playing');
+  const [, setHudRefresh] = useState(0);
   const [worlds, setWorlds] = useState<WorldMeta[]>([]);
   const [selectedWorldIdx, setSelectedWorldIdx] = useState<number>(-1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -182,7 +183,7 @@ export default function App() {
       eng.onlineMode = !!onlineRoomRef.current;
 
       eng.onUIStateChange = (st) => setUIState(st);
-      eng.onHUDUpdate = () => setUIState((prev) => prev);
+      eng.onHUDUpdate = () => setHudRefresh((tick) => tick + 1);
       eng.onToast = (msg) => showToast(msg);
       eng.onBlockChanged = (change) => {
         if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });

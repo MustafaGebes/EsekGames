@@ -622,7 +622,10 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
 
           {/* Damage Vignette */}
           {engine.damageFlashTimer > 0 && (
-            <div className="absolute inset-0 bg-red-600/30 pointer-events-none transition-opacity duration-300" />
+            <div
+              className="absolute inset-0 bg-red-600 pointer-events-none transition-opacity duration-75"
+              style={{ opacity: Math.max(0, Math.min(0.3, (engine.damageFlashTimer / 0.4) * 0.3)) }}
+            />
           )}
           <div className="absolute top-3 left-3 flex flex-col gap-1">
             <div className="px-2 py-1 bg-black/55 border border-white/20 text-white font-mono text-xs pointer-events-none">

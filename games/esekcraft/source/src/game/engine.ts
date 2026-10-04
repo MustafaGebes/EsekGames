@@ -128,6 +128,7 @@ export class MinecraftEngine {
   public regenTimer = 0;
   public starveTimer = 0;
   public damageFlashTimer = 0;
+  private damageFlashHudClock = 0;
 
   // Active Tile Entity Open
   public currentFurnacePos: { x: number; y: number; z: number } | null = null;
@@ -1057,9 +1058,11 @@ export class MinecraftEngine {
 
     // Grass, dirt, stone, logs, ores and utility blocks all use their own face tiles.
     // This keeps grass-top/dirt-side and log-endgrain orientation recognizable in hand.
-    const size = 0.30;
+    const size = blockId === BlockType.OAK_LOG || blockId === BlockType.OAK_PLANKS ? 0.33 : 0.30;
     const geometry = new THREE.BoxGeometry(size, size, size);
-    const cube = new THREE.Mesh(geometry, this.worldMaterial);
+    // A dedicated atlas material keeps bark and plank grain visible on hand-held blocks.
+    const blockMaterial = new THREE.MeshLambertMaterial({ map: atlasTexture, transparent: true, alphaTest: 0.1 });
+    const cube = new THREE.Mesh(geometry, blockMaterial);
     this.setupMeshUVs(geometry, blockId);
     model.add(cube);
     return model;
@@ -2053,6 +2056,7 @@ export class MinecraftEngine {
     this.hp -= finalDamage;
     Sound.hit();
     this.damageFlashTimer = 0.4;
+    this.damageFlashHudClock = 0;
     this.onHUDUpdate?.();
 
     if (this.hp <= 0) {
@@ -2829,6 +2833,15 @@ export class MinecraftEngine {
     this.animFrameId = requestAnimationFrame(this.animate);
     const dt = Math.min(0.05, (now - this.lastTime) / 1000 || 0.016);
     this.lastTime = now;
+
+    if (this.damageFlashTimer > 0) {
+      this.damageFlashTimer = Math.max(0, this.damageFlashTimer - dt);
+      this.damageFlashHudClock += dt;
+      if (this.damageFlashHudClock >= 0.05 || this.damageFlashTimer === 0) {
+        this.damageFlashHudClock = 0;
+        this.onHUDUpdate?.();
+      }
+    }
 
     if (!this.isPaused && !this.isDead) {
       this.updatePlayer(dt);
