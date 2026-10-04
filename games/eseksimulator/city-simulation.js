@@ -10,6 +10,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     citizens: citizenDefinitions = [],
     shopBuildings = [],
     isBlocked = () => false,
+    onLocalCashDrop = () => {},
   } = options;
 
   const signalRoads = roadLines.filter((line) => Math.abs(line) <= 42);
@@ -164,7 +165,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     scene.add(root);
     const hitMaterials = [];
     root.traverse(node => { if (!node.isMesh || !node.material) return; node.material = node.material.clone(); hitMaterials.push({ material: node.material, base: node.material.color.clone(), emissive: node.material.emissive?.clone() || null }); });
-    return { root, torso, arms, legs, hitbox: { radius: .62, height: 2.12 }, hitMaterials, hitFlashUntil: 0, hitTinted: false, health: 3, alive: true, aiState: 'wander' };
+    return { root, torso, arms, legs, hitbox: { radius: .62, height: 2.12 }, hitMaterials, hitFlashUntil: 0, hitTinted: false, health: 2, alive: true, aiState: 'wander' };
   }
   const nodes = new Map();
   const nodeKey = (ix, iz, sx, sz) => `${ix},${iz},${sx},${sz}`;
@@ -319,8 +320,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
       walking: false,
       id: `pedestrian-${i}`,
       serverTargetId: null,
-      health: 3,
+      health: 2,
       alive: true,
+      cashDrop: 10 + (i % 4) * 5,
       behavior: i % 4 === 0 ? 'attack' : 'flee',
       panicUntil: 0,
       attackUntil: 0,
@@ -338,7 +340,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const point = building.shopkeeperPoint();
     model.root.position.set(point.x, 0.02, point.z);
     model.root.rotation.y = building.face;
-    return { ...model, id: building.id, name: building.title, building, point, serverTargetId: null, health: 3, alive: true, behavior: index % 3 === 0 ? 'attack' : 'flee', panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
+    return { ...model, id: building.id, name: building.title, building, point, serverTargetId: null, health: 2, alive: true, cashDrop: 15 + (index % 3) * 5, behavior: index % 3 === 0 ? 'attack' : 'flee', panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
   });
 
   function humanPosition(human) {
@@ -432,9 +434,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
   function triggerHumanVehicleImpact(human, impact) {
     if (!human || human.ragdoll || human.alive === false) return;
-    human.health = Math.max(0, (Number(human.health) || 3) - (impact.vehicle.speed > 6 ? 2 : 1));
+    human.health = Math.max(0, (Number(human.health) || 2) - (impact.vehicle.speed > 6 ? 2 : 1));
     human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.32);
-    if (human.health <= 0) { human.alive = false; human.root.visible = false; return; }
+    if (human.health <= 0) { human.alive = false; human.deathAt = elapsed + 0.3; if (!human.serverTargetId) onLocalCashDrop(Number(human.cashDrop) || 10); return; }
     human.ragdoll = { until: elapsed + 1.15, velocity: impact.impulse.clone().multiplyScalar(.32), rotation: (impact.impulse.x - impact.impulse.z) * .18 };
     human.panicUntil = human.behavior === 'flee' ? elapsed + 4.5 : 0;
     human.attackUntil = human.behavior === 'attack' ? elapsed + 4.0 : 0;
@@ -460,8 +462,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
     human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.28);
     human.attackFlash = 0.42;
     if (!human.serverTargetId) {
-      human.health = Math.max(0, (Number(human.health) || 3) - 1);
-      if (human.health <= 0) { human.alive = false; human.root.visible = false; return; }
+      human.health = Math.max(0, (Number(human.health) || 2) - 1);
+      if (human.health <= 0) { human.alive = false; human.deathAt = elapsed + 0.3; if (!human.serverTargetId) onLocalCashDrop(Number(human.cashDrop) || 10); return; }
     }
     human.aiState = human.behavior === 'flee' ? 'flee' : 'attack';
     if (human.behavior === 'flee') human.panicUntil = elapsed + 3.8;
@@ -494,9 +496,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
       person.gait += dt * (person.panicUntil > elapsed ? 9.5 : 1.6);
       const threat = person.attackFlash > 0 || person.attackUntil > elapsed;
       if (person.attackFlash > 0) person.attackFlash = Math.max(0, person.attackFlash - dt);
-      const flashing = (person.hitFlashUntil || 0) > elapsed;
-      if (flashing && !person.hitTinted) { person.hitMaterials?.forEach(entry => { entry.material.color.setHex(0xff3f38); if (entry.material.emissive) entry.material.emissive.setHex(0x66100b); }); person.hitTinted = true; }
-      else if (!flashing && person.hitTinted) { person.hitMaterials?.forEach(entry => { entry.material.color.copy(entry.base); if (entry.material.emissive && entry.emissive) entry.material.emissive.copy(entry.emissive); }); person.hitTinted = false; }
+      updateHumanTint(person);
       person.torso.position.y = 1.08 + Math.sin(person.gait) * 0.009;
       person.arms[0].rotation.x = threat ? -0.8 : Math.sin(person.gait) * 0.025;
       person.arms[1].rotation.x = threat ? 0.35 : -Math.sin(person.gait) * 0.025;
@@ -780,7 +780,15 @@ export function createCitySimulation(THREE, scene, options = {}) {
     }
   }
 
+  function updateHumanTint(human) {
+    if (human.deathAt && elapsed >= human.deathAt) { human.root.visible = false; return; }
+    const flashing = (human.hitFlashUntil || 0) > elapsed;
+    if (flashing && !human.hitTinted) { human.hitMaterials?.forEach(entry => { entry.material.color.setHex(0xff3f38); if (entry.material.emissive) entry.material.emissive.setHex(0x66100b); }); human.hitTinted = true; }
+    else if (!flashing && human.hitTinted) { human.hitMaterials?.forEach(entry => { entry.material.color.copy(entry.base); if (entry.material.emissive && entry.emissive) entry.material.emissive.copy(entry.emissive); }); human.hitTinted = false; }
+  }
+
   function updatePedestrian(pedestrian, dt) {
+    updateHumanTint(pedestrian);
     const vehicleImpact = getVehicleImpact(pedestrian.root.position, .58);
     if (vehicleImpact) triggerHumanVehicleImpact(pedestrian, vehicleImpact);
     if (updateHumanRagdoll(pedestrian, dt)) return;

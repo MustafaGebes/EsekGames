@@ -86,6 +86,12 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
   }
 
   function itemFor(id) { return DATA.items.find((item) => item.id === id); }
+  function addLocalCash(amount = 10) {
+    profile.cash = Math.max(0, profile.cash + Math.max(1, Math.floor(Number(amount) || 10)));
+    renderHud();
+    showToast(`İnsan para düşürdü: ₺${Math.max(1, Math.floor(Number(amount) || 10))}`);
+  }
+
   function renderShop() {
     const shop = DATA.shops.find((entry) => entry.id === activeShopId);
     if (!shop) return;
@@ -326,5 +332,5 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
   function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestHuman(player.position, 5.0, forward); }
 
   renderHud();
-  return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, get profile() { return profile; } };
+  return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, addLocalCash, get profile() { return profile; } };
 }

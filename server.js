@@ -117,7 +117,7 @@ function handleAttack(player, data = {}) {
     player.lastAttackAt = now;
     room.lastActivityAt = now;
     broadcastToRoom(room.id, { type: "attack", id: player.id });
-    if (data && data.targetCitizenId) handleCityCitizenHit(player, data);
+    if (data && (data.targetCitizenId || Array.isArray(data.targetCitizenIds))) handleCityCitizenHit(player, data);
 }
 function handleRoomsRequest(player) {
     sendRoomList(player);
@@ -832,6 +832,11 @@ function handleCityNpcInteract(player, data) {
     sendTo(player, { type: "city_npc_dialogue", npcId, line });
 }
 function handleCityCitizenHit(player, data) {
+    if (Array.isArray(data && data.targetCitizenIds)) {
+        const ids = [...new Set(data.targetCitizenIds.map(String))].slice(0, 12);
+        for (const id of ids) handleCityCitizenHit(player, { targetCitizenId: id, batch: true });
+        return;
+    }
     if (!isCityGameplayPlayer(player)) return;
     const npcId = String(data && data.targetCitizenId || ""), npc = CITY_CITIZENS.get(npcId), room = getPlayerRoom(player);
     const state = room && room.cityCitizens && room.cityCitizens.get(npcId);
@@ -845,7 +850,7 @@ function handleCityCitizenHit(player, data) {
     // Torso hitbox: a little forgiving at the edge, but attacks must be in front.
     if (distance > 5.0 || facing < -0.35) return;
     const now = Date.now();
-    if (now - (player.lastCityAttackAt || 0) < 400) return;
+    if (!data.batch && now - (player.lastCityAttackAt || 0) < 400) return;
     player.lastCityAttackAt = now;
     state.hostileUntil = now + 15000;
     const weapon = CITY_ITEMS.get(player.progress && player.progress.cityEquippedWeapon);

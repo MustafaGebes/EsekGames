@@ -91,7 +91,7 @@
     citizens,
     hospitalSpawn,
     bagCapacity: 12,
-    npcHealth: 3,
+    npcHealth: 2,
     npcRespawnMs: 90_000,
     cashMin: 0,
     cashMax: 999_999,
