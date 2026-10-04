@@ -124,7 +124,7 @@ export class MinecraftEngine {
   // Game Mode & Settings
   public gameMode: 'survival' | 'creative' = 'survival';
   public isFlying = false;
-  public flyCooldown = 0;
+  public flyCooldown = -Infinity;
 
   // Physics params
   public readonly PW = 0.3;
@@ -1881,22 +1881,50 @@ export class MinecraftEngine {
   private recoverFromBlockCollision() {
     if (!this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) return;
     const origin = { ...this.pos };
-    const directions = [[0, 0], [0.42, 0], [-0.42, 0], [0, 0.42], [0, -0.42], [0.72, 0.72], [-0.72, 0.72], [0.72, -0.72], [-0.72, -0.72]];
-    for (const yOffset of [0, 0.25, 0.55, 0.9, 1.3]) {
+    const directions = [
+      [0, 0], [0.42, 0], [-0.42, 0], [0, 0.42], [0, -0.42],
+      [0.72, 0.72], [-0.72, 0.72], [0.72, -0.72], [-0.72, -0.72],
+      [1.05, 0], [-1.05, 0], [0, 1.05], [0, -1.05],
+      [1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5],
+      [2.5, 0], [-2.5, 0], [0, 2.5], [0, -2.5],
+    ];
+    for (const yOffset of [0, 0.25, 0.55, 0.9, 1.3, 1.8, 2.5, 3.5, 5, 8]) {
       for (const [dx, dz] of directions) {
         const candidate = { x: origin.x + dx, y: origin.y + yOffset, z: origin.z + dz };
         if (candidate.x < this.PW + 0.1 || candidate.x > SX - this.PW - 0.1 || candidate.z < this.PW + 0.1 || candidate.z > SZ - this.PW - 0.1) continue;
         if (!this.checkCollision(candidate.x, candidate.y, candidate.z)) {
           this.pos = candidate;
           this.vel.y = 0;
-          this.onGround = yOffset === 0;
+          this.vel.x = 0;
+          this.vel.z = 0;
+          this.onGround = false;
+          this.fallStartY = candidate.y;
           return;
         }
       }
     }
-    // Son çare: bulunduğu sütunun güvenli üstüne çıkar.
-    const top = this.world.getTopSurface(Math.floor(origin.x), Math.floor(origin.z));
-    this.pos = { x: origin.x, y: Math.max(origin.y, top + 0.05), z: origin.z };
+    // Last resort: get above the highest surface under any part of the player's footprint.
+    let top = 0;
+    for (const x of [Math.floor(origin.x - this.PW), Math.floor(origin.x + this.PW)]) {
+      for (const z of [Math.floor(origin.z - this.PW), Math.floor(origin.z + this.PW)]) {
+        top = Math.max(top, this.world.getTopSurface(x, z));
+      }
+    }
+    let safeY = Math.max(origin.y, top + 0.05);
+    for (let attempt = 0; attempt < 200 && this.checkCollision(origin.x, safeY, origin.z); attempt++) safeY += 0.25;
+    if (!this.checkCollision(origin.x, safeY, origin.z)) {
+      this.pos = { x: origin.x, y: safeY, z: origin.z };
+    } else {
+      // A corrupted/fully enclosed position must never trap the main game loop.
+      const spawnX = SX / 2 + 0.5;
+      const spawnZ = SZ / 2 + 0.5;
+      safeY = this.world.getTopSurface(Math.floor(spawnX), Math.floor(spawnZ)) + 0.05;
+      for (let attempt = 0; attempt < 200 && this.checkCollision(spawnX, safeY, spawnZ); attempt++) safeY += 0.25;
+      this.pos = { x: spawnX, y: safeY, z: spawnZ };
+    }
+    this.vel = { x: 0, y: 0, z: 0 };
+    this.onGround = false;
+    this.fallStartY = this.pos.y;
   }
 
   private getPlayerHeight(): number {
@@ -2032,14 +2060,29 @@ export class MinecraftEngine {
       !this.isSneaking &&
       this.hunger > 6;
 
+    if (!this.isFlying && this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) {
+      this.recoverFromBlockCollision();
+    }
+
     // Creative Flying Mode
     if (this.isFlying) {
-      let speed = 10;
-      if (this.isActionActive('jump')) this.pos.y += speed * dt;
-      if (this.isActionActive('sneak')) this.pos.y -= speed * dt;
-      this.pos.x += wishX * speed * dt;
-      this.pos.z += wishZ * speed * dt;
+      if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.recoverFromBlockCollision();
+      const speed = this.isSprinting ? 20 : 10;
+      const dx = wishX * speed * dt;
+      const dy = (Number(this.isActionActive('jump')) - Number(this.isActionActive('sneak'))) * speed * dt;
+      const dz = wishZ * speed * dt;
+      // Small swept steps prevent flying fast enough to tunnel through a wall or door.
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) / 0.12));
+      for (let step = 0; step < steps; step++) {
+        const nextX = Math.max(this.PW + 0.1, Math.min(SX - this.PW - 0.1, this.pos.x + dx / steps));
+        if (!this.checkCollision(nextX, this.pos.y, this.pos.z)) this.pos.x = nextX;
+        const nextY = this.pos.y + dy / steps;
+        if (!this.checkCollision(this.pos.x, nextY, this.pos.z)) this.pos.y = nextY;
+        const nextZ = Math.max(this.PW + 0.1, Math.min(SZ - this.PW - 0.1, this.pos.z + dz / steps));
+        if (!this.checkCollision(this.pos.x, this.pos.y, nextZ)) this.pos.z = nextZ;
+      }
       this.vel = { x: 0, y: 0, z: 0 };
+      this.onGround = false;
       return;
     }
 
@@ -2078,6 +2121,7 @@ export class MinecraftEngine {
         const landingY = this.findLandingSurface(this.pos.x, this.pos.z, this.pos.y, oldY);
         if (landingY !== null) this.pos.y = landingY;
         for (let attempt = 0; attempt < 100 && this.checkCollision(this.pos.x, this.pos.y, this.pos.z); attempt++) this.pos.y += 0.01;
+        if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.recoverFromBlockCollision();
 
         // Fall damage calculation
         const fallDistance = this.fallStartY - this.pos.y;
@@ -2090,7 +2134,8 @@ export class MinecraftEngine {
         if (fallDistance > 0.8) Sound.step(this.getCurrentSurfaceMaterial());
       } else {
         this.pos.y = oldY;
-        while (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.pos.y -= 0.01;
+        for (let attempt = 0; attempt < 200 && this.checkCollision(this.pos.x, this.pos.y, this.pos.z); attempt++) this.pos.y -= 0.01;
+        if (this.checkCollision(this.pos.x, this.pos.y, this.pos.z)) this.recoverFromBlockCollision();
       }
       this.vel.y = 0;
     } else {
@@ -3578,13 +3623,22 @@ export class MinecraftEngine {
           this.onHUDUpdate?.();
         }
         // Creative flight toggle (Double Jump)
-        else if (e.code === this.keyBindings.jump && this.gameMode === 'creative') {
+        else if (e.code === this.keyBindings.jump && this.gameMode === 'creative' && !e.repeat) {
           const now = performance.now();
           if (now - this.flyCooldown < 300) {
             this.isFlying = !this.isFlying;
+            // A completed double-tap must not combine with the next intentional jump/ascend press.
+            this.flyCooldown = -Infinity;
+            if (this.isFlying) {
+              this.onGround = false;
+            } else {
+              this.vel = { x: 0, y: 0, z: 0 };
+              this.recoverFromBlockCollision();
+            }
             this.onToast?.(this.isFlying ? 'Uçuş Modu Açık' : 'Uçuş Modu Kapalı');
+          } else {
+            this.flyCooldown = now;
           }
-          this.flyCooldown = now;
         }
       }
     });
