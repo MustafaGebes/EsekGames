@@ -327,6 +327,8 @@ const ITEM_TILE_ENTRIES: Array<{
   { id: ItemType.IRON_INGOT, name: 'Demir Külçesi', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.GOLD_INGOT, name: 'Altın Külçesi', tile: TILE.ITEM_GOLD_INGOT },
   { id: ItemType.DIAMOND, name: 'Elmas', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.RAW_IRON, name: 'Ham Demir', tile: TILE.ITEM_RAW_IRON },
+  { id: ItemType.RAW_GOLD, name: 'Ham Altın', tile: TILE.ITEM_RAW_GOLD },
   { id: ItemType.FLINT, name: 'Çakmak Taşı', tile: TILE.ITEM_FLINT },
   { id: ItemType.APPLE, name: 'Elma', tile: TILE.ITEM_APPLE },
   { id: ItemType.BREAD, name: 'Ekmek', tile: TILE.ITEM_BREAD },

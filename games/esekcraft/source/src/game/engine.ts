@@ -1989,9 +1989,23 @@ export class MinecraftEngine {
 
   // ================= DROPS & PARTICLES =================
   public spawnDrop(x: number, y: number, z: number, id: AnyItemId, count: number) {
-    const geo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
-    const mesh = new THREE.Mesh(geo, this.worldMaterial);
-    this.setupMeshUVs(geo, id);
+    const mineralColors: Record<number, number> = {
+      [ItemType.COAL]: 0x171717,
+      [ItemType.RAW_IRON]: 0xb97852,
+      [ItemType.RAW_GOLD]: 0xf2bd28,
+      [ItemType.DIAMOND]: 0x36dbe5,
+      [ItemType.IRON_INGOT]: 0xd7b2a0,
+      [ItemType.GOLD_INGOT]: 0xffd33d,
+    };
+    const mineralColor = mineralColors[id as number];
+    const geo = mineralColor
+      ? new THREE.IcosahedronGeometry(0.22, 0)
+      : new THREE.BoxGeometry(0.28, 0.28, 0.28);
+    const material = mineralColor
+      ? new THREE.MeshLambertMaterial({ color: mineralColor, emissive: mineralColor, emissiveIntensity: id === ItemType.DIAMOND ? 0.16 : 0.03 })
+      : this.worldMaterial;
+    const mesh = new THREE.Mesh(geo, material);
+    if (!mineralColor) this.setupMeshUVs(geo as THREE.BoxGeometry, id);
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
 
