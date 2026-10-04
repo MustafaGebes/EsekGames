@@ -1231,10 +1231,11 @@ export function initTextures() {
   ] as const;
   for (const { tile: bedTile, edge } of bedHeadTiles) {
     tile(bedTile, (x, y) => {
-      const onPillow = edge === 'north' ? y >= 1 && y <= 4
-        : edge === 'south' ? y >= 11 && y <= 14
-        : edge === 'west' ? x >= 1 && x <= 4
-        : x >= 11 && x <= 14;
+      // CanvasTexture's top-face UVs invert pixel edges relative to world X/Z.
+      const onPillow = edge === 'north' ? y >= 11 && y <= 14
+        : edge === 'south' ? y >= 1 && y <= 4
+        : edge === 'west' ? x >= 11 && x <= 14
+        : x >= 1 && x <= 4;
       if (onPillow) return (x + y) % 4 === 0 ? '#ded8ca' : '#f3ead9';
       if (x === 0 || x === 15 || y === 0 || y === 15) return '#7f2028';
       return pick(rnd, ['#b52d37', '#c43740', '#a92732', '#ba303a']);

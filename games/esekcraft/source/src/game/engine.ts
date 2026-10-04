@@ -143,6 +143,22 @@ export class MinecraftEngine {
   public starveTimer = 0;
   public damageFlashTimer = 0;
   private damageFlashHudClock = 0;
+  private bedSleepAnimation: {
+    elapsed: number;
+    duration: number;
+    wakeStart: number;
+    morningApplied: boolean;
+    startPosition: THREE.Vector3;
+    startRotation: THREE.Euler;
+    targetPosition: THREE.Vector3;
+    targetYaw: number;
+    targetPitch: number;
+    targetRoll: number;
+    centerX: number;
+    centerZ: number;
+    bedY: number;
+  } | null = null;
+  private sleepOverlay: HTMLDivElement | null = null;
 
   // Active Tile Entity Open
   public currentFurnacePos: { x: number; y: number; z: number } | null = null;
@@ -642,6 +658,9 @@ export class MinecraftEngine {
 
   public destroy() {
     cancelAnimationFrame(this.animFrameId);
+    this.sleepOverlay?.remove();
+    this.sleepOverlay = null;
+    this.bedSleepAnimation = null;
     this.mobs.forEach((m) => {
       this.scene.remove(m.mesh);
     });
@@ -1952,7 +1971,7 @@ export class MinecraftEngine {
   }
 
   private updatePlayer(dt: number) {
-    if (this.isDead) return;
+    if (this.isDead || this.bedSleepAnimation) return;
 
     const requestedSneak = this.isActionActive('sneak') && this.onGround && !this.isFlying;
     this.isSneaking = requestedSneak;
@@ -1983,7 +2002,7 @@ export class MinecraftEngine {
 
     // Minecraft forces the crouch pose in a 1.5–1.8 block-high passage.
     if (this.onGround && !this.isFlying && !requestedSneak) {
-      const step = (this.isSprinting ? 5.75 : 4.35) * dt;
+      const step = (this.isSprinting ? 6.0 : 4.35) * dt;
       const entersLowSpace = wishLen > 0 && this.hasLowHeadroom(
         this.pos.x + (wishX / wishLen) * step,
         this.pos.y,
@@ -2009,7 +2028,7 @@ export class MinecraftEngine {
 
     let speed = 4.35;
     if (this.isSneaking) speed = 1.35;
-    else if (this.isSprinting) speed = 6.0;
+    else if (this.isSprinting) speed = 6.3;
 
     const targetVx = wishLen > 0 ? (wishX / wishLen) * speed : 0;
     const targetVz = wishLen > 0 ? (wishZ / wishLen) * speed : 0;
@@ -2247,8 +2266,95 @@ export class MinecraftEngine {
     };
   }
 
+  private beginBedSleep(hit: { x: number; y: number; z: number; id: BlockType }) {
+    const bedState = getBedState(hit.id);
+    if (!bedState || this.bedSleepAnimation) return;
+
+    const headOffset = bedState.facing === 0 ? { x: 0, z: -1 }
+      : bedState.facing === 1 ? { x: -1, z: 0 }
+      : bedState.facing === 2 ? { x: 0, z: 1 }
+      : { x: 1, z: 0 };
+    const footX = bedState.head ? hit.x - headOffset.x : hit.x;
+    const footZ = bedState.head ? hit.z - headOffset.z : hit.z;
+    const headX = footX + headOffset.x;
+    const headZ = footZ + headOffset.z;
+    const centerX = (footX + headX) / 2 + 0.5;
+    const centerZ = (footZ + headZ) / 2 + 0.5;
+    const duration = 5.05;
+    const thirdPerson = this.isThirdPerson;
+    const targetPosition = thirdPerson
+      ? new THREE.Vector3(centerX - headOffset.x * 2.8, hit.y + 2.35, centerZ - headOffset.z * 2.8)
+      : new THREE.Vector3(centerX, hit.y + 0.92, centerZ);
+    const targetYaw = thirdPerson
+      ? Math.atan2(-(centerX - targetPosition.x), -(centerZ - targetPosition.z))
+      : bedState.facing * (Math.PI / 2);
+    const targetPitch = thirdPerson
+      ? Math.atan2(hit.y + 0.42 - targetPosition.y, Math.hypot(centerX - targetPosition.x, centerZ - targetPosition.z))
+      : 1.18;
+
+    if (!this.sleepOverlay) {
+      this.sleepOverlay = document.createElement('div');
+      this.sleepOverlay.setAttribute('aria-hidden', 'true');
+      Object.assign(this.sleepOverlay.style, {
+        position: 'fixed', inset: '0', background: '#000', opacity: '0',
+        pointerEvents: 'none', zIndex: '2147483647',
+      });
+      document.body.appendChild(this.sleepOverlay);
+    }
+
+    this.bedSleepAnimation = {
+      elapsed: 0,
+      duration,
+      wakeStart: 4.1,
+      morningApplied: false,
+      startPosition: this.camera.position.clone(),
+      startRotation: this.camera.rotation.clone(),
+      targetPosition,
+      targetYaw,
+      targetPitch,
+      targetRoll: 0,
+      centerX,
+      centerZ,
+      bedY: hit.y,
+    };
+    this.mouseLeft = false;
+    this.mouseRight = false;
+    this.keys = {};
+    this.isSneaking = false;
+    this.isSprinting = false;
+    this.onToast?.('Yatıyorsun...');
+    Sound.click();
+  }
+
+  private updateBedSleep(dt: number) {
+    const sleep = this.bedSleepAnimation;
+    if (!sleep) return;
+    sleep.elapsed = Math.min(sleep.duration, sleep.elapsed + dt);
+
+    if (!sleep.morningApplied && sleep.elapsed >= sleep.wakeStart) {
+      sleep.morningApplied = true;
+      this.timeOfDay = 0.76;
+      this.updateDayNight(0);
+    }
+
+    const smoothstep = (value: number) => {
+      const t = Math.max(0, Math.min(1, value));
+      return t * t * (3 - 2 * t);
+    };
+    const fadeIn = smoothstep(sleep.elapsed / 1.15);
+    const fadeOut = smoothstep((sleep.elapsed - sleep.wakeStart) / (sleep.duration - sleep.wakeStart));
+    if (this.sleepOverlay) this.sleepOverlay.style.opacity = String(0.98 * fadeIn * (1 - fadeOut));
+
+    if (sleep.elapsed >= sleep.duration) {
+      this.bedSleepAnimation = null;
+      if (this.sleepOverlay) this.sleepOverlay.style.opacity = '0';
+      this.onToast?.('Sabah oldu! Uyandın.');
+      this.onHUDUpdate?.();
+    }
+  }
+
   private updateInteraction(dt: number) {
-    if (this.isDead || this.isPaused) return;
+    if (this.isDead || this.isPaused || this.bedSleepAnimation) return;
 
     const eye = this.getEyePos();
     const dir = this.getLookDir();
@@ -2438,12 +2544,10 @@ export class MinecraftEngine {
         return;
       }
 
-      // Bed interaction: sleep only at night, then advance to sunrise.
+      // Sleep is available only at night; the animation advances to sunrise after its sleep interval.
       if (isBedBlock(hit.id)) {
         if (this.timeOfDay >= 0.25 && this.timeOfDay <= 0.75) {
-          this.timeOfDay = 0.76;
-          this.onToast?.('Uyudun. Sabah oldu!');
-          Sound.click();
+          this.beginBedSleep(hit);
         } else {
           this.onToast?.('Sadece gece uyuyabilirsin.');
         }
@@ -3207,15 +3311,19 @@ export class MinecraftEngine {
     }
 
     if (!this.isPaused && !this.isDead) {
-      this.updatePlayer(dt);
-      this.updateInteraction(dt);
-      this.updateMobs(dt);
-      this.updateRemotePlayers(dt);
-      this.updateDrops(dt);
-      this.updateParticles(dt);
-      this.updateDayNight(dt);
-      this.updateTorchLights(dt);
-      this.tickFurnaces(dt);
+      if (this.bedSleepAnimation) {
+        this.updateBedSleep(dt);
+      } else {
+        this.updatePlayer(dt);
+        this.updateInteraction(dt);
+        this.updateMobs(dt);
+        this.updateRemotePlayers(dt);
+        this.updateDrops(dt);
+        this.updateParticles(dt);
+        this.updateDayNight(dt);
+        this.updateTorchLights(dt);
+        this.tickFurnaces(dt);
+      }
     }
 
     this.updateWorldBorder(dt);
@@ -3350,12 +3458,45 @@ export class MinecraftEngine {
       this.camera.position.set(camX, camY, camZ);
       this.camera.lookAt(eye.x, eye.y, eye.z);
     }
+
+    const sleep = this.bedSleepAnimation;
+    if (sleep) {
+      const smoothstep = (value: number) => {
+        const t = Math.max(0, Math.min(1, value));
+        return t * t * (3 - 2 * t);
+      };
+      const enterPose = smoothstep(sleep.elapsed / 1.15);
+      const wakePose = smoothstep((sleep.elapsed - sleep.wakeStart) / (sleep.duration - sleep.wakeStart));
+      const pose = enterPose * (1 - wakePose);
+      const yawDelta = Math.atan2(
+        Math.sin(sleep.targetYaw - sleep.startRotation.y),
+        Math.cos(sleep.targetYaw - sleep.startRotation.y),
+      );
+
+      this.camera.position.copy(sleep.startPosition).lerp(sleep.targetPosition, pose);
+      this.camera.rotation.set(
+        THREE.MathUtils.lerp(sleep.startRotation.x, sleep.targetPitch, pose),
+        sleep.startRotation.y + yawDelta * pose,
+        THREE.MathUtils.lerp(sleep.startRotation.z, sleep.targetRoll, pose),
+        'YXZ',
+      );
+      this.handGroup.visible = false;
+      if (this.isThirdPerson) {
+        this.donkey3P.visible = true;
+        this.donkey3P.position.set(sleep.centerX, sleep.bedY + 0.04, sleep.centerZ);
+        this.donkey3P.rotation.y = sleep.targetYaw + Math.PI;
+        this.donkey3P.rotation.z = -Math.PI / 2 * pose;
+      } else {
+        this.donkey3P.visible = false;
+      }
+    }
   }
 
   // ================= INPUT LISTENERS =================
   private setupListeners() {
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      if (this.bedSleepAnimation) return;
       this.keys[e.code] = true;
 
       if (!this.isPaused && !this.isDead) {
@@ -3410,7 +3551,7 @@ export class MinecraftEngine {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (this.isPaused || this.isDead || this.isGUIOpen) return;
+      if (this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
       if ((e.target as HTMLElement)?.closest('.mc-panel, .mc-slot, .mc-btn, input, select, button')) {
         return;
       }
@@ -3437,14 +3578,14 @@ export class MinecraftEngine {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.isPointerLocked || this.isPaused || this.isDead || this.isGUIOpen) return;
+      if (!this.isPointerLocked || this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
       const s = this.mouseSensitivity * 0.0022;
       this.yaw -= e.movementX * s;
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - e.movementY * s));
     });
 
     window.addEventListener('wheel', (e) => {
-      if (this.isPaused || this.isDead || this.isGUIOpen) return;
+      if (this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
       this.selectedSlot = (this.selectedSlot + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
       this.updateHeldItemModel();
       this.onHUDUpdate?.();
@@ -3458,7 +3599,7 @@ export class MinecraftEngine {
 
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
-      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode) {
+      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode && !this.bedSleepAnimation) {
         this.isPaused = true;
         this.mouseLeft = false;
         this.mouseRight = false;
