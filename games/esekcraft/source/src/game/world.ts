@@ -323,18 +323,6 @@ export class VoxelWorld {
       }
     }, 0, 36, 'Arazi katmanları oluşturuluyor...');
 
-    // Carve deterministic underground cave pockets and tunnels below the surface.
-    await processRows(2, SZ - 2, (z) => {
-      for (let x = 2; x < SX - 2; x++) {
-        const surface = this.getTopSolid(x, z);
-        for (let y = 4; y < Math.min(surface - 2, SY - 4); y++) {
-          const tunnel = Math.sin(x * 0.29 + y * 0.61 + z * 0.37 + this.seed * 0.0001);
-          const chamber = Math.sin(x * 0.13 + y * 0.21 + z * 0.17 + this.seed * 0.00007);
-          if (tunnel > 0.78 && chamber > -0.25) this.data[IDX(x, y, z)] = BlockType.AIR;
-        }
-      }
-    }, 36, 60, 'Mağaralar ve maden damarları hazırlanıyor...');
-
     // Trees
     await processRows(3, SZ - 3, (z) => {
       for (let x = 3; x < SX - 3; x++) {
@@ -346,7 +334,7 @@ export class VoxelWorld {
           }
         }
       }
-    }, 60, 72, 'Ağaçlar ve bitki örtüsü yükleniyor...');
+    }, 36, 72, 'Ağaçlar ve bitki örtüsü yükleniyor...');
 
     // Carve after vegetation so no tree trunk can block the cave mouth.
     this.carveSurfaceCaveEntrance();
