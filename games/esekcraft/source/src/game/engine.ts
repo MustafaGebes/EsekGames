@@ -706,20 +706,18 @@ export class MinecraftEngine {
       this.handGroup.add(door);
     // Sheared wool is placeable as a full block, so show the full block model in hand too.
     } else if (id === ItemType.WHITE_WOOL) {
-      const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
-      this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
-      this.setupMeshUVs(geo, BlockType.WHITE_WOOL_BLOCK);
+      const blockModel = this.createHeldBlockModel(BlockType.WHITE_WOOL_BLOCK);
+      this.heldItemMesh = blockModel as unknown as THREE.Mesh;
       this.heldItemMesh.position.set(-0.02, 0.15, -0.06);
       this.heldItemMesh.rotation.set(0.2, -0.45, 0.15);
-      this.handGroup.add(this.heldItemMesh);
-    // If it's a block: render its own atlas-textured miniature block.
+      this.handGroup.add(blockModel);
+    // All block items get a larger hand model with their own per-face atlas texture.
     } else if (BLOCK_DEFS[id] && Number(id) < 100 && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
-      const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
-      this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
-      this.setupMeshUVs(geo, id);
+      const blockModel = this.createHeldBlockModel(id);
+      this.heldItemMesh = blockModel as unknown as THREE.Mesh;
       this.heldItemMesh.position.set(-0.02, 0.15, -0.06);
       this.heldItemMesh.rotation.set(0.2, -0.45, 0.15);
-      this.handGroup.add(this.heldItemMesh);
+      this.handGroup.add(blockModel);
     } else {
       // It's a tool or item: authentic Minecraft voxel design
       const def = ITEM_DEFS[id];
@@ -1003,6 +1001,40 @@ export class MinecraftEngine {
       this.heldItemMesh = toolGroup as unknown as THREE.Mesh;
       this.handGroup.add(this.heldItemMesh);
     }
+  }
+
+  private createHeldBlockModel(blockId: AnyItemId): THREE.Group {
+    const model = new THREE.Group();
+
+    // The bed has a recognizable mattress/pillow/headboard silhouette instead of a cube.
+    if (blockId === BlockType.BED) {
+      const wood = new THREE.MeshLambertMaterial({ color: 0x80512f });
+      const blanket = new THREE.MeshLambertMaterial({ color: 0xb93a45 });
+      const pillow = new THREE.MeshLambertMaterial({ color: 0xf1e8d7 });
+      const addPart = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+        const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        part.position.set(x, y, z);
+        model.add(part);
+      };
+      addPart(0.30, 0.055, 0.24, wood, 0, 0.015, 0);
+      addPart(0.30, 0.115, 0.24, blanket, 0, 0.10, 0);
+      addPart(0.095, 0.065, 0.225, pillow, -0.095, 0.19, 0);
+      addPart(0.035, 0.27, 0.27, wood, -0.145, 0.11, 0);
+      addPart(0.035, 0.15, 0.27, wood, 0.145, 0.065, 0);
+      for (const x of [-0.12, 0.12]) {
+        for (const z of [-0.09, 0.09]) addPart(0.035, 0.10, 0.035, wood, x, -0.045, z);
+      }
+      return model;
+    }
+
+    // Grass, dirt, stone, logs, ores and utility blocks all use their own face tiles.
+    // This keeps grass-top/dirt-side and log-endgrain orientation recognizable in hand.
+    const size = 0.30;
+    const geometry = new THREE.BoxGeometry(size, size, size);
+    const cube = new THREE.Mesh(geometry, this.worldMaterial);
+    this.setupMeshUVs(geometry, blockId);
+    model.add(cube);
+    return model;
   }
 
   private setupMeshUVs(geo: THREE.BoxGeometry, blockId: AnyItemId) {

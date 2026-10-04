@@ -13,7 +13,7 @@
 `source/src/game/engine.ts` içindeki `updateHeldItemModel()` seçili eşyanın her değişiminde ayrı bir 3B görsel oluşturur:
 
 - Araçlar: kazma, balta, kürek ve kılıç geometrileri; tahta/taş/demir/elmas malzemeleri farklı renklerle gösterilir.
-- Bloklar: ilgili atlas dokusunu kullanan minyatür blok modeli; meşale kendi çubuk/alev modeliyle, meşe kapı ise çerçeveli ince kapı modeliyle gösterilir.
+- Bloklar: her sıradan blok, tanınması için 0.30 boyutlu atlas-dokulu küp olarak tutulur; çim üstü/toprak yanı, kütük uç kesiti ve çalışma masası/fırın/sandık ön yüzleri kendi yüz dokularını korur. Yatak kendi yatak/yastık/başlık geometrisine, meşale çubuk/alev modeline, meşe kapı ise çerçeveli ince kapı modeline sahiptir.
 - Malzemeler: kömür/odun kömürü, demir/altın külçe, ham demir/altın ve çakmak taşı birbirinden ayrı şekil ve renkler alır.
 - Yiyecekler: ekmek, elma ve sekiz çiğ/pişmiş et türü ayrı biçim/renk detaylarına sahiptir.
 - Diğerleri: deri, tüy, makas ve her zırh parçası kendi siluetini taşır. Yerleştirilebilir yün eşyası elde küçük bir yığın değil, gerçek yün blok dokusunu kullanan tam küp model olarak gösterilir.
