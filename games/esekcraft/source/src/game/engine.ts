@@ -91,7 +91,10 @@ export class MinecraftEngine {
   // Player & Models
   public donkey3P: THREE.Group;
   public handGroup: THREE.Group;
+  public offhandHandGroup: THREE.Group;
   public heldItemMesh: THREE.Mesh | null = null;
+  public offhandItemMesh: THREE.Mesh | null = null;
+  private isBuildingOffhandItemModel = false;
   public isThirdPerson = false;
   public fov = 75;
   public mouseSensitivity = 1.0;
@@ -138,6 +141,7 @@ export class MinecraftEngine {
   public breakingBlock: { x: number; y: number; z: number } | null = null;
   public breakProgress = 0;
   public swingTimer = -1;
+  public offhandSwingTimer = -1;
   public placeCooldown = 0;
   public fallStartY = 0;
   public walkPhase = 0;
@@ -198,6 +202,7 @@ export class MinecraftEngine {
   private animFrameId = 0;
   private torchGroup = new THREE.Group();
   private torchLights: THREE.PointLight[] = [];
+  private heldTorchLights: THREE.PointLight[] = [];
   private torchTime = 0;
 
   constructor(canvasContainer: HTMLElement, meta?: WorldMeta) {
@@ -399,7 +404,18 @@ export class MinecraftEngine {
 
     this.handGroup = this.createFirstPersonHand();
     this.camera.add(this.handGroup);
+    this.offhandHandGroup = this.createFirstPersonHand();
+    this.offhandHandGroup.position.x = -0.36;
+    this.offhandHandGroup.scale.x = -1;
+    this.offhandHandGroup.visible = false;
+    this.camera.add(this.offhandHandGroup);
     this.scene.add(this.camera);
+    this.heldTorchLights = [0, 1].map(() => {
+      const light = new THREE.PointLight(0xffa33a, 1.25, 7, 2);
+      light.visible = false;
+      this.scene.add(light);
+      return light;
+    });
 
     // Load Keybindings from localStorage if available
     try {
@@ -411,6 +427,7 @@ export class MinecraftEngine {
 
     // Load or Initialize Player State
     this.initPlayerState(meta);
+    this.updateHeldItemModel();
 
     // Event Listeners
     this.setupListeners();
@@ -686,6 +703,7 @@ export class MinecraftEngine {
     });
     this.mobs = [];
     this.clearRemotePlayers();
+    this.heldTorchLights.forEach((light) => this.scene.remove(light));
     this.renderer.dispose();
   }
 
@@ -773,7 +791,14 @@ export class MinecraftEngine {
     }
 
     const currentStack = this.inventory[this.selectedSlot];
-    if (!currentStack) return;
+    if (!currentStack) {
+      if (this.isBuildingOffhandItemModel) this.offhandItemMesh = null;
+      else {
+        this.rebuildOffhandHeldItemModel();
+        this.updateHeldTorchLights();
+      }
+      return;
+    }
 
     const id = currentStack.id;
 
@@ -1106,6 +1131,56 @@ export class MinecraftEngine {
       toolGroup.rotation.set(-0.16, 0.32, -0.22);
       this.heldItemMesh = toolGroup as unknown as THREE.Mesh;
       this.handGroup.add(this.heldItemMesh);
+    }
+    if (this.isBuildingOffhandItemModel) {
+      this.offhandItemMesh = this.heldItemMesh;
+    } else {
+      this.rebuildOffhandHeldItemModel();
+      this.updateHeldTorchLights();
+    }
+  }
+
+  private rebuildOffhandHeldItemModel() {
+    const selectedStack = this.inventory[this.selectedSlot];
+    const activeHandGroup = this.handGroup;
+    const activeHeldItem = this.heldItemMesh;
+    const wasBuildingOffhand = this.isBuildingOffhandItemModel;
+    this.isBuildingOffhandItemModel = true;
+    this.inventory[this.selectedSlot] = this.offhand;
+    this.handGroup = this.offhandHandGroup;
+    this.heldItemMesh = this.offhandItemMesh;
+    try {
+      this.updateHeldItemModel();
+    } finally {
+      this.inventory[this.selectedSlot] = selectedStack;
+      this.handGroup = activeHandGroup;
+      this.heldItemMesh = activeHeldItem;
+      this.isBuildingOffhandItemModel = wasBuildingOffhand;
+    }
+  }
+
+  private updateHeldTorchLights() {
+    if (this.heldTorchLights.length < 2) return;
+    this.camera.updateMatrixWorld(true);
+    if (this.isThirdPerson) this.donkey3P.updateMatrixWorld(true);
+    const stacks = [this.inventory[this.selectedSlot], this.offhand];
+    const groups = [this.handGroup, this.offhandHandGroup];
+    for (let index = 0; index < 2; index++) {
+      const light = this.heldTorchLights[index];
+      const heldTorch = stacks[index]?.id === BlockType.TORCH && (stacks[index]?.count ?? 0) > 0;
+      light.visible = !!heldTorch && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.bedSleepAnimation;
+      if (!light.visible) continue;
+      const point = this.isThirdPerson
+        ? new THREE.Vector3(index === 0 ? 0.28 : -0.28, 1.05, 0.3)
+        : new THREE.Vector3(0.02, 0.3, -0.08);
+      if (this.isThirdPerson) {
+        light.position.copy(this.donkey3P.localToWorld(point));
+      } else {
+        groups[index].updateMatrixWorld(true);
+        light.position.copy(groups[index].localToWorld(point));
+      }
+      const flicker = Math.sin(this.torchTime * 11) * 0.08 + Math.sin(this.torchTime * 23) * 0.04;
+      light.intensity = 1.25 + flicker;
     }
   }
 
@@ -2589,14 +2664,13 @@ export class MinecraftEngine {
 
     // Food can be eaten in open air too; Minecraft does not require a block target.
     if (this.mouseRight && this.placeCooldown <= 0 && !hit) {
-      const held = this.inventory[this.selectedSlot];
-      const food = held ? ITEM_DEFS[held.id]?.food : null;
-      if (held && food && (this.hunger < this.maxHunger || this.hp < this.maxHp)) {
+      const mainHand = this.inventory[this.selectedSlot];
+      if (mainHand && this.tryEatHeldFood(mainHand, 'main')) {
         this.placeCooldown = 0.35;
-        this.hunger = Math.min(this.maxHunger, this.hunger + food.foodPoints);
-        this.hp = Math.min(this.maxHp, this.hp + food.healHp);
-        held.count--; if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-        Sound.eat(); this.updateHeldItemModel(); this.onHUDUpdate?.();
+        return;
+      }
+      if (this.offhand && this.tryEatHeldFood(this.offhand, 'offhand')) {
+        this.placeCooldown = 0.35;
         return;
       }
     }
@@ -2649,29 +2723,24 @@ export class MinecraftEngine {
         }
         return;
       }
-      // Check food consumption
-      const held = this.inventory[this.selectedSlot];
-      if (held) {
-        const itemDef = ITEM_DEFS[held.id];
-        if (itemDef?.food && (this.hunger < this.maxHunger || this.hp < this.maxHp)) {
-          this.hunger = Math.min(this.maxHunger, this.hunger + itemDef.food.foodPoints);
-          this.hp = Math.min(this.maxHp, this.hp + itemDef.food.healHp);
-          held.count--;
-          if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-          Sound.eat();
-          this.onHUDUpdate?.();
-          return;
-        }
-      }
+      const mainHand = this.inventory[this.selectedSlot];
+      if (mainHand && this.tryEatHeldFood(mainHand, 'main')) return;
+      if (mainHand && this.tryPlaceBlock(hit, mainHand, 'main')) return;
 
-      // Place Block
-      this.tryPlaceBlock(hit);
+      // Java-style fallback: only try the offhand after the main-hand use fails.
+      const offhand = this.offhand;
+      if (offhand && this.tryEatHeldFood(offhand, 'offhand')) return;
+      if (offhand) this.tryPlaceBlock(hit, offhand, 'offhand');
     }
 
     // Swing arm timer
     if (this.swingTimer >= 0) {
       this.swingTimer += dt;
       if (this.swingTimer > 0.3) this.swingTimer = -1;
+    }
+    if (this.offhandSwingTimer >= 0) {
+      this.offhandSwingTimer += dt;
+      if (this.offhandSwingTimer > 0.3) this.offhandSwingTimer = -1;
     }
   }
 
@@ -2842,16 +2911,43 @@ export class MinecraftEngine {
       getBlockOffsetY(above) === 0 && getBlockHeight(above) >= 1;
   }
 
-  private tryPlaceDoor(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
+  private consumeHandStack(held: ItemStack, hand: 'main' | 'offhand') {
+    if (this.gameMode !== 'survival') return;
+    held.count--;
+    if (held.count <= 0) {
+      if (hand === 'offhand') this.offhand = null;
+      else this.inventory[this.selectedSlot] = null;
+    }
+    this.updateHeldItemModel();
+    this.onHUDUpdate?.();
+  }
+
+  private swingHand(hand: 'main' | 'offhand') {
+    if (hand === 'offhand') this.offhandSwingTimer = 0;
+    else this.swingTimer = 0;
+  }
+
+  private tryEatHeldFood(held: ItemStack, hand: 'main' | 'offhand'): boolean {
+    const food = ITEM_DEFS[held.id]?.food;
+    if (!food || (this.hunger >= this.maxHunger && this.hp >= this.maxHp)) return false;
+    this.hunger = Math.min(this.maxHunger, this.hunger + food.foodPoints);
+    this.hp = Math.min(this.maxHp, this.hp + food.healHp);
+    this.swingHand(hand);
+    this.consumeHandStack(held, hand);
+    Sound.eat();
+    return true;
+  }
+
+  private tryPlaceDoor(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack, hand: 'main' | 'offhand'): boolean {
     const x = hit.x + hit.nx;
     const y = hit.y + hit.ny;
     const z = hit.z + hit.nz;
-    if (!inBounds(x, y, z) || !inBounds(x, y + 1, z)) return;
-    if (this.world.getBlock(x, y, z) !== BlockType.AIR || this.world.getBlock(x, y + 1, z) !== BlockType.AIR) return;
+    if (!inBounds(x, y, z) || !inBounds(x, y + 1, z)) return false;
+    if (this.world.getBlock(x, y, z) !== BlockType.AIR || this.world.getBlock(x, y + 1, z) !== BlockType.AIR) return false;
 
     const support = this.world.getBlockPhys(x, y - 1, z);
     const supportDef = BLOCK_DEFS[support];
-    if (!supportDef || supportDef.transparent || getBlockHeight(support) < 1) return;
+    if (!supportDef || supportDef.transparent || getBlockHeight(support) < 1) return false;
 
     const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as DoorFacing;
     const partner = findAdjacentDoorPair(
@@ -2868,7 +2964,7 @@ export class MinecraftEngine {
       cellY < this.pos.y + this.getPlayerHeight() &&
       z + doorBounds.maxZ > this.pos.z - this.PW &&
       z + doorBounds.minZ < this.pos.z + this.PW;
-    if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return;
+    if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return false;
 
     const bottomId = getDoorBlockId(false, facing, false, hinge);
     const topId = getDoorBlockId(true, facing, false, hinge);
@@ -2891,16 +2987,12 @@ export class MinecraftEngine {
     this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
     Sound.placeBlock('wood');
-    this.swingTimer = 0;
-    if (this.gameMode === 'survival') {
-      held.count--;
-      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-      this.updateHeldItemModel();
-      this.onHUDUpdate?.();
-    }
+    this.swingHand(hand);
+    this.consumeHandStack(held, hand);
+    return true;
   }
 
-  private tryPlaceBed(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
+  private tryPlaceBed(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack, hand: 'main' | 'offhand'): boolean {
     const footX = hit.x + hit.nx;
     const footY = hit.y + hit.ny;
     const footZ = hit.z + hit.nz;
@@ -2911,15 +3003,15 @@ export class MinecraftEngine {
       : { x: 1, z: 0 };
     const headX = footX + headOffset.x;
     const headZ = footZ + headOffset.z;
-    if (!inBounds(footX, footY, footZ) || !inBounds(headX, footY, headZ)) return;
-    if (this.world.getBlock(footX, footY, footZ) !== BlockType.AIR || this.world.getBlock(headX, footY, headZ) !== BlockType.AIR) return;
+    if (!inBounds(footX, footY, footZ) || !inBounds(headX, footY, headZ)) return false;
+    if (this.world.getBlock(footX, footY, footZ) !== BlockType.AIR || this.world.getBlock(headX, footY, headZ) !== BlockType.AIR) return false;
 
     const playerHeight = this.getPlayerHeight();
     const intersectsPlayer = (x: number, z: number) =>
       x + 1 > this.pos.x - this.PW && x < this.pos.x + this.PW &&
       footY + 0.5625 > this.pos.y && footY < this.pos.y + playerHeight &&
       z + 1 > this.pos.z - this.PW && z < this.pos.z + this.PW;
-    if (intersectsPlayer(footX, footZ) || intersectsPlayer(headX, headZ)) return;
+    if (intersectsPlayer(footX, footZ) || intersectsPlayer(headX, headZ)) return false;
 
     // Java Edition beds use two horizontal cells and need room, but no floor support.
     const footId = getBedBlockId(false, facing);
@@ -2930,30 +3022,22 @@ export class MinecraftEngine {
     this.onBlockChanged?.({ x: headX, y: footY, z: headZ, blockId: headId });
     this.rebuildVisibleWorld();
     Sound.placeBlock('wood');
-    this.swingTimer = 0;
-    if (this.gameMode === 'survival') {
-      held.count--;
-      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-      this.updateHeldItemModel();
-      this.onHUDUpdate?.();
-    }
+    this.swingHand(hand);
+    this.consumeHandStack(held, hand);
+    return true;
   }
 
-  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number }) {
-    const held = this.inventory[this.selectedSlot];
-    if (!held) return;
+  private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number }, held: ItemStack, hand: 'main' | 'offhand'): boolean {
 
     // White wool is an inventory item but places as the real wool block.
     let placeId: AnyItemId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
     // Materials such as leather and feathers are not placeable blocks.
-    if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return;
+    if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return false;
     if (placeId === BlockType.OAK_DOOR) {
-      this.tryPlaceDoor(hit, held);
-      return;
+      return this.tryPlaceDoor(hit, held, hand);
     }
     if (placeId === BlockType.BED) {
-      this.tryPlaceBed(hit, held);
-      return;
+      return this.tryPlaceBed(hit, held, hand);
     }
 
     const heldSlabBase = getSlabBaseBlock(placeId as BlockType);
@@ -2969,20 +3053,16 @@ export class MinecraftEngine {
         hit.y < this.pos.y + this.getPlayerHeight() &&
         hit.z + 1 > this.pos.z - this.PW &&
         hit.z < this.pos.z + this.PW;
-      if (intersectsPlayer) return;
+      if (intersectsPlayer) return false;
       const fullBlock = heldSlabBase === BlockType.STONE_SLAB ? BlockType.STONE : BlockType.OAK_PLANKS;
       this.world.setBlock(hit.x, hit.y, hit.z, fullBlock);
       this.onBlockChanged?.({ x: hit.x, y: hit.y, z: hit.z, blockId: fullBlock });
       this.rebuildVisibleWorld();
       this.rebuildTorchVisuals();
       Sound.placeBlock(heldSlabBase === BlockType.OAK_PLANKS_SLAB ? 'wood' : 'stone');
-      this.swingTimer = 0;
-      if (this.gameMode === 'survival') {
-        held.count--;
-        if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-        this.onHUDUpdate?.();
-      }
-      return;
+      this.swingHand(hand);
+      this.consumeHandStack(held, hand);
+      return true;
     }
 
     if (isSlabBlock(placeId as BlockType)) {
@@ -2997,8 +3077,8 @@ export class MinecraftEngine {
     const py = hit.y + hit.ny;
     const pz = hit.z + hit.nz;
 
-    if (!inBounds(px, py, pz)) return;
-    if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return;
+    if (!inBounds(px, py, pz)) return false;
+    if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return false;
     // Check collision with player
     const intersectsPlayer =
       px + 1 > this.pos.x - this.PW &&
@@ -3008,7 +3088,7 @@ export class MinecraftEngine {
       pz + 1 > this.pos.z - this.PW &&
       pz < this.pos.z + this.PW;
 
-    if (intersectsPlayer && held.id !== BlockType.TORCH) return;
+    if (intersectsPlayer && held.id !== BlockType.TORCH) return false;
 
     // Place block in world
     if (placeId === BlockType.CHEST) this.world.prepareChestPlacement(px, py, pz);
@@ -3022,14 +3102,10 @@ export class MinecraftEngine {
     if (placeId === BlockType.OAK_LOG || placeId === BlockType.OAK_PLANKS || placeId === BlockType.OAK_PLANKS_SLAB || placeId === BlockType.OAK_PLANKS_SLAB_TOP || placeId === BlockType.CRAFTING_TABLE || placeId === BlockType.CHEST)
       mat = 'wood';
     Sound.placeBlock(mat);
-    this.swingTimer = 0;
+    this.swingHand(hand);
 
-    if (this.gameMode === 'survival') {
-      held.count--;
-      if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-      this.updateHeldItemModel();
-      this.onHUDUpdate?.();
-    }
+    this.consumeHandStack(held, hand);
+    return true;
   }
 
   public addXP(amount: number) {
@@ -3485,6 +3561,7 @@ export class MinecraftEngine {
 
     this.updateWorldBorder(dt);
     this.updateCameraAndModels(dt);
+    this.updateHeldTorchLights();
     // Recenter the visible chunk ring before the player reaches its edge.
     // This makes nearby chunks appear while walking instead of waiting for a hard chunk boundary.
     if (Math.hypot(this.pos.x - this.visibleMeshCenter.x, this.pos.z - this.visibleMeshCenter.z) > 12) this.rebuildVisibleWorldAdaptive();
@@ -3537,6 +3614,7 @@ export class MinecraftEngine {
       this.camera.rotation.set(this.pitch, this.yaw, 0);
       this.donkey3P.visible = false;
       this.handGroup.visible = true;
+      this.offhandHandGroup.visible = !!this.offhand && this.offhand.count > 0;
 
       // First-person donkey hoof bobbing and authentic Minecraft swing
       const baseRx = 0.12;
@@ -3571,10 +3649,28 @@ export class MinecraftEngine {
       this.handGroup.position.x = 0.36 + Math.cos(this.walkPhase * 0.5) * 0.015 * walkFactor;
       this.handGroup.position.y = -0.28 + Math.sin(this.walkPhase) * 0.02 * walkFactor + posOffsetY;
       this.handGroup.position.z = -0.48 + posOffsetZ;
+      let offRx = baseRx;
+      let offRy = baseRy;
+      let offRz = baseRz;
+      let offPosY = 0;
+      let offPosZ = 0;
+      if (this.offhandSwingTimer >= 0) {
+        const offSwing = Math.sin((this.offhandSwingTimer / 0.28) * Math.PI);
+        offRx = baseRx - offSwing * 0.95;
+        offRy = baseRy - offSwing * 0.55;
+        offRz = baseRz + offSwing * 0.65;
+        offPosY = -offSwing * 0.05;
+        offPosZ = -offSwing * 0.07;
+      }
+      this.offhandHandGroup.rotation.set(offRx, offRy, offRz);
+      this.offhandHandGroup.position.x = -0.36 - Math.cos(this.walkPhase * 0.5) * 0.015 * walkFactor;
+      this.offhandHandGroup.position.y = -0.28 + Math.sin(this.walkPhase) * 0.02 * walkFactor + offPosY;
+      this.offhandHandGroup.position.z = -0.48 + offPosZ;
     } else {
       // 3rd Person
       this.donkey3P.visible = true;
       this.handGroup.visible = false;
+      this.offhandHandGroup.visible = false;
 
       this.donkey3P.position.set(this.pos.x, this.pos.y + (this.isDead ? 0.22 : (this.isSneaking ? -0.22 : 0)), this.pos.z);
       this.donkey3P.rotation.y = this.yaw + Math.PI;
@@ -3638,6 +3734,7 @@ export class MinecraftEngine {
         'YXZ',
       );
       this.handGroup.visible = false;
+      this.offhandHandGroup.visible = false;
       if (this.isThirdPerson) {
         this.donkey3P.visible = true;
         this.donkey3P.position.set(sleep.centerX, sleep.bedY + 0.04, sleep.centerZ);
@@ -3683,7 +3780,7 @@ export class MinecraftEngine {
           }
         }
         // Swap with offhand
-        else if (e.code === this.keyBindings.offhand) {
+        else if (e.code === this.keyBindings.offhand && !e.repeat) {
           e.preventDefault();
           const tmp = this.inventory[this.selectedSlot];
           this.inventory[this.selectedSlot] = this.offhand;

@@ -767,44 +767,57 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
             </div>
 
             {/* Hotbar (9 slots) */}
-            <div className="flex bg-[#000000]/40 p-1 border-2 border-[#1a1a1a]">
-              {engine.inventory.slice(0, 9).map((stack, idx) => (
-                <div
-                  key={idx}
-                  className={`mc-slot ${idx === engine.selectedSlot ? 'active-slot' : ''}`}
-                >
-                  {stack && (
-                    <>
-                      <img
-                        src={getItemIcon(stack.id)}
-                        alt={getItemName(stack.id)}
-                        className="w-8 h-8 pointer-events-none pixelated"
-                      />
-                      {stack.count > 1 && (
-                        <span className="absolute right-1 bottom-0 text-white font-mono font-bold text-xs pointer-events-none drop-shadow-[2px_2px_0_#222]">
-                          {stack.count}
-                        </span>
-                      )}
-                      {stack.durability !== undefined && stack.maxDurability && (
-                        <div className="absolute left-1 bottom-0.5 right-1 h-1 bg-black/70 pointer-events-none">
-                          <div
-                            className="h-full"
-                            style={{
-                              width: `${Math.round((stack.durability / stack.maxDurability) * 100)}%`,
-                              backgroundColor:
-                                stack.durability / stack.maxDurability > 0.5
-                                ? '#22c55e'
-                                : stack.durability / stack.maxDurability > 0.25
-                                ? '#eab308'
-                                : '#ef4444',
-                            }}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
+            <div className="flex items-end gap-2">
+              {engine.offhand && (
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-[9px] font-mono text-white/80 drop-shadow-[1px_1px_0_#000]">SOL EL · F</span>
+                  <div className="mc-slot relative">
+                    <img src={getItemIcon(engine.offhand.id)} alt={getItemName(engine.offhand.id)} className="w-8 h-8 pointer-events-none pixelated" />
+                    {engine.offhand.count > 1 && (
+                      <span className="absolute right-1 bottom-0 text-white font-mono font-bold text-xs pointer-events-none drop-shadow-[2px_2px_0_#222]">{engine.offhand.count}</span>
+                    )}
+                  </div>
                 </div>
-              ))}
+              )}
+              <div className="flex bg-[#000000]/40 p-1 border-2 border-[#1a1a1a]">
+                {engine.inventory.slice(0, 9).map((stack, idx) => (
+                  <div
+                    key={idx}
+                    className={`mc-slot ${idx === engine.selectedSlot ? 'active-slot' : ''}`}
+                  >
+                    {stack && (
+                      <>
+                        <img
+                          src={getItemIcon(stack.id)}
+                          alt={getItemName(stack.id)}
+                          className="w-8 h-8 pointer-events-none pixelated"
+                        />
+                        {stack.count > 1 && (
+                          <span className="absolute right-1 bottom-0 text-white font-mono font-bold text-xs pointer-events-none drop-shadow-[2px_2px_0_#222]">
+                            {stack.count}
+                          </span>
+                        )}
+                        {stack.durability !== undefined && stack.maxDurability && (
+                          <div className="absolute left-1 bottom-0.5 right-1 h-1 bg-black/70 pointer-events-none">
+                            <div
+                              className="h-full"
+                              style={{
+                                width: `${Math.round((stack.durability / stack.maxDurability) * 100)}%`,
+                                backgroundColor:
+                                  stack.durability / stack.maxDurability > 0.5
+                                  ? '#22c55e'
+                                  : stack.durability / stack.maxDurability > 0.25
+                                  ? '#eab308'
+                                  : '#ef4444',
+                              }}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Selected item label tooltip */}
@@ -853,7 +866,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               <div className="mt-2">
                 <div className="text-[10px] font-bold text-[#444444] mb-0.5">Sol El</div>
                 {renderSlot(engine.offhand, (e) =>
-                  handleSlotClick(engine.offhand, (s) => (engine.offhand = s), e)
+                  handleSlotClick(engine.offhand, (s) => { engine.offhand = s; engine.updateHeldItemModel(); }, e)
                 )}
               </div>
             </div>
