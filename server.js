@@ -199,6 +199,34 @@ const CITY_DATA = require(path.join(ROOT, "games", "eseksimulator", "city-data.j
 const CITY_ITEMS = new Map(CITY_DATA.items.map(item => [item.id, item]));
 const CITY_SHOPS = new Map(CITY_DATA.shops.map(shop => [shop.id, shop]));
 const CITY_CITIZENS = new Map(CITY_DATA.citizens.map(citizen => [citizen.id, citizen]));
+const CITY_WALL_COLLIDERS = [];
+for (let ix = 0; ix < 6; ix += 1) {
+    for (let iz = 0; iz < 6; iz += 1) {
+        for (let index = 0; index < 4; index += 1) {
+            const slot = CITY_DATA.getBuildingSlot(`${ix}:${iz}:${index}`);
+            if (slot) CITY_WALL_COLLIDERS.push({ minX: slot.x - slot.width / 2 - 0.18, maxX: slot.x + slot.width / 2 + 0.18, minZ: slot.z - slot.depth / 2 - 0.18, maxZ: slot.z + slot.depth / 2 + 0.18 });
+        }
+    }
+}
+function cityLineClear(from, to) {
+    const distance = Math.hypot(to.x - from.x, to.z - from.z);
+    const samples = Math.max(8, Math.ceil(distance / 0.75));
+    for (let index = 1; index < samples; index += 1) {
+        const progress = index / samples;
+        const x = from.x + (to.x - from.x) * progress;
+        const z = from.z + (to.z - from.z) * progress;
+        if (CITY_WALL_COLLIDERS.some(wall => x > wall.minX && x < wall.maxX && z > wall.minZ && z < wall.maxZ)) return false;
+    }
+    return true;
+}
+function nearestCityRoad(value) {
+    return CITY_DATA.roadLines.reduce((best, line) => Math.abs(line - value) < Math.abs(best - value) ? line : best, CITY_DATA.roadLines[0]);
+}
+function policeHasLineOfSight(player) {
+    const direction = player.z >= 0 ? -1 : 1;
+    const policeOrigin = { x: nearestCityRoad(player.x) + 1.35, z: player.z - direction * 4.8 };
+    return cityLineClear(policeOrigin, { x: player.x, z: player.z });
+}
 
 const DATA_DIR = path.join(ROOT, "data");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
@@ -882,7 +910,7 @@ function tickCityGameplay() {
         }
         if (player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
             player.cityNextPoliceAttackAt = now + Math.max(1300, 2250 - player.cityWantedLevel * 150);
-            damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Şehir polisi seni etkisiz hale getirmeye çalışıyor.");
+            if (policeHasLineOfSight(player)) damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Polis kurşunu sana isabet etti.");
         }
     }
 }

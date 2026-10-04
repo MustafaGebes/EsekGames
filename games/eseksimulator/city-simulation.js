@@ -9,6 +9,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     getPlayerPosition = () => null,
     citizens: citizenDefinitions = [],
     shopBuildings = [],
+    isBlocked = () => false,
   } = options;
 
   const signalRoads = roadLines.filter((line) => Math.abs(line) <= 42);
@@ -403,6 +404,52 @@ export function createCitySimulation(THREE, scene, options = {}) {
       if (snapshot) setCitizenState(snapshot);
     }
   }
+  function moveHumanAway(human, target, distance) {
+    const dx = human.root.position.x - target.x;
+    const dz = human.root.position.z - target.z;
+    const length = Math.hypot(dx, dz) || 1;
+    const candidates = [
+      { x: dx / length, z: dz / length },
+      { x: -dz / length, z: dx / length },
+      { x: dz / length, z: -dx / length },
+    ];
+    for (const direction of candidates) {
+      const nx = human.root.position.x + direction.x * distance;
+      const nz = human.root.position.z + direction.z * distance;
+      if (!isBlocked(nx, nz, 0.38)) {
+        human.root.position.x = nx;
+        human.root.position.z = nz;
+        human.root.rotation.y = Math.atan2(direction.x, direction.z);
+        return true;
+      }
+    }
+    return false;
+  }
+  function triggerHumanVehicleImpact(human, impact) {
+    if (!human || human.ragdoll || human.alive === false) return;
+    human.health = Math.max(0, (Number(human.health) || 3) - (impact.vehicle.speed > 6 ? 2 : 1));
+    human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.32);
+    if (human.health <= 0) { human.alive = false; human.root.visible = false; return; }
+    human.ragdoll = { until: elapsed + 1.15, velocity: impact.impulse.clone().multiplyScalar(.32), rotation: (impact.impulse.x - impact.impulse.z) * .18 };
+    human.panicUntil = human.behavior === 'flee' ? elapsed + 4.5 : 0;
+    human.attackUntil = human.behavior === 'attack' ? elapsed + 4.0 : 0;
+  }
+  function updateHumanRagdoll(human, dt) {
+    if (!human.ragdoll) return false;
+    const hit = human.ragdoll;
+    human.root.position.x += hit.velocity.x * dt;
+    human.root.position.z += hit.velocity.z * dt;
+    hit.velocity.multiplyScalar(Math.max(0, 1 - 4.5 * dt));
+    human.root.rotation.z += hit.rotation * dt;
+    human.root.rotation.x = Math.sin(Math.min(1, Math.max(0, (elapsed - (hit.until - 1.15)) / 1.15)) * Math.PI) * 1.05;
+    if (elapsed >= hit.until) {
+      human.root.rotation.x = 0;
+      human.root.rotation.z = 0;
+      human.ragdoll = null;
+    }
+    return true;
+  }
+
   function hitHuman(human) {
     if (!human) return;
     human.hitFlashUntil = Math.max(human.hitFlashUntil || 0, elapsed + 0.28);
@@ -422,14 +469,15 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const target = getPlayerPosition?.();
     for (const person of [...citizens, ...shopkeepers]) {
       if (!person.root.visible) continue;
+      const vehicleImpact = getVehicleImpact(person.root.position, .58);
+      if (vehicleImpact) triggerHumanVehicleImpact(person, vehicleImpact);
+      if (updateHumanRagdoll(person, dt)) continue;
       if (target && person.panicUntil > elapsed) {
         const dx = person.root.position.x - target.x;
         const dz = person.root.position.z - target.z;
         const distance = Math.hypot(dx, dz) || 1;
         const step = 4.2 * dt;
-        person.root.position.x += dx / distance * step;
-        person.root.position.z += dz / distance * step;
-        person.root.rotation.y = Math.atan2(dx, dz);
+        moveHumanAway(person, target, step);
       } else if (target && person.attackUntil > elapsed) {
         person.root.rotation.y = Math.atan2(target.x - person.root.position.x, target.z - person.root.position.z);
       }
@@ -514,7 +562,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     return { ...model, gait: 0 };
   }
   const policeOfficers = [makeOfficer(0), makeOfficer(5)];
-  const policeResponse = { level: 0, roadX: 0, direction: -1, spawned: false };
+  const policeResponse = { level: 0, roadX: 0, direction: -1, spawned: false, exited: false, lastShotAt: 0, lastImpactAt: -Infinity };
 
   function nearestRoadLine(value) {
     return roadLines.reduce((best, line) => Math.abs(line - value) < Math.abs(best - value) ? line : best, roadLines[0]);
@@ -527,6 +575,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
     policeCar.position.set(policeResponse.roadX + 1.35, 0, startZ);
     policeCar.rotation.y = policeResponse.direction > 0 ? 0 : Math.PI;
     policeResponse.spawned = true;
+    policeResponse.exited = false;
+    policeResponse.lastShotAt = 0;
+    policeResponse.lastImpactAt = -Infinity;
     policeOfficers.forEach((officer, index) => {
       officer.root.position.set(policeCar.position.x + (index ? 2.0 : -2.0), 0.02, policeCar.position.z - 1.5);
       officer.root.rotation.y = Math.PI - policeCar.rotation.y;
@@ -552,7 +603,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
     if (!policeResponse.spawned || Math.abs(target.x - policeResponse.roadX) > 23 || Math.abs(target.z - policeCar.position.z) > 45) positionPolice(target);
     const goalZ = target.z - policeResponse.direction * 4.8;
     const delta = goalZ - policeCar.position.z;
-    const move = Math.sign(delta) * Math.min(Math.abs(delta), 12.5 * dt);
+    const approachSpeed = Math.abs(delta) < 18 ? 4.2 : 8.5;
+    const move = Math.sign(delta) * Math.min(Math.abs(delta), approachSpeed * dt);
     policeCar.position.x = policeResponse.roadX + 1.35;
     policeCar.position.z += move;
     policeCar.rotation.y = policeResponse.direction > 0 ? 0 : Math.PI;
@@ -560,7 +612,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
     policeRed.emissiveIntensity = blink ? 2.2 : 0.15;
     policeBlue.emissiveIntensity = blink ? 0.15 : 2.2;
     policeCar.userData.wheels?.forEach((wheel) => { wheel.rotation.x += move * 2; });
-    const arrived = Math.abs(delta) < 7.5;
+    const arrived = Math.abs(delta) < 1.35;
+    if (arrived) policeResponse.exited = true;
     for (let index = 0; index < policeOfficers.length; index += 1) {
       const officer = policeOfficers[index];
       const side = index ? 1 : -1;
@@ -580,11 +633,36 @@ export function createCitySimulation(THREE, scene, options = {}) {
       }
       if (distance > 0.05) officer.root.rotation.y = Math.atan2(dx, dz);
       officer.gait += dt * (arrived && distance > 3.25 ? 10 : 1.5);
-      const aiming = arrived && distance <= 7.0;
+      const aiming = policeResponse.exited && distance <= 8.5;
+      if (aiming && elapsed - policeResponse.lastShotAt > Math.max(.72, 1.45 - policeResponse.level * .08) && !isBlocked(officer.root.position.x, officer.root.position.z, .18)) {
+        policeResponse.lastShotAt = elapsed;
+        spawnPoliceBullet(new THREE.Vector3(officer.root.position.x, 1.35, officer.root.position.z), new THREE.Vector3(target.x, .85, target.z));
+      }
       officer.arms[0].rotation.x = aiming ? -0.9 : Math.sin(officer.gait) * 0.32;
       officer.arms[1].rotation.x = aiming ? -0.75 : -Math.sin(officer.gait) * 0.32;
       officer.legs[0].rotation.x = arrived && distance > 3.25 ? Math.sin(officer.gait) * 0.45 : 0;
       officer.legs[1].rotation.x = arrived && distance > 3.25 ? -Math.sin(officer.gait) * 0.45 : 0;
+    }
+  }
+
+  const policeBullets = [];
+  const policeBulletGeometry = new THREE.SphereGeometry(.055, 6, 5);
+  const policeBulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffd86b, emissive: 0xff8a24 });
+  function spawnPoliceBullet(from, to) {
+    const bullet = new THREE.Mesh(policeBulletGeometry, policeBulletMaterial);
+    bullet.position.copy(from); scene.add(bullet);
+    policeBullets.push({ mesh: bullet, from: from.clone(), to: to.clone(), progress: 0, speed: 32 });
+  }
+  function updatePoliceBullets(dt) {
+    for (let i = policeBullets.length - 1; i >= 0; i -= 1) {
+      const bullet = policeBullets[i];
+      const distance = bullet.from.distanceTo(bullet.to);
+      bullet.progress += dt * bullet.speed / Math.max(distance, .1);
+      const point = bullet.from.clone().lerp(bullet.to, Math.min(1, bullet.progress));
+      if (isBlocked(point.x, point.z, .06) || bullet.progress >= 1) {
+        scene.remove(bullet.mesh); policeBullets.splice(i, 1); continue;
+      }
+      bullet.mesh.position.copy(point);
     }
   }
 
@@ -635,8 +713,11 @@ export function createCitySimulation(THREE, scene, options = {}) {
 
   function getVehicleImpact(position, radius = 0.82) {
     if (!position) return null;
-    for (const vehicle of vehicles) {
-      if (vehicle.lastImpactAt && elapsed - vehicle.lastImpactAt < 1.05) continue;
+    const collisionVehicles = [...vehicles];
+    if (policeCar.visible) collisionVehicles.push({ mesh: policeCar, axis: 'NS', direction: policeResponse.direction, speed: 4.2, isPolice: true });
+    for (const vehicle of collisionVehicles) {
+      const lastImpactAt = vehicle.isPolice ? policeResponse.lastImpactAt : vehicle.lastImpactAt;
+      if (lastImpactAt && elapsed - lastImpactAt < 1.05) continue;
       const yaw = vehicle.mesh.rotation.y;
       const cos = Math.cos(yaw), sin = Math.sin(yaw);
       for (const part of vehicle.mesh.userData.collisionParts || []) {
@@ -646,7 +727,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
         const halfZ = (Math.abs(sin) * part.w + Math.abs(cos) * part.d) / 2 + radius;
         const vertical = position.y + 1.25 >= part.y - part.h / 2 && position.y <= part.y + part.h / 2 + 0.35;
         if (!vertical || Math.abs(position.x - cx) > halfX || Math.abs(position.z - cz) > halfZ) continue;
-        vehicle.lastImpactAt = elapsed;
+        if (vehicle.isPolice) policeResponse.lastImpactAt = elapsed; else vehicle.lastImpactAt = elapsed;
         const direction = vehicle.axis === 'NS' ? new THREE.Vector3(0, 0, vehicle.direction) : new THREE.Vector3(vehicle.direction, 0, 0);
         const away = new THREE.Vector3(position.x - cx, 0, position.z - cz).normalize();
         const impulse = direction.multiplyScalar(vehicle.speed * 1.25 + 3.8).add(away.multiplyScalar(2.2));
@@ -690,15 +771,16 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   function updatePedestrian(pedestrian, dt) {
+    const vehicleImpact = getVehicleImpact(pedestrian.root.position, .58);
+    if (vehicleImpact) triggerHumanVehicleImpact(pedestrian, vehicleImpact);
+    if (updateHumanRagdoll(pedestrian, dt)) return;
     const player = getPlayerPosition?.();
     if (player && pedestrian.panicUntil > elapsed) {
       const dx = pedestrian.root.position.x - player.x;
       const dz = pedestrian.root.position.z - player.z;
       const distance = Math.hypot(dx, dz) || 1;
       const step = 4.8 * dt;
-      pedestrian.root.position.x += dx / distance * step;
-      pedestrian.root.position.z += dz / distance * step;
-      pedestrian.root.rotation.y = Math.atan2(dx, dz);
+      moveHumanAway(pedestrian, player, step);
       pedestrian.walking = true;
     } else if (player && pedestrian.attackUntil > elapsed) {
       pedestrian.root.rotation.y = Math.atan2(player.x - pedestrian.root.position.x, player.z - pedestrian.root.position.z);
