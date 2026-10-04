@@ -333,7 +333,7 @@ function buildCity(){
   for(let z=CITY_SPAWN.z-1;z<CITY_SPAWN.z+5;z+=2.8){
     const light=box(scene,.16,.16,.12,0xffd68b,CITY_SPAWN.x-1.88,3.2,z);light.material.emissive=new THREE.Color(0x3d2609);streetLampMaterials.push(light.material);
   }
-  citySimulation=createCitySimulation(THREE,scene,{roadLines,roadWidth,state,windTrees,signalHeads,hud:null,getPlayerPosition:()=>player.position,citizens:window.EsekCityData.citizens,shopBuildings:enterableWorld.buildings.filter(building=>building.kind!=='home'),isBlocked:(x,z,r=.35)=>isCityBlocked(x,z,r),onLocalCashDrop:(amount)=>cityGameplay?.addLocalCash(amount)});
+  citySimulation=createCitySimulation(THREE,scene,{roadLines,roadWidth,state,windTrees,signalHeads,hud:null,getPlayerPosition:()=>player.position,citizens:window.EsekCityData.citizens,shopBuildings:enterableWorld.buildings.filter(building=>building.kind!=='home'),isBlocked:(x,z,r=.35)=>isCityBlocked(x,z,r),onLocalCashDrop:(amount)=>send('city_local_cash_drop',{amount})});
 }
 buildCity();const dayNightCycle=createDayNightCycle(THREE,{scene,hemisphere:dayHemisphere,ambient:worldAmbient,sun,groundMaterial:cityGroundMaterial,warmWindows:warmWindowMaterial,coolWindows:coolWindowMaterial,streetLights:streetLampMaterials,cycleSeconds:240,startProgress:.30});const player=donkey();player.scale.setScalar(DONKEY_WORLD_SCALE);player.position.set(CITY_SPAWN.x,CITY_SPAWN.y,CITY_SPAWN.z);scene.add(player);player.visible=false;
 const menuDonkeys=[];for(let i=0;i<7;i++){const d=donkey();d.scale.setScalar(DONKEY_MENU_SCALE*(.94+(i%3)*.035));menuScene.add(d);menuDonkeys.push({d,phase:i*Math.PI*2/7,r:6.5+(i%2)*1.4,bowPhase:i*1.7})}

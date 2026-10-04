@@ -831,6 +831,17 @@ function handleCityNpcInteract(player, data) {
     }
     sendTo(player, { type: "city_npc_dialogue", npcId, line });
 }
+function handleCityLocalCashDrop(player, data) {
+    if (!isCityGameplayPlayer(player) || !player.progress) return;
+    const now = Date.now();
+    if (now - (player.lastLocalCashDropAt || 0) < 450) return;
+    player.lastLocalCashDropAt = now;
+    const amount = Math.max(5, Math.min(30, Math.floor(Number(data && data.amount) || 10)));
+    player.progress.cityCash = Math.min(CITY_DATA.cashMax, player.progress.cityCash + amount);
+    savePlayerProgress(player);
+    sendCityState(player);
+}
+
 function handleCityCitizenHit(player, data) {
     if (Array.isArray(data && data.targetCitizenIds)) {
         const ids = [...new Set(data.targetCitizenIds.map(String))].slice(0, 12);
@@ -2261,6 +2272,9 @@ wss.on("connection", (ws, req) => {
                 break;
             case "city_npc_interact":
                 handleCityNpcInteract(player, data);
+                break;
+            case "city_local_cash_drop":
+                handleCityLocalCashDrop(player, data);
                 break;
             case "city_hospital_heal":
                 handleCityHospitalHeal(player);
