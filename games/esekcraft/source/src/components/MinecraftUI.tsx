@@ -657,6 +657,23 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               </div>
             </div>
 
+            {/* Readable numeric status bars: icons remain for the Minecraft look. */}
+            <div className="w-[404px] max-w-[94vw] grid grid-cols-2 gap-2 px-1 text-[10px] font-mono font-bold drop-shadow-[1px_1px_0_#000]">
+              <div className="flex items-center gap-1 text-red-200">
+                <span className="w-8">CAN</span>
+                <div className="h-2 flex-1 bg-black/75 border border-red-950 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-red-700 to-red-400 transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, (engine.hp / engine.maxHp) * 100))}%` }} />
+                </div>
+                <span className="w-9 text-right">{Math.ceil(engine.hp)}/{engine.maxHp}</span>
+              </div>
+              <div className="flex items-center gap-1 text-amber-200">
+                <span className="w-10">AÇLIK</span>
+                <div className="h-2 flex-1 bg-black/75 border border-amber-950 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-amber-700 to-yellow-300 transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, (engine.hunger / engine.maxHunger) * 100))}%` }} />
+                </div>
+                <span className="w-9 text-right">{Math.ceil(engine.hunger)}/{engine.maxHunger}</span>
+              </div>
+            </div>
             {/* Experience Level & Bar */}
             <div className="relative w-[404px] max-w-[94vw] flex flex-col items-center">
               {engine.level > 0 && (

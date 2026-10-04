@@ -563,7 +563,7 @@ export class MinecraftEngine {
   public updateHeldItemModel() {
     if (this.heldItemMesh) {
       this.handGroup.remove(this.heldItemMesh);
-      this.heldItemMesh.geometry?.dispose();
+      this.disposeDropObject(this.heldItemMesh);
       this.heldItemMesh = null;
     }
 
@@ -595,7 +595,8 @@ export class MinecraftEngine {
 
       let headColor = 0x8a6d3b; // wood
       if (def?.tool) {
-        if (def.tool.material === 'iron') headColor = 0xe0e0e0;
+        if (def.tool.material === 'wood') headColor = 0x9a6b32;
+        else if (def.tool.material === 'iron') headColor = 0xe0e0e0;
         else if (def.tool.material === 'diamond') headColor = 0x38ebf5;
         else if (def.tool.material === 'stone') headColor = 0x808080;
       } else if (id === ItemType.GOLD_INGOT) {
@@ -740,6 +741,8 @@ export class MinecraftEngine {
         }
       }
 
+      // Make the tool silhouette readable in first person.
+      toolGroup.scale.setScalar(1.18);
       // Attaches right at the hoof, pointed UPWARD & forward towards crosshair
       toolGroup.position.set(-0.02, 0.15, -0.06);
       toolGroup.rotation.set(-0.16, 0.32, -0.22);
@@ -1657,7 +1660,8 @@ export class MinecraftEngine {
 
     // Survival Hunger & Health Regen
     if (this.gameMode === 'survival') {
-      this.hungerExhaustion += (horizontalSpeed > 0.5 ? (this.isSprinting ? 0.12 : 0.05) : 0.01) * dt;
+      const exhaustionRate = horizontalSpeed > 0.5 ? (this.isSprinting ? 0.16 : 0.08) : 0.003;
+      this.hungerExhaustion += exhaustionRate * dt;
       if (this.hungerExhaustion >= 4.0) {
         this.hungerExhaustion -= 4.0;
         if (this.hunger > 0) {
@@ -1675,8 +1679,9 @@ export class MinecraftEngine {
           this.hungerExhaustion += 1.5;
           this.onHUDUpdate?.();
         }
+      } else {
+        this.regenTimer = 0;
       }
-
       // Starvation damage when hunger is empty
       if (this.hunger <= 0) {
         this.starveTimer += dt;
@@ -1875,7 +1880,7 @@ export class MinecraftEngine {
       const held = this.inventory[this.selectedSlot];
       if (held) {
         const itemDef = ITEM_DEFS[held.id];
-        if (itemDef?.food && this.hunger < this.maxHunger) {
+        if (itemDef?.food && (this.hunger < this.maxHunger || this.hp < this.maxHp)) {
           this.hunger = Math.min(this.maxHunger, this.hunger + itemDef.food.foodPoints);
           this.hp = Math.min(this.maxHp, this.hp + itemDef.food.healHp);
           held.count--;
@@ -2124,14 +2129,14 @@ export class MinecraftEngine {
       const mesh = this.createTorchDrop();
       mesh.position.set(x, y, z);
       this.scene.add(mesh);
-      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 1.2, y: 0.8, z: (Math.random() - 0.5) * 1.2 }, age: 0, baseY: null });
+      this.drops.push({ id, count, mesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
       return;
     }
     const toolMesh = this.createToolDrop(id);
     if (toolMesh) {
       toolMesh.position.set(x, y, z);
       this.scene.add(toolMesh);
-      this.drops.push({ id, count, mesh: toolMesh, vel: { x: (Math.random() - 0.5) * 1.2, y: 0.8, z: (Math.random() - 0.5) * 1.2 }, age: 0, baseY: null });
+      this.drops.push({ id, count, mesh: toolMesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
       return;
     }
     const mineralColors: Record<number, number> = {
@@ -2160,7 +2165,7 @@ export class MinecraftEngine {
       mesh,
       vel: {
         x: (Math.random() - 0.5) * 2.8,
-        y: 0.9 + Math.random() * 0.45,
+        y: 0.05,
         z: (Math.random() - 0.5) * 2.8,
       },
       age: 0,
