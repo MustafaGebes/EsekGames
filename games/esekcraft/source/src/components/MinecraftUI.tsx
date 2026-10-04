@@ -161,8 +161,8 @@ const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mou
       donkey.add(hoof);
     }
 
-    // Default angle: 3/4 isometric angle facing front-left
-    donkey.rotation.y = 0.45;
+    // Envanter kamerası +Z tarafından baktığı için yüzü kameraya dönük tut.
+    donkey.rotation.y = Math.PI + 0.45;
     scene.add(donkey);
 
     let frameId = 0;
@@ -178,7 +178,7 @@ const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mou
         const dy = (mousePos.y - centerY) / (window.innerHeight / 2);
 
         // Body follows mouse gently
-        const targetBodyYaw = 0.45 + dx * 0.6;
+        const targetBodyYaw = Math.PI + 0.45 + dx * 0.6;
         donkeyRef.current.rotation.y += (targetBodyYaw - donkeyRef.current.rotation.y) * 0.1;
 
         // Head looks up/down and left/right towards mouse

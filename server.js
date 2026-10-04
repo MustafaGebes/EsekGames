@@ -185,6 +185,9 @@ function joinEsekCraftGame(player, data = {}) {
     player.platform = platform;
     player.inGame = true;
     player.alive = true;
+    player.health = 20;
+    player.armor = 0;
+    player.hunger = MAX_NEED;
     player.mapId = "overworld";
     player.x = 40.5;
     player.y = 30;
@@ -200,6 +203,40 @@ function joinEsekCraftGame(player, data = {}) {
     if (changes.length) sendTo(player, { type: "esekcraft_block_changes", changes });
     broadcastPlayers();
     broadcastRoomLists();
+}
+function handleEsekCraftAttack(player, data = {}) {
+    if (!player || !player.inGame || !player.alive) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const now = Date.now();
+    if (now - (player.esekcraftLastAttackAt || 0) < ESEKCRAFT_ATTACK_COOLDOWN_MS) return;
+    player.esekcraftLastAttackAt = now;
+    const weaponType = String(data.weaponType || "fist").toLowerCase();
+    const damage = ESEKCRAFT_DAMAGE_BY_WEAPON[weaponType] || ESEKCRAFT_DAMAGE_BY_WEAPON.fist;
+    const facingX = -Math.sin(Number(player.yaw) || 0);
+    const facingZ = -Math.cos(Number(player.yaw) || 0);
+    let target = null;
+    let bestDistance = Infinity;
+    for (const candidate of players.values()) {
+        if (candidate.id === player.id || !candidate.inGame || !candidate.alive || candidate.roomId !== player.roomId) continue;
+        const dx = candidate.x - player.x;
+        const dz = candidate.z - player.z;
+        const horizontalDistance = Math.hypot(dx, dz);
+        // Capsule hitbox: body radius ~0.42 plus a small melee margin.
+        if (horizontalDistance > ESEKCRAFT_ATTACK_REACH + 0.42) continue;
+        const verticalOverlap = candidate.y < player.y + 2.15 && candidate.y + 1.85 > player.y + 0.15;
+        if (!verticalOverlap) continue;
+        const dot = horizontalDistance > 0 ? (dx / horizontalDistance) * facingX + (dz / horizontalDistance) * facingZ : 1;
+        if (dot < 0.28) continue;
+        if (horizontalDistance < bestDistance) { bestDistance = horizontalDistance; target = candidate; }
+    }
+    broadcastToRoom(room.id, { type: "esekcraft_attack", attackerId: player.id });
+    if (!target) return;
+    damagePlayer(target, damage, player.id, player.name, `${player.name || "Oyuncu"} sana vurdu.`);
+    broadcastToRoom(room.id, {
+        type: "esekcraft_hit_confirmed", attackerId: player.id, targetId: target.id,
+        damage, health: target.health, maxHealth: 20
+    });
 }
 function handleEsekCraftBlockChange(player, data = {}) {
     if (!player || !player.inGame) return;
@@ -668,6 +705,9 @@ const CARROT_RESPAWN_MS = 5 * 60 * 1000; // istemcideki CARROT_RESPAWN_MS ile ay
 
 const FIST_DAMAGE = 1.5;
 const SWORD_DAMAGE = 3;
+const ESEKCRAFT_ATTACK_REACH = 3.1;
+const ESEKCRAFT_ATTACK_COOLDOWN_MS = 500;
+const ESEKCRAFT_DAMAGE_BY_WEAPON = Object.freeze({ fist: 1.5, sword: 4, axe: 5, pickaxe: 2, shovel: 1 });
 const GUN_DAMAGE = 4;
 const ANIMAL_ATTACK_DAMAGE = 3;
 const ANIMAL_BITE_DAMAGE = 1;
@@ -714,7 +754,11 @@ function getPlayerLevel(xp) { let level = 1, remaining = Math.max(0, Number(xp) 
 function getXpWithinLevel(xp) { let remaining = Math.max(0, Number(xp) || 0), level = 1; while (level < RPG_DATA.maxLevel && remaining >= xpForLevel(level)) { remaining -= xpForLevel(level); level++; } return { level, current: level >= RPG_DATA.maxLevel ? 0 : remaining, next: xpForLevel(level) }; }
 function getArmorItem(progress) { const item = getCatalogItem(progress && progress.equippedArmor); return item && item.kind === "armor" ? item : null; }
 function getBuffMultiplier(progress, key, now = Date.now()) { const buff = progress && progress.buffs && progress.buffs[key]; return buff && buff.expiresAt > now ? Math.max(0.5, Math.min(3, Number(buff.multiplier) || 1)) : 1; }
-function getMaxHealth(player) { const armor = getArmorItem(player && player.progress); return MAX_NEED + (armor ? Number(armor.healthBonus) || 0 : 0); }
+function getMaxHealth(player) {
+    if (player && player.mapId === "overworld") return 20;
+    const armor = getArmorItem(player && player.progress);
+    return MAX_NEED + (armor ? Number(armor.healthBonus) || 0 : 0);
+}
 function createDefaultProgress() {
     return { petId: null, stamina: 100, xp: 0, coins: RPG_DATA.startingCoins, bagLevel: 0, inventory: [], equippedWeapon: null, equippedArmor: null, ammo: 0, buffs: {}, cityCash: 0, cityInventory: [], cityEquippedWeapon: null, cityEquippedArmor: null, cityFriendlyGifts: [] };
 }
@@ -2355,6 +2399,9 @@ wss.on("connection", (ws, req) => {
 
             case "move":
                 handleMove(player, data);
+                break;
+            case "esekcraft_attack":
+                handleEsekCraftAttack(player, data);
                 break;
             case "esekcraft_block_change":
                 handleEsekCraftBlockChange(player, data);

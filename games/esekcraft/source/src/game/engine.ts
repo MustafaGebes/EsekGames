@@ -150,6 +150,7 @@ export class MinecraftEngine {
   public onHUDUpdate?: () => void;
   public onToast?: (msg: string) => void;
   public onBlockChanged?: (change: { x: number; y: number; z: number; blockId: number }) => void;
+  public onAttackPlayer?: (payload: { targetId: string; weaponType: string }) => void;
 
   private lastTime = 0;
   private animFrameId = 0;
@@ -461,14 +462,60 @@ export class MinecraftEngine {
       remote.mesh.rotation.y += yawDelta * Math.min(1, dt * 14);
       remote.mesh.scale.y = remote.mesh.scale.x * (remote.isCrouching ? 0.72 : 1);
       const ud = remote.mesh.userData;
+      const now = performance.now() / 1000;
+      const attackAge = now - (ud.attackUntil || 0) + 0.42;
+      const attack = attackAge > 0 && attackAge < 0.42 ? Math.sin((attackAge / 0.42) * Math.PI) : 0;
       const swing = remote.isMoving ? Math.sin(performance.now() * 0.012) * 0.48 : 0;
       if (ud.legs?.length === 4) {
-        ud.legs[0].rotation.x = swing;
-        ud.legs[1].rotation.x = -swing;
+        ud.legs[0].rotation.x = swing + (ud.attackSide > 0 ? -1.25 : 0.1) * attack;
+        ud.legs[1].rotation.x = -swing + (ud.attackSide < 0 ? -1.25 : 0.1) * attack;
         ud.legs[2].rotation.x = -swing;
         ud.legs[3].rotation.x = swing;
       }
+      const flashing = (ud.hitUntil || 0) > now;
+      if (flashing && !ud.hitTinted) {
+        for (const entry of ud.hitMaterials || []) entry.material.color.setHex(0xff302b);
+        ud.hitTinted = true;
+      } else if (!flashing && ud.hitTinted) {
+        for (const entry of ud.hitMaterials || []) entry.material.color.copy(entry.base);
+        ud.hitTinted = false;
+      }
     }
+  }
+  public flashRemotePlayer(id: string) {
+    const remote = this.remotePlayers.get(id);
+    if (remote) remote.mesh.userData.hitUntil = performance.now() / 1000 + 0.28;
+  }
+  public playRemoteAttack(id: string) {
+    const remote = this.remotePlayers.get(id);
+    if (remote) {
+      remote.mesh.userData.attackUntil = performance.now() / 1000;
+      remote.mesh.userData.attackSide = -(remote.mesh.userData.attackSide || 1);
+    }
+  }
+  public applyNetworkHealth(health: number) {
+    if (!Number.isFinite(health)) return;
+    this.hp = Math.max(0, Math.min(this.maxHp, health));
+    this.damageFlashTimer = 0.4;
+    this.onHUDUpdate?.();
+  }
+  private getRemoteTargetId(): string | null {
+    const eye = this.getEyePos();
+    const dir = this.getLookDir();
+    let best: { id: string; distance: number } | null = null;
+    for (const [id, remote] of this.remotePlayers) {
+      const dx = remote.target.x - eye.x;
+      const dy = (remote.target.y + 0.95) - eye.y;
+      const dz = remote.target.z - eye.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance > 3.55 || distance < 0.01) continue;
+      const dot = (dx * dir.x + dy * dir.y + dz * dir.z) / distance;
+      if (dot < 0.30) continue;
+      const perpendicular = Math.sqrt(Math.max(0, distance * distance - (distance * dot) ** 2));
+      if (perpendicular > 0.85) continue;
+      if (!best || distance < best.distance) best = { id, distance };
+    }
+    return best?.id || null;
   }
   public applyRemoteBlockChange(x: number, y: number, z: number, blockId: number) {
     if (![x, y, z, blockId].every(Number.isFinite)) return;
@@ -539,7 +586,15 @@ export class MinecraftEngine {
       legs.push(leg);
     }
     g.scale.setScalar(0.76);
-    g.userData = { legs, headGroup, bodyPivot };
+    const hitMaterials: { material: THREE.Material & { color: THREE.Color }; base: THREE.Color }[] = [];
+    g.traverse((node) => {
+      if (!(node as THREE.Mesh).isMesh) return;
+      const mesh = node as THREE.Mesh;
+      const material = (mesh.material as THREE.Material).clone() as THREE.Material & { color: THREE.Color };
+      mesh.material = material;
+      if (material.color) hitMaterials.push({ material, base: material.color.clone() });
+    });
+    g.userData = { legs, headGroup, bodyPivot, hitMaterials, hitUntil: 0, hitTinted: false, attackUntil: 0, attackSide: 1 };
     return g;
   }
   // First Person Donkey Hoof Hand on the right side - authentically angled upward & inward like Minecraft
@@ -1790,6 +1845,22 @@ export class MinecraftEngine {
     if (this.placeCooldown > 0) this.placeCooldown -= dt;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
 
+    // Online player melee: client selects a visible candidate, server validates the capsule hitbox.
+    if (this.mouseLeft && this.attackCooldown <= 0 && this.onAttackPlayer) {
+      const targetId = this.getRemoteTargetId();
+      if (targetId) {
+        const currentItem = this.inventory[this.selectedSlot];
+        const itemDef = currentItem ? ITEM_DEFS[currentItem.id] : null;
+        const weaponType = itemDef?.tool?.type || 'fist';
+        this.onAttackPlayer({ targetId, weaponType });
+        this.attackCooldown = 0.5;
+        this.swingTimer = 0;
+        this.breakingBlock = null;
+        this.breakProgress = 0;
+        this.crackMesh.visible = false;
+        return;
+      }
+    }
     // Attack Mobs
     if (this.mouseLeft && this.attackCooldown <= 0) {
       const hitMob = this.raycastMob(eye, dir, 4.4);

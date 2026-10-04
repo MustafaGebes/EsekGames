@@ -201,6 +201,9 @@ export default function App() {
           eng.onBlockChanged = (change) => {
             if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });
           };
+          eng.onAttackPlayer = (payload) => {
+            if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_attack', ...payload });
+          };
           eng.start();
           if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
           if (onlineRoomRef.current) {
@@ -292,6 +295,13 @@ export default function App() {
         }
         if (message.type === 'esekcraft_block_change' && engineRef.current) {
           engineRef.current.applyRemoteBlockChange(Number(message.x), Number(message.y), Number(message.z), Number(message.blockId));
+        }
+        if (message.type === 'esekcraft_attack' && engineRef.current && message.attackerId !== onlinePlayerIdRef.current) {
+          engineRef.current.playRemoteAttack(String(message.attackerId));
+        }
+        if (message.type === 'combat_hit' && engineRef.current) {
+          if (message.targetId === onlinePlayerIdRef.current) engineRef.current.applyNetworkHealth(Number(message.health));
+          else if (message.targetId) engineRef.current.flashRemotePlayer(String(message.targetId));
         }
       } catch {}
     };
