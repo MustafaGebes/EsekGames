@@ -68,6 +68,11 @@ export class MinecraftEngine {
   public highlightBox: THREE.LineSegments;
   public crackMesh: THREE.Mesh;
 
+  // World border (Minecraft-style blue forcefield barrier)
+  public worldBorderGroup: THREE.Group;
+  public worldBorderMaterial: THREE.MeshBasicMaterial;
+  public worldBorderTime = 0;
+
   // Player & Models
   public donkey3P: THREE.Group;
   public handGroup: THREE.Group;
@@ -238,6 +243,94 @@ export class MinecraftEngine {
     this.crackMesh.visible = false;
     this.scene.add(this.crackMesh);
 
+    // ================= WORLD BORDER (Minecraft forcefield) =================
+    // Procedural forcefield texture: animated diagonal stripes that match
+    // Minecraft's "blue barrier" world border. Single texture shared across
+    // all four walls; UV scrolling animates the stripes.
+    const forcefieldCanvas = document.createElement('canvas');
+    forcefieldCanvas.width = 64;
+    forcefieldCanvas.height = 64;
+    const ffCtx = forcefieldCanvas.getContext('2d')!;
+    ffCtx.imageSmoothingEnabled = false;
+    // Background: dark translucent aqua
+    ffCtx.fillStyle = 'rgba(20, 90, 130, 0.30)';
+    ffCtx.fillRect(0, 0, 64, 64);
+    // Diagonal stripes (parallel narrow bars)
+    for (let i = -64; i < 128; i += 6) {
+      const grad = ffCtx.createLinearGradient(i, 0, i + 64, 64);
+      grad.addColorStop(0.0, 'rgba(120, 240, 255, 0.0)');
+      grad.addColorStop(0.4, 'rgba(140, 250, 255, 0.55)');
+      grad.addColorStop(0.5, 'rgba(220, 255, 255, 0.85)');
+      grad.addColorStop(0.6, 'rgba(140, 250, 255, 0.55)');
+      grad.addColorStop(1.0, 'rgba(120, 240, 255, 0.0)');
+      ffCtx.fillStyle = grad;
+      ffCtx.fillRect(i, 0, 64, 64);
+    }
+    const forcefieldTexture = new THREE.CanvasTexture(forcefieldCanvas);
+    forcefieldTexture.wrapS = THREE.RepeatWrapping;
+    forcefieldTexture.wrapT = THREE.RepeatWrapping;
+    forcefieldTexture.magFilter = THREE.NearestFilter;
+    forcefieldTexture.minFilter = THREE.NearestFilter;
+    forcefieldTexture.generateMipmaps = false;
+
+    this.worldBorderMaterial = new THREE.MeshBasicMaterial({
+      map: forcefieldTexture,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      color: 0x88f0ff, // aqua tint matching border color
+    });
+
+    // Build 4 vertical walls around the world perimeter
+    this.worldBorderGroup = new THREE.Group();
+    const wallHeight = SY; // 48 blocks tall
+    const wallThickness = 0.4;
+    const wallCenterY = SY / 2;
+    const wallRepeatY = 6;
+    const wallRepeatLong = 32; // for X/Z axis walls
+
+    // North wall (+Z)
+    const northWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(SX, wallHeight),
+      this.worldBorderMaterial
+    );
+    northWall.position.set(SX / 2, wallCenterY, SZ);
+    northWall.rotation.y = Math.PI;
+    northWall.userData = { repeatX: wallRepeatLong, repeatY: wallRepeatY };
+    this.worldBorderGroup.add(northWall);
+
+    // South wall (-Z)
+    const southWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(SX, wallHeight),
+      this.worldBorderMaterial
+    );
+    southWall.position.set(SX / 2, wallCenterY, 0);
+    southWall.userData = { repeatX: wallRepeatLong, repeatY: wallRepeatY };
+    this.worldBorderGroup.add(southWall);
+
+    // East wall (+X)
+    const eastWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(SZ, wallHeight),
+      this.worldBorderMaterial
+    );
+    eastWall.position.set(SX, wallCenterY, SZ / 2);
+    eastWall.rotation.y = -Math.PI / 2;
+    eastWall.userData = { repeatX: wallRepeatLong, repeatY: wallRepeatY };
+    this.worldBorderGroup.add(eastWall);
+
+    // West wall (-X)
+    const westWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(SZ, wallHeight),
+      this.worldBorderMaterial
+    );
+    westWall.position.set(0, wallCenterY, SZ / 2);
+    westWall.rotation.y = Math.PI / 2;
+    westWall.userData = { repeatX: wallRepeatLong, repeatY: wallRepeatY };
+    this.worldBorderGroup.add(westWall);
+
+    this.scene.add(this.worldBorderGroup);
+
     // Create World
     this.world = new VoxelWorld(meta ? meta.seed : 'minecraft');
     if (meta && meta.mods) {
@@ -365,7 +458,7 @@ export class MinecraftEngine {
 
     // Head Group (for nodding and ear physics)
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.5, -0.85);
+    headGroup.position.set(0, 1.5, 0.85);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.55), bodyMat);
     headGroup.add(head);
@@ -717,9 +810,9 @@ export class MinecraftEngine {
     udder.position.set(0, 0.55, 0.36);
     g.add(udder);
 
-    // Head Group
+    // Head Group (face toward +z so rotation.y = yaw matches movement)
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.35, -0.75);
+    headGroup.position.set(0, 1.35, 0.75);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.44, 0.44), cowBrown);
     headGroup.add(head);
@@ -803,9 +896,9 @@ export class MinecraftEngine {
     body.position.set(0, 0.96, 0);
     g.add(body);
 
-    // Head Group
+    // Head Group (face toward +z so rotation.y = yaw matches movement)
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 1.28, -0.74);
+    headGroup.position.set(0, 1.28, 0.74);
 
     // Pink / Skin sheep face
     const face = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.36, 0.42), skinMat);
@@ -881,9 +974,9 @@ export class MinecraftEngine {
     body.position.set(0, 0.78, 0);
     g.add(body);
 
-    // Head Group
+    // Head Group (face toward +z so rotation.y = yaw matches movement)
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.98, -0.72);
+    headGroup.position.set(0, 0.98, 0.72);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.44), pigPink);
     headGroup.add(head);
@@ -963,9 +1056,9 @@ export class MinecraftEngine {
     wing2.position.set(0.21, 0.48, 0);
     g.add(wing2);
 
-    // Head Group
+    // Head Group (face toward +z so rotation.y = yaw matches movement)
     const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.72, -0.26);
+    headGroup.position.set(0, 0.72, 0.26);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.2), whiteMat);
     headGroup.add(head);
@@ -1126,6 +1219,10 @@ export class MinecraftEngine {
         mob.isPanicking ||
         (mob.wanderTimer > 1.2 && (Math.abs(mob.vel.x) > 0.05 || Math.abs(mob.vel.z) > 0.05 || Math.random() < 0.7));
 
+      // Mob head/face is positioned on the +z side of the mesh group now
+      // (see headGroup.position.set(0, y, +z) in each create*Model()).
+      // Three.js: rotation.y = 0 means mesh faces +z (local +z = world +z).
+      // So at yaw=0 the mob moves toward +z and looks toward +z. Good.
       if (isMoving) {
         mob.vel.x = Math.sin(mob.yaw) * speed;
         mob.vel.z = Math.cos(mob.yaw) * speed;
@@ -1256,13 +1353,14 @@ export class MinecraftEngine {
     mob.hurtTimer = 0.28;
     Sound.mobHurt();
 
-    // Knockback
+    // Knockback - yaw points the mob AWAY from the player (face them fleeing).
+    // Velocity is in the same direction the mob will walk next frame.
     mob.isPanicking = true;
     mob.panicTimer = 3.2;
     mob.yaw = Math.atan2(mob.pos.x - this.pos.x, mob.pos.z - this.pos.z);
-    mob.vel.x = dir.x * 6;
+    mob.vel.x = Math.sin(mob.yaw) * 6;
     mob.vel.y = 4.0;
-    mob.vel.z = dir.z * 6;
+    mob.vel.z = Math.cos(mob.yaw) * 6;
 
     // Check Mob Death
     if (mob.hp <= 0) {
@@ -2092,9 +2190,44 @@ export class MinecraftEngine {
       this.tickFurnaces(dt);
     }
 
+    this.updateWorldBorder(dt);
     this.updateCameraAndModels(dt);
     this.renderer.render(this.scene, this.camera);
   };
+
+  /**
+   * Update Minecraft-style world border: animate diagonal stripes and
+   * increase opacity the closer the player is to the world edge.
+   */
+  private updateWorldBorder(dt: number) {
+    if (!this.worldBorderGroup || !this.worldBorderMaterial) return;
+    this.worldBorderTime += dt;
+
+    // Scroll the diagonal stripes along U (left to right)
+    const tex = this.worldBorderMaterial.map as THREE.CanvasTexture | null;
+    if (tex) {
+      tex.offset.x = (this.worldBorderTime * 0.18) % 1;
+      tex.offset.y = 0;
+      tex.needsUpdate = false;
+    }
+
+    // Opacity: dim when far, opaque when within 4 blocks of the edge.
+    const distToEdge = Math.min(
+      this.pos.x,
+      this.pos.z,
+      SX - this.pos.x,
+      SZ - this.pos.z
+    );
+    const maxRange = 32;
+    const minRange = 4;
+    let alpha = 0.18 + (Math.max(0, maxRange - distToEdge) / maxRange) * 0.42;
+    if (distToEdge < minRange) {
+      alpha = 0.85;
+    }
+    // Pulse the opacity slightly so it feels alive
+    alpha += Math.sin(this.worldBorderTime * 3.4) * 0.04;
+    this.worldBorderMaterial.opacity = Math.max(0.12, Math.min(0.9, alpha));
+  }
 
   private updateCameraAndModels(dt: number) {
     const eye = this.getEyePos();

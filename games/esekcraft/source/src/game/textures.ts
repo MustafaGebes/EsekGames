@@ -51,6 +51,31 @@ export const TILE = {
   MOSSY_COBBLE: 26,
   OBSIDIAN: 27,
   TORCH: 28,
+
+  // Item-only tile slots (used for mob drops, ores, ingots, food, tools, etc.)
+  ITEM_STICK: 29,
+  ITEM_COAL: 30,
+  ITEM_CHARCOAL: 31,
+  ITEM_IRON_INGOT: 32,
+  ITEM_GOLD_INGOT: 33,
+  ITEM_DIAMOND: 34,
+  ITEM_FLINT: 35,
+  ITEM_APPLE: 36,
+  ITEM_BREAD: 37,
+  ITEM_RAW_BEEF: 38,
+  ITEM_COOKED_STEAK: 39,
+  ITEM_RAW_PORKCHOP: 40,
+  ITEM_COOKED_PORKCHOP: 41,
+  ITEM_RAW_MUTTON: 42,
+  ITEM_COOKED_MUTTON: 43,
+  ITEM_RAW_CHICKEN: 44,
+  ITEM_COOKED_CHICKEN: 45,
+  ITEM_LEATHER: 46,
+  ITEM_FEATHER: 47,
+  ITEM_WHITE_WOOL: 48,
+  ITEM_RAW_IRON: 49,
+  ITEM_RAW_GOLD: 50,
+  ITEM_OAK_DOOR: 51,
 };
 
 export const BLOCK_DEFS: Record<number, BlockDef> = {
@@ -210,7 +235,7 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     hardness: 3.0,
     requiredTool: 'pickaxe',
     minHarvestLevel: 1, // stone pickaxe required
-    drop: BlockType.IRON_ORE,
+    drop: ItemType.RAW_IRON,
   },
   [BlockType.GOLD_ORE]: {
     name: 'Altın Cevheri',
@@ -220,7 +245,7 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     hardness: 3.0,
     requiredTool: 'pickaxe',
     minHarvestLevel: 2, // iron pickaxe required
-    drop: BlockType.GOLD_ORE,
+    drop: ItemType.RAW_GOLD,
   },
   [BlockType.DIAMOND_ORE]: {
     name: 'Elmas Cevheri',
@@ -285,6 +310,77 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
   },
 };
 
+// ===================== ITEM TILE LOOKUP TABLE =====================
+// These entries exist ONLY so that setupMeshUVs() can find a tile for items
+// dropped by mobs, ores, or smelting. They have Infinity hardness so they
+// can never be placed or broken as blocks. Placement logic in tryPlaceBlock
+// checks BLOCK_DEFS[held.id]?.requiredTool — undefined entries there reject
+// placement. Items-only entries below use requiredTool: 'none' to match.
+const ITEM_TILE_ENTRIES: Array<{
+  id: number;
+  name: string;
+  tile: number;
+}> = [
+  { id: ItemType.STICK, name: 'Çubuk', tile: TILE.ITEM_STICK },
+  { id: ItemType.COAL, name: 'Kömür', tile: TILE.ITEM_COAL },
+  { id: ItemType.CHARCOAL, name: 'Odun Kömürü', tile: TILE.ITEM_CHARCOAL },
+  { id: ItemType.IRON_INGOT, name: 'Demir Külçesi', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.GOLD_INGOT, name: 'Altın Külçesi', tile: TILE.ITEM_GOLD_INGOT },
+  { id: ItemType.DIAMOND, name: 'Elmas', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.FLINT, name: 'Çakmak Taşı', tile: TILE.ITEM_FLINT },
+  { id: ItemType.APPLE, name: 'Elma', tile: TILE.ITEM_APPLE },
+  { id: ItemType.BREAD, name: 'Ekmek', tile: TILE.ITEM_BREAD },
+  { id: ItemType.RAW_BEEF, name: 'Çiğ Sığır Eti', tile: TILE.ITEM_RAW_BEEF },
+  { id: ItemType.COOKED_STEAK, name: 'Pişmiş Biftek', tile: TILE.ITEM_COOKED_STEAK },
+  { id: ItemType.RAW_PORKCHOP, name: 'Çiğ Domuz Eti', tile: TILE.ITEM_RAW_PORKCHOP },
+  { id: ItemType.COOKED_PORKCHOP, name: 'Pişmiş Domuz Pirzolası', tile: TILE.ITEM_COOKED_PORKCHOP },
+  { id: ItemType.RAW_MUTTON, name: 'Çiğ Koyun Eti', tile: TILE.ITEM_RAW_MUTTON },
+  { id: ItemType.COOKED_MUTTON, name: 'Pişmiş Koyun Eti', tile: TILE.ITEM_COOKED_MUTTON },
+  { id: ItemType.RAW_CHICKEN, name: 'Çiğ Tavuk Eti', tile: TILE.ITEM_RAW_CHICKEN },
+  { id: ItemType.COOKED_CHICKEN, name: 'Pişmiş Tavuk', tile: TILE.ITEM_COOKED_CHICKEN },
+  { id: ItemType.LEATHER, name: 'Deri', tile: TILE.ITEM_LEATHER },
+  { id: ItemType.FEATHER, name: 'Tüy', tile: TILE.ITEM_FEATHER },
+  { id: ItemType.WHITE_WOOL, name: 'Beyaz Yün', tile: TILE.ITEM_WHITE_WOOL },
+  { id: ItemType.WOODEN_PICKAXE, name: 'Tahta Kazma', tile: TILE.ITEM_STICK },
+  { id: ItemType.STONE_PICKAXE, name: 'Taş Kazma', tile: TILE.ITEM_COAL },
+  { id: ItemType.IRON_PICKAXE, name: 'Demir Kazma', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.DIAMOND_PICKAXE, name: 'Elmas Kazma', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.WOODEN_AXE, name: 'Tahta Balta', tile: TILE.ITEM_STICK },
+  { id: ItemType.STONE_AXE, name: 'Taş Balta', tile: TILE.ITEM_COAL },
+  { id: ItemType.IRON_AXE, name: 'Demir Balta', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.DIAMOND_AXE, name: 'Elmas Balta', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.WOODEN_SHOVEL, name: 'Tahta Kürek', tile: TILE.ITEM_STICK },
+  { id: ItemType.STONE_SHOVEL, name: 'Taş Kürek', tile: TILE.ITEM_COAL },
+  { id: ItemType.IRON_SHOVEL, name: 'Demir Kürek', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.DIAMOND_SHOVEL, name: 'Elmas Kürek', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.WOODEN_SWORD, name: 'Tahta Kılıç', tile: TILE.ITEM_STICK },
+  { id: ItemType.STONE_SWORD, name: 'Taş Kılıç', tile: TILE.ITEM_COAL },
+  { id: ItemType.IRON_SWORD, name: 'Demir Kılıç', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.DIAMOND_SWORD, name: 'Elmas Kılıç', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.IRON_HELMET, name: 'Demir Kask', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.IRON_CHESTPLATE, name: 'Demir Zırh', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.IRON_LEGGINGS, name: 'Demir Pantolon', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.IRON_BOOTS, name: 'Demir Bot', tile: TILE.ITEM_IRON_INGOT },
+  { id: ItemType.DIAMOND_CHESTPLATE, name: 'Elmas Zırh', tile: TILE.ITEM_DIAMOND },
+  { id: BlockType.OAK_DOOR, name: 'Meşe Kapı', tile: TILE.ITEM_OAK_DOOR },
+];
+
+// Register each item entry into BLOCK_DEFS so setupMeshUVs can find a tile
+// for any item ID. We use minHarvestLevel = 99 to make sure these can never
+// be "broken" as a block by mistake.
+for (const e of ITEM_TILE_ENTRIES) {
+  BLOCK_DEFS[e.id] = {
+    name: e.name,
+    top: e.tile,
+    bottom: e.tile,
+    side: e.tile,
+    hardness: Infinity,
+    requiredTool: 'none',
+    minHarvestLevel: 99,
+    drop: null,
+  };
+}
+
 export const ITEM_DEFS: Record<number, ItemDef> = {
   // Materials
   [ItemType.STICK]: { name: 'Çubuk', fuelValue: 5 },
@@ -294,6 +390,8 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   [ItemType.GOLD_INGOT]: { name: 'Altın Külçesi' },
   [ItemType.DIAMOND]: { name: 'Elmas' },
   [ItemType.FLINT]: { name: 'Çakmak Taşı' },
+  [ItemType.RAW_IRON]: { name: 'Ham Demir' },
+  [ItemType.RAW_GOLD]: { name: 'Ham Altın' },
 
   // Pickaxes
   [ItemType.WOODEN_PICKAXE]: {
@@ -778,6 +876,234 @@ export function initTextures() {
     if (y <= 4 && x >= 6 && x <= 9) return pick(r, ['#ffea47', '#ff8800', '#ffffff', '#ffaa00']);
     if (y > 4 && x >= 7 && x <= 8) return '#5e4823';
     return null;
+  });
+
+  // ===================== ITEM TILES (rows 29-51) =====================
+  // Each item is drawn as a single 16x16 tile that fills the box face on the drop mesh.
+
+  // 29 Stick - diagonal brown rod
+  tile(TILE.ITEM_STICK, (x, y) => {
+    const onLine = (x - y >= -1 && x - y <= 1);
+    const onLine2 = (x + y >= 13 && x + y <= 15);
+    if (onLine || onLine2) return '#6e5124';
+    if ((x - y === -2 || x - y === 2) || (x + y === 12 || x + y === 16)) return '#8a6a32';
+    return null;
+  });
+
+  // 30 Coal - jagged black mineral chunk
+  tile(TILE.ITEM_COAL, (x, y) => {
+    const isChunk = (x + y) % 3 === 0 || (x * 2 + y) % 5 === 0;
+    if (x < 2 || x > 13 || y < 2 || y > 13) return null;
+    if (isChunk) return '#0a0a0a';
+    if (y > 11 && x < 4) return null;
+    return pick(rnd, ['#222222', '#1c1c1c', '#2a2a2a', '#161616']);
+  });
+
+  // 31 Charcoal - dark brown-black chunk (slightly warmer than coal)
+  tile(TILE.ITEM_CHARCOAL, (x, y) => {
+    if (x < 2 || x > 13 || y < 2 || y > 13) return null;
+    if ((x + y * 2) % 4 === 0) return '#1a1108';
+    return pick(rnd, ['#2c2014', '#2a1d12', '#3a2a1c', '#22170d']);
+  });
+
+  // 32 Iron Ingot - silvery bar with bevel
+  tile(TILE.ITEM_IRON_INGOT, (x, y) => {
+    if (y < 5 || y > 11) return null;
+    if (y === 5 || y === 11) return '#8f8f8f';
+    if (y === 6 || y === 10) return '#cfcfcf';
+    if (x === 2 || x === 13) return '#8f8f8f';
+    if (x === 3 || x === 12) return '#dcdcdc';
+    return pick(rnd, ['#e0e0e0', '#d0d0d0', '#cccccc', '#dadada']);
+  });
+
+  // 33 Gold Ingot - golden bar with bevel
+  tile(TILE.ITEM_GOLD_INGOT, (x, y) => {
+    if (y < 5 || y > 11) return null;
+    if (y === 5 || y === 11) return '#b58a00';
+    if (y === 6 || y === 10) return '#ffe075';
+    if (x === 2 || x === 13) return '#b58a00';
+    if (x === 3 || x === 12) return '#fff575';
+    return pick(rnd, ['#ffd700', '#f7c800', '#ffdc33', '#ffd700']);
+  });
+
+  // 34 Diamond - cyan gem
+  tile(TILE.ITEM_DIAMOND, (x, y) => {
+    const cx = 7.5, cy = 7.5;
+    const dx = x - cx, dy = y - cy;
+    const d = Math.abs(dx) + Math.abs(dy);
+    if (d > 7) return null;
+    if (d > 5.5) return '#1f989e';
+    if (d > 4) return '#38ebf5';
+    if ((x + y) % 3 === 0) return '#b8ffff';
+    return pick(rnd, ['#4dedf4', '#38ebf5', '#5ff0ff', '#38ebf5']);
+  });
+
+  // 35 Flint - dark grey angular stone
+  tile(TILE.ITEM_FLINT, (x, y) => {
+    if (y < 3 || y > 12 || x < 3 || x > 12) return null;
+    if (y < 5 && x > 10) return null;
+    if (y > 10 && x < 5) return null;
+    if ((x + y) % 5 === 0) return '#1a1a1a';
+    return pick(rnd, ['#3d3d3d', '#2a2a2a', '#454545', '#383838']);
+  });
+
+  // 36 Apple - red fruit with stem
+  tile(TILE.ITEM_APPLE, (x, y) => {
+    if (y < 3 || y > 12) return null;
+    if (y < 5 && (x < 6 || x > 9)) return null;
+    if (y > 11 && (x < 5 || x > 10)) return null;
+    if (y === 3 && x >= 7 && x <= 8) return '#5c3a1e';
+    if (y === 4 && x === 9) return '#3fa32b';
+    if (y > 4 && (x + y) % 3 === 0) return '#ff6b77';
+    return pick(rnd, ['#d42222', '#c41a1a', '#e62828', '#b81818']);
+  });
+
+  // 37 Bread - crusty loaf with cuts
+  tile(TILE.ITEM_BREAD, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y === 4 || y === 12) return '#7a4b14';
+    if (y === 5 || y === 11) return '#e2aa4f';
+    if (x === 5 || x === 11) return '#7a4b14';
+    if ((y === 6 || y === 9) && (x % 4 === 2)) return '#7a4b14';
+    return pick(rnd, ['#c8923a', '#bb8a30', '#cf9a40', '#bb8a30']);
+  });
+
+  // 38 Raw Beef - red meat with white bone
+  tile(TILE.ITEM_RAW_BEEF, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#fce8e8';
+    if (y < 6 && x >= 5 && x <= 5) return '#ffffff';
+    return pick(rnd, ['#b83333', '#a02828', '#c43a3a', '#9c2424']);
+  });
+
+  // 39 Cooked Steak - brown meat with grill marks
+  tile(TILE.ITEM_COOKED_STEAK, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#e0ded3';
+    if ((x + y) % 4 === 0) return '#3d1d0c';
+    return pick(rnd, ['#6b361a', '#5a2a14', '#7a3e20', '#602e16']);
+  });
+
+  // 40 Raw Porkchop - pink meat
+  tile(TILE.ITEM_RAW_PORKCHOP, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#fce4e4';
+    return pick(rnd, ['#e88b8b', '#dd7878', '#f09999', '#d46c6c']);
+  });
+
+  // 41 Cooked Porkchop - brown meat
+  tile(TILE.ITEM_COOKED_PORKCHOP, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#e3cfc1';
+    if ((x + y) % 4 === 0) return '#5c3a21';
+    return pick(rnd, ['#a66e46', '#95593a', '#b27850', '#8f5236']);
+  });
+
+  // 42 Raw Mutton
+  tile(TILE.ITEM_RAW_MUTTON, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#f5e1e1';
+    return pick(rnd, ['#bd4f4f', '#a83c3c', '#c45c5c', '#a83838']);
+  });
+
+  // 43 Cooked Mutton
+  tile(TILE.ITEM_COOKED_MUTTON, (x, y) => {
+    if (y < 4 || y > 12) return null;
+    if (y < 6 && (x < 3 || x > 12)) return null;
+    if (y < 5 && (x < 4 || x > 11)) return null;
+    if (y < 6 && x >= 4 && x <= 6) return '#d6c0b4';
+    return pick(rnd, ['#7a3e28', '#682e1c', '#8a4a30', '#5e2818']);
+  });
+
+  // 44 Raw Chicken - small meat on bone
+  tile(TILE.ITEM_RAW_CHICKEN, (x, y) => {
+    if (y < 4 || y > 13) return null;
+    if (y < 6 && (x < 5 || x > 10)) return null;
+    if (y > 11 && (x < 6 || x > 9)) return null;
+    if (y === 12 && x === 7) return '#e3ded8';
+    if (y > 10 && x >= 6 && x <= 9) return '#e3ded8';
+    return pick(rnd, ['#e8a599', '#d99585', '#eab0a0', '#d89585']);
+  });
+
+  // 45 Cooked Chicken
+  tile(TILE.ITEM_COOKED_CHICKEN, (x, y) => {
+    if (y < 4 || y > 13) return null;
+    if (y < 6 && (x < 5 || x > 10)) return null;
+    if (y > 11 && (x < 6 || x > 9)) return null;
+    if (y === 12 && x === 7) return '#e8dec8';
+    if (y > 10 && x >= 6 && x <= 9) return '#e8dec8';
+    if ((x + y) % 4 === 0) return '#61320d';
+    return pick(rnd, ['#a35c24', '#8e4a18', '#b36628', '#85421a']);
+  });
+
+  // 46 Leather - tan hide square
+  tile(TILE.ITEM_LEATHER, (x, y) => {
+    if (x < 3 || x > 12 || y < 3 || y > 12) return null;
+    if ((x + y) % 4 === 0) return '#6e3f20';
+    if ((x + y) % 3 === 0) return '#a66a3f';
+    return pick(rnd, ['#8f5630', '#7a4a28', '#965e36', '#7e4e2a']);
+  });
+
+  // 47 Feather - white fluffy barbs
+  tile(TILE.ITEM_FEATHER, (x, y) => {
+    const cx = 7.5;
+    const along = y + (x - cx) * 0.4;
+    const dist = Math.abs(x - cx) + (y < 4 ? (4 - y) : (y > 11 ? (y - 11) : 0));
+    if (along < 2 || along > 14) return null;
+    if (dist > 4) return null;
+    if (Math.abs(x - cx) < 1 && y > 3 && y < 12) return '#737373';
+    if ((x + y) % 2 === 0) return '#ffffff';
+    return '#e8e8e8';
+  });
+
+  // 48 White Wool - fluffy ball
+  tile(TILE.ITEM_WHITE_WOOL, (x, y) => {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    if (d > 6) return null;
+    if (d > 5) return '#bfbfbf';
+    if ((x + y) % 3 === 0) return '#ffffff';
+    return pick(rnd, ['#e8e8e8', '#f4f4ee', '#dadada', '#f0f0ea']);
+  });
+
+  // 49 Raw Iron - speckled iron ore chunk
+  tile(TILE.ITEM_RAW_IRON, (x, y) => {
+    if (x < 3 || x > 12 || y < 3 || y > 12) return null;
+    if ((x + y * 2) % 4 === 0) return '#d2a87a';
+    if ((x * 2 + y) % 5 === 0) return '#8c6c44';
+    return pick(rnd, ['#a98b6b', '#c0a382', '#a4875f', '#b89b75']);
+  });
+
+  // 50 Raw Gold - speckled gold ore chunk
+  tile(TILE.ITEM_RAW_GOLD, (x, y) => {
+    if (x < 3 || x > 12 || y < 3 || y > 12) return null;
+    if ((x + y * 2) % 4 === 0) return '#ffd700';
+    if ((x * 2 + y) % 5 === 0) return '#c79d00';
+    return pick(rnd, ['#c8a060', '#b89858', '#d2a86c', '#a88848']);
+  });
+
+  // 51 Oak Door - small wooden door panel with window cutout
+  tile(TILE.ITEM_OAK_DOOR, (x, y) => {
+    if (x < 5 || x > 10 || y < 1 || y > 14) return null;
+    // Door frame outline
+    if (x === 5 || x === 10) return '#3d2a13';
+    if (y === 1 || y === 14) return '#3d2a13';
+    // Window cutout
+    if (y >= 4 && y <= 11 && x >= 7 && x <= 8) return '#7a99c4';
+    if (y === 4 && x >= 7 && x <= 8) return '#a8c8e0';
+    if (y === 11 && x >= 7 && x <= 8) return '#5a7a9a';
+    // Handle
+    if (x === 9 && y >= 7 && y <= 9) return '#3d2a13';
+    return pick(rnd, ['#9c7f4e', '#a68754', '#8c7042', '#a18350']);
   });
 
   // Create Three.js Texture

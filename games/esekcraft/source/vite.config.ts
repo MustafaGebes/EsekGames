@@ -5,18 +5,13 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    root: import.meta.dirname,
     base: '/games/esekcraft/',
+    build: { outDir: '../dist', emptyOutDir: true },
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, '.'),
+        '@': path.resolve(__dirname, '.'),
       },
-    },
-    build: {
-      outDir: path.resolve(import.meta.dirname, '../dist'),
-      emptyOutDir: true,
-      chunkSizeWarningLimit: 1000,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -1,8 +1,8 @@
-# EsekCraft Demo
+# EsekCraft1 — EsekGames sürümü
 
-Bu klasör, `MustafaGebes/EsekCraft` reposundan aktarılan React + Three.js kaynak projesidir. Oyun EsekGames içinde `/games/esekcraft/` adresinde servis edilir.
+Bu klasör, `MustafaGebes/EsekCraft` deposundaki `EsekCraft1` projesinin EsekGames'e aktarılmış sürümüdür.
 
-Kaynak: [github.com/MustafaGebes/EsekCraft](https://github.com/MustafaGebes/EsekCraft), aktarılan upstream commit `49f6f18bdca4ea136deee8c215b8b655e55c84d3`.
+EsekGames üzerinde `/games/esekcraft/` adresinden servis edilir.
 
 ## Geliştirme ve derleme
 
@@ -13,6 +13,4 @@ npm run lint
 npm run build
 ```
 
-Vite, `../dist` klasörünü `/games/esekcraft/` base yolu için üretir. EsekGames Express sunucusu bu klasörü oyun adresinde servis eder. `dist` derlemesi canlı yayında kullanılmak üzere EsekGames deposunda tutulur; root Render servisi kaynak kodu derlemez.
-
-Dünya kayıtları ve ayarlar tarayıcının `localStorage` alanında saklanır. Eski EsekCraft sürümüyle aynı kayıt anahtarları korunmuştur; yeni oyun eksik eski oyuncu alanları için varsayılan değerler kullanır.
+Vite, EsekGames Express sunucusunun servis ettiği `../dist` klasörüne `/games/esekcraft/` base yolu ile derler.

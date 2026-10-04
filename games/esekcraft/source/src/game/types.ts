@@ -44,6 +44,8 @@ export enum ItemType {
   GOLD_INGOT = 104,
   DIAMOND = 105,
   FLINT = 106,
+  RAW_IRON = 107,
+  RAW_GOLD = 108,
   
   // Tools
   WOODEN_PICKAXE = 110,

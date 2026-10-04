@@ -10,8 +10,8 @@ export interface SmeltRecipe {
 }
 
 export const SMELTING_RECIPES: SmeltRecipe[] = [
-  { input: BlockType.IRON_ORE, output: { id: ItemType.IRON_INGOT, count: 1 }, cookTime: 8 },
-  { input: BlockType.GOLD_ORE, output: { id: ItemType.GOLD_INGOT, count: 1 }, cookTime: 8 },
+  { input: ItemType.RAW_IRON, output: { id: ItemType.IRON_INGOT, count: 1 }, cookTime: 8 },
+  { input: ItemType.RAW_GOLD, output: { id: ItemType.GOLD_INGOT, count: 1 }, cookTime: 8 },
   { input: BlockType.SAND, output: { id: BlockType.GLASS, count: 1 }, cookTime: 8 },
   { input: BlockType.COBBLESTONE, output: { id: BlockType.STONE, count: 1 }, cookTime: 8 },
   { input: BlockType.OAK_LOG, output: { id: ItemType.CHARCOAL, count: 1 }, cookTime: 8 },
@@ -41,6 +41,12 @@ const DIA = ItemType.DIAMOND;
 const FUR = BlockType.FURNACE;
 const CST = BlockType.CHEST;
 const TRC = BlockType.TORCH;
+const GLS = BlockType.GLASS;
+const SND = BlockType.SAND;
+const DOOR = BlockType.OAK_DOOR;
+const RAW_IRN = ItemType.RAW_IRON;
+const RAW_GLD = ItemType.RAW_GOLD;
+const BREAD = ItemType.BREAD;
 
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // 1 Log -> 4 Planks (1x1 shapeless)
@@ -313,6 +319,56 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     output: { id: ItemType.DIAMOND_CHESTPLATE, count: 1, durability: 528, maxDurability: 528 },
     category: 'combat',
   },
+
+  // ====== NEW RECIPES (minecraft.wiki standard shapes) ======
+
+  // Wooden Door (6 planks, 2x3 two vertical columns)
+  {
+    id: 'wooden_door',
+    name: 'Meşe Kapı',
+    width: 2,
+    height: 3,
+    pattern: [PLK, PLK, PLK, PLK, PLK, PLK],
+    output: { id: DOOR, count: 1 },
+    category: 'building',
+  },
+
+  // 4 Sand -> 4 Sandstone would need a new block; skip for now.
+  // Instead, let's add shaped "Shapeless" Cobblestone -> 4 Gravel via crafting? No gravel.
+  // Charcoal from Log is handled in SMELTING_RECIPES already.
+
+  // Flint & Steel would need FLINT ItemType on its own (already exists)
+  // 1 IRN + 1 FLINT -> 1 Flint and Steel - useful but requires new item type.
+  // Skip tool-only items; users already have iron tools via recipes above.
+
+  // 9 Diamonds -> Diamond Block (block type missing)
+  // 9 Iron Ingots -> Iron Block (block type missing)
+
+  // 1 Coal/Charcoal + 8 Sticks placed in a + shape -> 8 Torches
+  {
+    id: 'torch_bulk',
+    name: 'Meşale (8x)',
+    width: 3,
+    height: 3,
+    pattern: [STK, COL, STK, STK, STK, STK, STK, STK, STK],
+    output: { id: TRC, count: 8 },
+    category: 'survival',
+  },
+  {
+    id: 'torch_bulk_charcoal',
+    name: 'Meşale (Odun Kömürü, 8x)',
+    width: 3,
+    height: 3,
+    pattern: [STK, CHR, STK, STK, STK, STK, STK, STK, STK],
+    output: { id: TRC, count: 8 },
+    category: 'survival',
+  },
+
+  // 4 Wood Log -> 4 Charcoal via furnace is already in SMELTING_RECIPES.
+
+  // Raw Iron / Raw Gold are already mineable; smelting yields ingots.
+
+  // Shapeless 4 White Wool -> "Wool Block" (would need new block, skip)
 ];
 
 /**
