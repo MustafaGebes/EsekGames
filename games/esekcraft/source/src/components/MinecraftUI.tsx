@@ -1194,15 +1194,12 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                       handleSlotClick(f.input, (s) => (f.input = s), e)
                     )}
 
-                    {/* Burning Fire Indicator */}
-                    <div className="w-4 h-4 flex items-center justify-center">
-                      <span
-                        className={`text-lg transition-all ${
-                          f.burnTimeRemaining > 0 ? 'text-amber-500 scale-110 animate-pulse' : 'text-[#666]'
-                        }`}
-                      >
-                        🔥
-                      </span>
+                    {/* Minecraft-style fuel gauge: remaining burn time / current fuel item burn time */}
+                    <div className="flex flex-col items-center gap-0.5" title={`Yakıt: ${Math.ceil(f.burnTimeRemaining)} sn`}>
+                      <div className="w-4 h-7 bg-[#333] border border-[#777] flex items-end">
+                        <div className="w-full bg-orange-500 transition-all" style={{ height: `${Math.min(100, f.maxBurnTime > 0 ? (f.burnTimeRemaining / f.maxBurnTime) * 100 : 0)}%` }} />
+                      </div>
+                      <span className={`text-[10px] ${f.burnTimeRemaining > 0 ? 'text-amber-500' : 'text-[#666]'}`}>🔥</span>
                     </div>
 
                     {/* Fuel slot */}

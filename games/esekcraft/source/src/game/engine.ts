@@ -144,6 +144,7 @@ export class MinecraftEngine {
   public isPaused = false;
   public isDead = false;
   public isGUIOpen = false;
+  public onlineMode = false;
 
   // Callbacks to React UI
   public onUIStateChange?: (state: string) => void;
@@ -151,6 +152,7 @@ export class MinecraftEngine {
   public onToast?: (msg: string) => void;
   public onBlockChanged?: (change: { x: number; y: number; z: number; blockId: number }) => void;
   public onAttackPlayer?: (payload: { targetId: string; weaponType: string }) => void;
+  public onTileEntityChanged?: () => void;
 
   private lastTime = 0;
   private animFrameId = 0;
@@ -540,7 +542,7 @@ export class MinecraftEngine {
     this.recoverFromBlockCollision();
     this.world.buildMesh(this.scene, this.worldMaterial);
     this.rebuildTorchVisuals();
-    this.spawnMobs(16);
+    this.spawnMobs(30);
     this.lastTime = performance.now();
     this.animate(this.lastTime);
   }
@@ -807,16 +809,29 @@ export class MinecraftEngine {
           gem.position.set(0, 0.16, 0);
           toolGroup.add(gem);
         } else if (id === ItemType.APPLE) {
-          const apple = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), toolMat);
-          apple.position.set(0, 0.14, 0);
-          toolGroup.add(apple);
-          const stem = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.04), woodHandleMat);
-          stem.position.set(0, 0.26, 0);
-          toolGroup.add(stem);
+          const apple = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshLambertMaterial({ color: 0xd62929 }));
+          apple.scale.y = 0.85; apple.position.set(0, 0.14, 0); toolGroup.add(apple);
+          const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.08, 6), woodHandleMat);
+          stem.position.set(0, 0.28, 0); toolGroup.add(stem);
+        } else if (id === ItemType.SHEARS) {
+          const bladeMat = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 });
+          const ringMat = new THREE.MeshLambertMaterial({ color: 0x6b3f20 });
+          for (const x of [-0.07, 0.07]) {
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 12), ringMat);
+            ring.position.set(x, 0.03, 0); toolGroup.add(ring);
+          }
+          const bladeA = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.32, 0.025), bladeMat);
+          bladeA.position.set(-0.045, 0.2, 0); bladeA.rotation.z = -0.22; toolGroup.add(bladeA);
+          const bladeB = bladeA.clone(); bladeB.position.x = 0.045; bladeB.rotation.z = 0.22; toolGroup.add(bladeB);
+        } else if ([ItemType.BREAD, ItemType.RAW_BEEF, ItemType.COOKED_STEAK, ItemType.RAW_PORKCHOP, ItemType.COOKED_PORKCHOP, ItemType.RAW_MUTTON, ItemType.COOKED_MUTTON, ItemType.RAW_CHICKEN, ItemType.COOKED_CHICKEN].includes(id as ItemType)) {
+          const food = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), toolMat);
+          food.scale.set(1.2, 0.7, 0.75); food.position.set(0, 0.14, 0); toolGroup.add(food);
+        } else if (id === ItemType.FEATHER) {
+          const feather = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.38), new THREE.MeshLambertMaterial({ color: 0xf1f1e8, side: THREE.DoubleSide }));
+          feather.position.set(0, 0.17, 0); feather.rotation.z = -0.25; toolGroup.add(feather);
         } else {
           const itemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.18, 0.16), toolMat);
-          itemMesh.position.set(0, 0.14, 0);
-          toolGroup.add(itemMesh);
+          itemMesh.position.set(0, 0.14, 0); toolGroup.add(itemMesh);
         }
       }
 
@@ -1252,6 +1267,8 @@ export class MinecraftEngine {
         walkPhase: Math.random() * 10,
         isPanicking: false,
         panicTimer: 0,
+        woolAvailable: type === MobType.SHEEP,
+        woolRegrowTimer: 0,
       };
 
       this.mobs.push(mob);
@@ -1262,6 +1279,10 @@ export class MinecraftEngine {
     for (let i = this.mobs.length - 1; i >= 0; i--) {
       const mob = this.mobs[i];
 
+      if (mob.type === MobType.SHEEP && mob.woolAvailable === false) {
+        mob.woolRegrowTimer = Math.max(0, (mob.woolRegrowTimer || 0) - dt);
+        if (mob.woolRegrowTimer <= 0) { mob.woolAvailable = true; mob.mesh.userData.woolParts?.forEach((m: THREE.Object3D) => { m.visible = true; }); }
+      }
       // Hurt timer & red damage flash
       if (mob.hurtTimer > 0) {
         mob.hurtTimer -= dt;
@@ -1916,9 +1937,21 @@ export class MinecraftEngine {
         return;
       }
     }
-    // Attack Mobs
+    // Sheep shearing uses the same reliable capsule raycast as melee.
     if (this.mouseLeft && this.attackCooldown <= 0) {
       const hitMob = this.raycastMob(eye, dir, 4.4);
+      const heldShears = this.inventory[this.selectedSlot]?.id === ItemType.SHEARS;
+      if (hitMob && hitMob.type === MobType.SHEEP && heldShears && hitMob.woolAvailable !== false) {
+        hitMob.woolAvailable = false;
+        hitMob.woolRegrowTimer = 60;
+        hitMob.hurtTimer = 0.22;
+        this.spawnDrop(hitMob.pos.x, hitMob.pos.y + 0.45, hitMob.pos.z, ItemType.WHITE_WOOL, 1 + Math.floor(Math.random() * 3));
+        const shears = this.inventory[this.selectedSlot];
+        if (shears?.durability !== undefined) { shears.durability--; if (shears.durability <= 0) this.inventory[this.selectedSlot] = null; }
+        hitMob.mesh.userData.woolParts?.forEach((m: THREE.Object3D) => { m.visible = false; });
+        this.onHUDUpdate?.(); this.onToast?.('Koyun kırkıldı: yün düştü.');
+        this.attackCooldown = 0.45; this.swingTimer = 0; return;
+      }
       if (hitMob) {
         this.attackMob(hitMob, dir);
         this.attackCooldown = 0.35;
@@ -1946,10 +1979,10 @@ export class MinecraftEngine {
 
         if (this.gameMode === 'creative') {
           toolSpeed = 100; // instant break
-        } else if (itemDef?.tool) {
-          if (itemDef.tool.type === bDef.requiredTool) {
-            toolSpeed = itemDef.tool.speed;
-          }
+        } else if (itemDef?.tool && itemDef.tool.type === bDef.requiredTool) {
+          toolSpeed = itemDef.tool.speed;
+        } else if (bDef.requiredTool !== 'none') {
+          toolSpeed = 0.18;
         }
 
         this.breakProgress += (dt * toolSpeed) / bDef.hardness;
@@ -1982,6 +2015,20 @@ export class MinecraftEngine {
         this.breakingBlock = null;
         this.breakProgress = 0;
         this.crackMesh.visible = false;
+      }
+    }
+
+    // Food can be eaten in open air too; Minecraft does not require a block target.
+    if (this.mouseRight && this.placeCooldown <= 0 && !hit) {
+      const held = this.inventory[this.selectedSlot];
+      const food = held ? ITEM_DEFS[held.id]?.food : null;
+      if (held && food && (this.hunger < this.maxHunger || this.hp < this.maxHp)) {
+        this.placeCooldown = 0.35;
+        this.hunger = Math.min(this.maxHunger, this.hunger + food.foodPoints);
+        this.hp = Math.min(this.maxHp, this.hp + food.healHp);
+        held.count--; if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+        Sound.eat(); this.updateHeldItemModel(); this.onHUDUpdate?.();
+        return;
       }
     }
 
@@ -2070,8 +2117,8 @@ export class MinecraftEngine {
 
       // Tool harvest requirement check
       let canHarvest = true;
-      if (bDef.requiredTool === 'pickaxe' && bDef.minHarvestLevel > 0) {
-        canHarvest = itemDef?.tool?.type === 'pickaxe' && itemDef.tool.harvestLevel >= bDef.minHarvestLevel;
+      if (bDef.requiredTool !== 'none') {
+        canHarvest = itemDef?.tool?.type === bDef.requiredTool && (itemDef.tool.harvestLevel ?? 0) >= bDef.minHarvestLevel;
       }
 
       if (bDef.drop && canHarvest) {
@@ -2290,6 +2337,20 @@ export class MinecraftEngine {
       this.drops.push({ id, count, mesh: toolMesh, vel: { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 }, age: 0, baseY: null });
       return;
     }
+    const foodColors: Record<number, number> = {
+      [ItemType.APPLE]: 0xd62929, [ItemType.BREAD]: 0xd8a14b, [ItemType.RAW_BEEF]: 0xa94b43,
+      [ItemType.COOKED_STEAK]: 0x7b351f, [ItemType.RAW_PORKCHOP]: 0xe58b82, [ItemType.COOKED_PORKCHOP]: 0x9b4b31,
+      [ItemType.RAW_MUTTON]: 0xd77b72, [ItemType.COOKED_MUTTON]: 0x8b4329, [ItemType.RAW_CHICKEN]: 0xe9b5a1,
+      [ItemType.COOKED_CHICKEN]: 0xc98d5b, [ItemType.LEATHER]: 0x7b4a2d, [ItemType.FEATHER]: 0xf1f1e8,
+      [ItemType.WHITE_WOOL]: 0xf4f4ee,
+    };
+    if (foodColors[id as number]) {
+      const geo = id === ItemType.FEATHER ? new THREE.PlaneGeometry(0.32, 0.42) : new THREE.SphereGeometry(0.18, 8, 6);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: foodColors[id as number] }));
+      mesh.position.set(x, y, z); this.scene.add(mesh);
+      this.drops.push({ id, count, mesh, vel: { x: (Math.random()-0.5)*1.8, y: 1.8, z: (Math.random()-0.5)*1.8 }, age: 0, baseY: null });
+      return;
+    }
     const mineralColors: Record<number, number> = {
       [ItemType.COAL]: 0x171717,
       [ItemType.RAW_IRON]: 0xb97852,
@@ -2325,6 +2386,16 @@ export class MinecraftEngine {
   }
 
   private updateDrops(dt: number) {
+    // Falling sand/gravity blocks: settle unsupported sand downward and hurt buried player.
+    if (Math.random() < dt * 3) {
+      const bx = Math.floor(this.pos.x), bz = Math.floor(this.pos.z), by = Math.floor(this.pos.y + 1.2);
+      if (this.world.getBlock(bx, by, bz) === BlockType.SAND && this.gameMode === 'survival') this.applyDamage(1, 'Kum altında boğuldun');
+      for (let z = 1; z < SZ - 1; z++) for (let x = 1; x < SX - 1; x++) for (let y = 1; y < SY - 1; y++) {
+        if (this.world.getBlock(x, y, z) === BlockType.SAND && this.world.getBlockPhys(x, y - 1, z) === BlockType.AIR) {
+          this.world.setBlock(x, y, z, BlockType.AIR); this.world.setBlock(x, y - 1, z, BlockType.SAND); this.world.buildMesh(this.scene, this.worldMaterial); break;
+        }
+      }
+    }
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const drop = this.drops[i];
       drop.age += dt;
@@ -2454,6 +2525,11 @@ export class MinecraftEngine {
     return count;
   }
 
+  public applyRemoteTileState(furnaces: Record<number, FurnaceData>, chests: Record<number, ChestData>) {
+    this.world.furnaces = furnaces || {};
+    this.world.chests = chests || {};
+    this.onHUDUpdate?.();
+  }
   // ================= FURNACE TICKING =================
   private tickFurnaces(dt: number) {
     for (const key in this.world.furnaces) {
@@ -2481,6 +2557,12 @@ export class MinecraftEngine {
           isLit = true;
         }
       }
+
+      // Keep the placed block visually lit while fuel remains.
+      const fx = idx % SX; const fz = Math.floor(idx / SX) % SZ; const fy = Math.floor(idx / (SX * SZ));
+      const placed = this.world.getBlock(fx, fy, fz);
+      if (isLit && placed === BlockType.FURNACE) this.world.setBlock(fx, fy, fz, BlockType.FURNACE_LIT, false);
+      if (!isLit && placed === BlockType.FURNACE_LIT) this.world.setBlock(fx, fy, fz, BlockType.FURNACE, false);
 
       // Progress cooking
       if (isLit && canSmelt) {
@@ -2754,7 +2836,7 @@ export class MinecraftEngine {
 
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
-      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen) {
+      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode) {
         this.isPaused = true;
         this.mouseLeft = false;
         this.mouseRight = false;

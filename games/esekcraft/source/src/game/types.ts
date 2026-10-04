@@ -34,6 +34,7 @@ export enum BlockType {
   OBSIDIAN = 22,
   OAK_DOOR = 23,
   BED = 24,
+  WHITE_WOOL_BLOCK = 25,
 }
 
 // Non-Block Items
@@ -85,6 +86,7 @@ export enum ItemType {
   LEATHER = 171,
   FEATHER = 172,
   WHITE_WOOL = 173,
+  SHEARS = 174,
 
   // Armor
   IRON_HELMET = 160,
@@ -249,4 +251,6 @@ export interface MobEntity {
   walkPhase: number;
   isPanicking: boolean;
   panicTimer: number;
+  woolAvailable?: boolean;
+  woolRegrowTimer?: number;
 }

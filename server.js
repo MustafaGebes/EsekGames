@@ -263,6 +263,16 @@ function handleEsekCraftKick(player, data = {}) {
     broadcastPlayers();
     broadcastRoomLists();
 }
+function handleEsekCraftTileState(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const furnaces = data.furnaces && typeof data.furnaces === "object" ? data.furnaces : {};
+    const chests = data.chests && typeof data.chests === "object" ? data.chests : {};
+    room.esekcraftTileState = { furnaces, chests };
+    room.lastActivityAt = Date.now();
+    broadcastToRoom(room.id, { type: "esekcraft_tile_state", sourceId: player.id, furnaces, chests });
+}
 function handleEsekCraftBlockChange(player, data = {}) {
     if (!player || !player.inGame) return;
     const room = getPlayerRoom(player);
@@ -2435,6 +2445,9 @@ wss.on("connection", (ws, req) => {
                 break;
             case "esekcraft_block_change":
                 handleEsekCraftBlockChange(player, data);
+                break;
+            case "esekcraft_tile_state":
+                handleEsekCraftTileState(player, data);
                 break;
 
             case "building_door_state":

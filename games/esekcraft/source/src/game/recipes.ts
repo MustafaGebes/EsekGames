@@ -44,6 +44,8 @@ const TRC = BlockType.TORCH;
 const GLS = BlockType.GLASS;
 const SND = BlockType.SAND;
 const DOOR = BlockType.OAK_DOOR;
+const WOOL_BLOCK = BlockType.WHITE_WOOL_BLOCK;
+const SHEARS = ItemType.SHEARS;
 const RAW_IRN = ItemType.RAW_IRON;
 const RAW_GLD = ItemType.RAW_GOLD;
 const BREAD = ItemType.BREAD;
@@ -368,7 +370,8 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
 
   // Raw Iron / Raw Gold are already mineable; smelting yields ingots.
 
-  // Shapeless 4 White Wool -> "Wool Block" (would need new block, skip)
+  { id: 'wool_block', name: 'Yün Bloğu', width: 2, height: 2, pattern: [ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, ItemType.WHITE_WOOL, ItemType.WHITE_WOOL], output: { id: WOOL_BLOCK, count: 1 }, category: 'building' },
+  { id: 'shears', name: 'Makas', width: 2, height: 2, pattern: [IRN, _, _, IRN], output: { id: SHEARS, count: 1, durability: 238, maxDurability: 238 }, category: 'tools' },
 ];
 
 /**

@@ -189,6 +189,7 @@ export default function App() {
           eng.isThirdPerson = thirdPerson;
 
           engineRef.current = eng;
+          eng.onlineMode = !!onlineRoomRef.current;
 
           eng.onUIStateChange = (st) => {
             setUIState(st);
@@ -219,6 +220,7 @@ export default function App() {
                 isCrouching: current.isSneaking, isSprinting: current.isSprinting,
                 isJumping: !current.onGround, platform: 'pc'
               });
+              sendOnlineMessage({ type: 'esekcraft_tile_state', furnaces: current.world.furnaces, chests: current.world.chests });
             }, 50);
           }
           setGenProgress(100);
@@ -300,6 +302,9 @@ export default function App() {
         if (message.type === 'esekcraft_kicked') { showToast(message.message || 'Odadan çıkarıldın.'); handleSaveAndQuit(); return; }
         if (message.type === 'esekcraft_block_changes' && engineRef.current) {
           for (const change of message.changes || []) engineRef.current.applyRemoteBlockChange(Number(change.x), Number(change.y), Number(change.z), Number(change.blockId));
+        }
+        if (message.type === 'esekcraft_tile_state' && engineRef.current) {
+          engineRef.current.applyRemoteTileState(message.furnaces || {}, message.chests || {});
         }
         if (message.type === 'esekcraft_block_change' && engineRef.current) {
           engineRef.current.applyRemoteBlockChange(Number(message.x), Number(message.y), Number(message.z), Number(message.blockId));

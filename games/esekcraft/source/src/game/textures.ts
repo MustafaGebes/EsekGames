@@ -76,6 +76,8 @@ export const TILE = {
   ITEM_RAW_IRON: 49,
   ITEM_RAW_GOLD: 50,
   ITEM_OAK_DOOR: 51,
+  WOOL: 48,
+  SHEARS: 52,
 };
 
 export const BLOCK_DEFS: Record<number, BlockDef> = {
@@ -169,6 +171,10 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     requiredTool: 'none',
     minHarvestLevel: 0,
     drop: BlockType.BED,
+  },
+  [BlockType.WHITE_WOOL_BLOCK]: {
+    name: 'Beyaz Yün Bloğu', top: TILE.ITEM_WHITE_WOOL, bottom: TILE.ITEM_WHITE_WOOL, side: TILE.ITEM_WHITE_WOOL,
+    hardness: 0.8, requiredTool: 'none', minHarvestLevel: 0, drop: BlockType.WHITE_WOOL_BLOCK,
   },
   [BlockType.CRAFTING_TABLE]: {
     name: 'Çalışma Masası',
@@ -375,6 +381,7 @@ const ITEM_TILE_ENTRIES: Array<{
   { id: ItemType.IRON_BOOTS, name: 'Demir Bot', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_CHESTPLATE, name: 'Elmas Zırh', tile: TILE.ITEM_DIAMOND },
   { id: BlockType.OAK_DOOR, name: 'Meşe Kapı', tile: TILE.ITEM_OAK_DOOR },
+  { id: ItemType.SHEARS, name: 'Makas', tile: TILE.SHEARS },
 ];
 
 // Register each item entry into BLOCK_DEFS so setupMeshUVs can find a tile
@@ -528,10 +535,8 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   [ItemType.FEATHER]: {
     name: 'Tüy',
   },
-  [ItemType.WHITE_WOOL]: {
-    name: 'Beyaz Yün',
-    fuelValue: 5,
-  },
+  [ItemType.WHITE_WOOL]: { name: 'Beyaz Yün' },
+  [ItemType.SHEARS]: { name: 'Makas', tool: { type: 'none', material: 'iron', durability: 238, speed: 1, damage: 1, harvestLevel: 0 } },
 
   // Armor
   [ItemType.IRON_HELMET]: {
