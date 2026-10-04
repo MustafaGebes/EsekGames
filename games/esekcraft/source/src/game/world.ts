@@ -405,12 +405,16 @@ export class VoxelWorld {
             const bedSideTiles = [TILE.BED_SIDE, TILE.BED_SIDE, TILE.BED_FRAME, mattressTop, TILE.BED_SIDE, TILE.BED_SIDE];
             const frameTiles = [TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME, TILE.BED_FRAME];
             const axisX = bedState.facing === 1 || bedState.facing === 3;
-            const mattressMinX = axisX ? 0.02 : 0.07;
-            const mattressMaxX = axisX ? 0.98 : 0.93;
-            const mattressMinZ = axisX ? 0.07 : 0.02;
-            const mattressMaxZ = axisX ? 0.93 : 0.98;
+            // A continuous wooden underside hides the supporting block through the gaps in the frame.
+            emitTexturedBox(x, y, z, 0, 1, 0, 0.10, 0, 1, frameTiles);
+
+            // Let the mattress and frame meet exactly at the foot/head cell boundary.
+            const mattressMinX = axisX ? 0 : 0.07;
+            const mattressMaxX = axisX ? 1 : 0.93;
+            const mattressMinZ = axisX ? 0.07 : 0;
+            const mattressMaxZ = axisX ? 0.93 : 1;
             emitTexturedBox(x, y, z, mattressMinX, mattressMaxX, 0.245, 0.5625, mattressMinZ, mattressMaxZ, bedSideTiles);
-            emitTexturedBox(x, y, z, axisX ? 0.02 : 0.12, axisX ? 0.98 : 0.88, 0.10, 0.25, axisX ? 0.12 : 0.02, axisX ? 0.88 : 0.98, frameTiles);
+            emitTexturedBox(x, y, z, axisX ? 0 : 0.12, axisX ? 1 : 0.88, 0.10, 0.25, axisX ? 0.12 : 0, axisX ? 0.88 : 1, frameTiles);
 
             const headEndIsMin = bedState.facing === 0 || bedState.facing === 1;
             const legAtMin = bedState.head === headEndIsMin;
