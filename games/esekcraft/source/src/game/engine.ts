@@ -581,7 +581,7 @@ export class MinecraftEngine {
       this.heldItemMesh = torch as unknown as THREE.Mesh;
       this.handGroup.add(this.heldItemMesh);
     // If it's a block: render miniature 3D block held by the hoof, tilted upright facing player
-    } else if (BLOCK_DEFS[id]) {
+    } else if (BLOCK_DEFS[id] && !ITEM_DEFS[id]?.tool && id !== ItemType.STICK) {
       const geo = new THREE.BoxGeometry(0.24, 0.24, 0.24);
       this.heldItemMesh = new THREE.Mesh(geo, this.worldMaterial);
       this.setupMeshUVs(geo, id);
@@ -723,7 +723,15 @@ export class MinecraftEngine {
         toolGroup.add(tip);
       } else {
         // General items, food, materials (apple, ingot, diamond, wool, meat)
-        if (id === ItemType.DIAMOND) {
+        if (id === ItemType.STICK) {
+          const stick = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.035, 0.045, 0.58, 8),
+            woodHandleMat
+          );
+          stick.rotation.z = -0.35;
+          stick.position.set(0, 0.12, 0);
+          toolGroup.add(stick);
+        } else if (id === ItemType.DIAMOND) {
           const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), toolMat);
           gem.position.set(0, 0.16, 0);
           toolGroup.add(gem);
