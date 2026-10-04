@@ -1365,22 +1365,22 @@ export class MinecraftEngine {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.2), whiteMat);
     headGroup.add(head);
 
-    // Yellow beak
+    // Face details point toward +z, matching the mob yaw and movement direction.
     const beak = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.14), beakMat);
-    beak.position.set(0, -0.04, -0.15);
+    beak.position.set(0, -0.04, 0.15);
     headGroup.add(beak);
 
     // Red wattle
     const wattle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.06), wattleMat);
-    wattle.position.set(0, -0.12, -0.1);
+    wattle.position.set(0, -0.12, 0.1);
     headGroup.add(wattle);
 
     // Eyes
     const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.04), black);
-    eye1.position.set(-0.1, 0.06, -0.07);
+    eye1.position.set(-0.1, 0.06, 0.07);
     headGroup.add(eye1);
     const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.04), black);
-    eye2.position.set(0.1, 0.06, -0.07);
+    eye2.position.set(0.1, 0.06, 0.07);
     headGroup.add(eye2);
 
     g.add(headGroup);
@@ -1396,7 +1396,7 @@ export class MinecraftEngine {
       legGroup.add(leg);
 
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.14), footMat);
-      foot.position.set(0, -0.27, -0.03);
+      foot.position.set(0, -0.27, 0.03);
       legGroup.add(foot);
 
       g.add(legGroup);
