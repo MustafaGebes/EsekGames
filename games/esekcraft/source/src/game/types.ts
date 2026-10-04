@@ -61,9 +61,26 @@ export enum BlockType {
   BED_HEAD_WEST = 49,
   BED_HEAD_SOUTH = 50,
   BED_HEAD_EAST = 51,
+  OAK_DOOR_RIGHT_HINGE = 52,
+  OAK_DOOR_WEST_RIGHT_HINGE = 53,
+  OAK_DOOR_SOUTH_RIGHT_HINGE = 54,
+  OAK_DOOR_EAST_RIGHT_HINGE = 55,
+  OAK_DOOR_TOP_RIGHT_HINGE = 56,
+  OAK_DOOR_TOP_WEST_RIGHT_HINGE = 57,
+  OAK_DOOR_TOP_SOUTH_RIGHT_HINGE = 58,
+  OAK_DOOR_TOP_EAST_RIGHT_HINGE = 59,
+  OAK_DOOR_OPEN_RIGHT_HINGE = 60,
+  OAK_DOOR_OPEN_WEST_RIGHT_HINGE = 61,
+  OAK_DOOR_OPEN_SOUTH_RIGHT_HINGE = 62,
+  OAK_DOOR_OPEN_EAST_RIGHT_HINGE = 63,
+  OAK_DOOR_TOP_OPEN_RIGHT_HINGE = 64,
+  OAK_DOOR_TOP_OPEN_WEST_RIGHT_HINGE = 65,
+  OAK_DOOR_TOP_OPEN_SOUTH_RIGHT_HINGE = 66,
+  OAK_DOOR_TOP_OPEN_EAST_RIGHT_HINGE = 67,
 }
 
 export type DoorFacing = 0 | 1 | 2 | 3; // north, west, south, east
+export type DoorHinge = 'left' | 'right';
 
 const DOOR_LOWER_CLOSED: readonly BlockType[] = [
   BlockType.OAK_DOOR, BlockType.OAK_DOOR_WEST, BlockType.OAK_DOOR_SOUTH, BlockType.OAK_DOOR_EAST,
@@ -77,21 +94,37 @@ const DOOR_LOWER_OPEN: readonly BlockType[] = [
 const DOOR_UPPER_OPEN: readonly BlockType[] = [
   BlockType.OAK_DOOR_TOP_OPEN, BlockType.OAK_DOOR_TOP_OPEN_WEST, BlockType.OAK_DOOR_TOP_OPEN_SOUTH, BlockType.OAK_DOOR_TOP_OPEN_EAST,
 ];
+const DOOR_LOWER_CLOSED_RIGHT: readonly BlockType[] = [
+  BlockType.OAK_DOOR_RIGHT_HINGE, BlockType.OAK_DOOR_WEST_RIGHT_HINGE, BlockType.OAK_DOOR_SOUTH_RIGHT_HINGE, BlockType.OAK_DOOR_EAST_RIGHT_HINGE,
+];
+const DOOR_UPPER_CLOSED_RIGHT: readonly BlockType[] = [
+  BlockType.OAK_DOOR_TOP_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_WEST_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_SOUTH_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_EAST_RIGHT_HINGE,
+];
+const DOOR_LOWER_OPEN_RIGHT: readonly BlockType[] = [
+  BlockType.OAK_DOOR_OPEN_RIGHT_HINGE, BlockType.OAK_DOOR_OPEN_WEST_RIGHT_HINGE, BlockType.OAK_DOOR_OPEN_SOUTH_RIGHT_HINGE, BlockType.OAK_DOOR_OPEN_EAST_RIGHT_HINGE,
+];
+const DOOR_UPPER_OPEN_RIGHT: readonly BlockType[] = [
+  BlockType.OAK_DOOR_TOP_OPEN_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_OPEN_WEST_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_OPEN_SOUTH_RIGHT_HINGE, BlockType.OAK_DOOR_TOP_OPEN_EAST_RIGHT_HINGE,
+];
 
-export function getDoorState(id: BlockType): { upper: boolean; open: boolean; facing: DoorFacing } | null {
+export function getDoorState(id: BlockType): { upper: boolean; open: boolean; facing: DoorFacing; hinge: DoorHinge } | null {
   for (let facing = 0; facing < 4; facing++) {
-    if (DOOR_LOWER_CLOSED[facing] === id) return { upper: false, open: false, facing: facing as DoorFacing };
-    if (DOOR_UPPER_CLOSED[facing] === id) return { upper: true, open: false, facing: facing as DoorFacing };
-    if (DOOR_LOWER_OPEN[facing] === id) return { upper: false, open: true, facing: facing as DoorFacing };
-    if (DOOR_UPPER_OPEN[facing] === id) return { upper: true, open: true, facing: facing as DoorFacing };
+    if (DOOR_LOWER_CLOSED[facing] === id) return { upper: false, open: false, facing: facing as DoorFacing, hinge: 'left' };
+    if (DOOR_UPPER_CLOSED[facing] === id) return { upper: true, open: false, facing: facing as DoorFacing, hinge: 'left' };
+    if (DOOR_LOWER_OPEN[facing] === id) return { upper: false, open: true, facing: facing as DoorFacing, hinge: 'left' };
+    if (DOOR_UPPER_OPEN[facing] === id) return { upper: true, open: true, facing: facing as DoorFacing, hinge: 'left' };
+    if (DOOR_LOWER_CLOSED_RIGHT[facing] === id) return { upper: false, open: false, facing: facing as DoorFacing, hinge: 'right' };
+    if (DOOR_UPPER_CLOSED_RIGHT[facing] === id) return { upper: true, open: false, facing: facing as DoorFacing, hinge: 'right' };
+    if (DOOR_LOWER_OPEN_RIGHT[facing] === id) return { upper: false, open: true, facing: facing as DoorFacing, hinge: 'right' };
+    if (DOOR_UPPER_OPEN_RIGHT[facing] === id) return { upper: true, open: true, facing: facing as DoorFacing, hinge: 'right' };
   }
   return null;
 }
 
-export function getDoorBlockId(upper: boolean, facing: DoorFacing, open: boolean): BlockType {
-  const states = open
-    ? (upper ? DOOR_UPPER_OPEN : DOOR_LOWER_OPEN)
-    : (upper ? DOOR_UPPER_CLOSED : DOOR_LOWER_CLOSED);
+export function getDoorBlockId(upper: boolean, facing: DoorFacing, open: boolean, hinge: DoorHinge = 'left'): BlockType {
+  const states = hinge === 'right'
+    ? (open ? (upper ? DOOR_UPPER_OPEN_RIGHT : DOOR_LOWER_OPEN_RIGHT) : (upper ? DOOR_UPPER_CLOSED_RIGHT : DOOR_LOWER_CLOSED_RIGHT))
+    : (open ? (upper ? DOOR_UPPER_OPEN : DOOR_LOWER_OPEN) : (upper ? DOOR_UPPER_CLOSED : DOOR_LOWER_CLOSED));
   return states[facing];
 }
 
@@ -102,17 +135,36 @@ export interface DoorLocalBounds {
   maxZ: number;
 }
 
-/** Shared centered, one-cell panel bounds for mesh, raycast, outline and player collision. */
+/** Shared hinge-aware panel bounds for mesh, raycast, outline and player collision. */
 export function getDoorLocalBounds(id: BlockType): DoorLocalBounds | null {
   const state = getDoorState(id);
   if (!state) return null;
 
-  // Keep the leaf fully inside its own voxel: closed leaves lie across X for
-  // north/south, while opening rotates them across Z (and vice versa).
-  const widthAlongX = (state.facing % 2 === 0) !== state.open;
+  if (state.open) {
+    // When open, the leaf rotates out of the doorway and hugs the stored hinge edge.
+    const leftEdge = state.facing === 0 ? 'minX' : state.facing === 1 ? 'maxZ' : state.facing === 2 ? 'maxX' : 'minZ';
+    const rightEdge = state.facing === 0 ? 'maxX' : state.facing === 1 ? 'minZ' : state.facing === 2 ? 'minX' : 'maxZ';
+    const edge = state.hinge === 'left' ? leftEdge : rightEdge;
+    if (edge === 'minX') return { minX: 0, maxX: 0.125, minZ: 0.05, maxZ: 0.95 };
+    if (edge === 'maxX') return { minX: 0.875, maxX: 1, minZ: 0.05, maxZ: 0.95 };
+    if (edge === 'minZ') return { minX: 0.05, maxX: 0.95, minZ: 0, maxZ: 0.125 };
+    return { minX: 0.05, maxX: 0.95, minZ: 0.875, maxZ: 1 };
+  }
+
+  // Closed leaves lie across X for north/south and across Z for west/east.
+  const widthAlongX = state.facing % 2 === 0;
   return widthAlongX
     ? { minX: 0.05, maxX: 0.95, minZ: 0.4375, maxZ: 0.5625 }
     : { minX: 0.4375, maxX: 0.5625, minZ: 0.05, maxZ: 0.95 };
+}
+
+/** Pick the hinge on the outside edge, away from an adjacent matching door. */
+export function getDoorHingeAwayFromNeighbor(facing: DoorFacing, neighborDx: number, neighborDz: number): DoorHinge {
+  const awayEdge = facing % 2 === 0
+    ? (neighborDx < 0 ? 'maxX' : 'minX')
+    : (neighborDz < 0 ? 'maxZ' : 'minZ');
+  const leftEdge = facing === 0 ? 'minX' : facing === 1 ? 'maxZ' : facing === 2 ? 'maxX' : 'minZ';
+  return awayEdge === leftEdge ? 'left' : 'right';
 }
 
 /** Finds the adjacent, same-facing door leaf that forms a horizontal double door. */

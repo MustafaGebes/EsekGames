@@ -444,7 +444,7 @@ for (const e of ITEM_TILE_ENTRIES) {
 
 // Door states are real block shapes, not the item-only cube fallback. Upper and
 // open/facing variants share the correct procedural lower/upper atlas texture.
-for (let blockId = BlockType.OAK_DOOR; blockId <= BlockType.OAK_DOOR_TOP_OPEN_EAST; blockId++) {
+for (let blockId = BlockType.OAK_DOOR; blockId <= BlockType.OAK_DOOR_TOP_OPEN_EAST_RIGHT_HINGE; blockId++) {
   const state = getDoorState(blockId);
   if (!state) continue;
   const tile = state.upper ? TILE.DOOR_UPPER : TILE.DOOR_LOWER;

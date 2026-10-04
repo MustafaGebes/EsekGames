@@ -25,6 +25,7 @@ import {
   getBlockOffsetY,
   getDoorBlockId,
   getDoorLocalBounds,
+  getDoorHingeAwayFromNeighbor,
   findAdjacentDoorPair,
   getDoorState,
   getSlabBaseBlock,
@@ -2771,22 +2772,38 @@ export class MinecraftEngine {
     const upperState = getDoorState(upperBlock);
     if (upperBlock !== BlockType.AIR && (!upperState || !upperState.upper)) return;
     const open = !bottomState.open;
-    const doors = [{ x: hit.x, z: hit.z }];
     const partner = findAdjacentDoorPair(
       (x, y, z) => this.world.getBlock(x, y, z),
       hit.x, bottomY, hit.z, bottomState.facing,
     );
-    if (partner) doors.push(partner);
+    const hinge = partner
+      ? getDoorHingeAwayFromNeighbor(bottomState.facing, partner.x - hit.x, partner.z - hit.z)
+      : bottomState.hinge;
+    const bottomId = getDoorBlockId(false, bottomState.facing, open, hinge);
+    const topId = getDoorBlockId(true, bottomState.facing, open, hinge);
+    this.world.setBlock(hit.x, bottomY, hit.z, bottomId);
+    this.world.setBlock(hit.x, bottomY + 1, hit.z, topId);
+    this.onBlockChanged?.({ x: hit.x, y: bottomY, z: hit.z, blockId: bottomId });
+    this.onBlockChanged?.({ x: hit.x, y: bottomY + 1, z: hit.z, blockId: topId });
 
-    for (const door of doors) {
-      const state = getDoorState(this.world.getBlock(door.x, bottomY, door.z));
-      if (!state || state.upper) continue;
-      const bottomId = getDoorBlockId(false, state.facing, open);
-      const topId = getDoorBlockId(true, state.facing, open);
-      this.world.setBlock(door.x, bottomY, door.z, bottomId);
-      this.world.setBlock(door.x, bottomY + 1, door.z, topId);
-      this.onBlockChanged?.({ x: door.x, y: bottomY, z: door.z, blockId: bottomId });
-      this.onBlockChanged?.({ x: door.x, y: bottomY + 1, z: door.z, blockId: topId });
+    // Keep a paired leaf on the opposite hinge edge, but never toggle its open state.
+    if (partner) {
+      const partnerState = getDoorState(this.world.getBlock(partner.x, bottomY, partner.z));
+      if (partnerState && !partnerState.upper) {
+        const partnerHinge = getDoorHingeAwayFromNeighbor(
+          bottomState.facing, hit.x - partner.x, hit.z - partner.z,
+        );
+        const partnerBottomId = getDoorBlockId(false, partnerState.facing, partnerState.open, partnerHinge);
+        const partnerTopId = getDoorBlockId(true, partnerState.facing, partnerState.open, partnerHinge);
+        if (this.world.getBlock(partner.x, bottomY, partner.z) !== partnerBottomId) {
+          this.world.setBlock(partner.x, bottomY, partner.z, partnerBottomId);
+          this.onBlockChanged?.({ x: partner.x, y: bottomY, z: partner.z, blockId: partnerBottomId });
+        }
+        if (this.world.getBlock(partner.x, bottomY + 1, partner.z) !== partnerTopId) {
+          this.world.setBlock(partner.x, bottomY + 1, partner.z, partnerTopId);
+          this.onBlockChanged?.({ x: partner.x, y: bottomY + 1, z: partner.z, blockId: partnerTopId });
+        }
+      }
     }
     this.rebuildVisibleWorld();
     Sound.click();
@@ -2804,6 +2821,12 @@ export class MinecraftEngine {
     if (!supportDef || supportDef.transparent || getBlockHeight(support) < 1) return;
 
     const facing = (((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4) as DoorFacing;
+    const partner = findAdjacentDoorPair(
+      (bx, by, bz) => this.world.getBlock(bx, by, bz), x, y, z, facing,
+    );
+    const hinge = partner
+      ? getDoorHingeAwayFromNeighbor(facing, partner.x - x, partner.z - z)
+      : 'left';
     const doorBounds = getDoorLocalBounds(getDoorBlockId(false, facing, false))!;
     const intersectsPlayer = (cellY: number) =>
       x + doorBounds.maxX > this.pos.x - this.PW &&
@@ -2814,12 +2837,24 @@ export class MinecraftEngine {
       z + doorBounds.minZ < this.pos.z + this.PW;
     if (intersectsPlayer(y) || intersectsPlayer(y + 1)) return;
 
-    const bottomId = getDoorBlockId(false, facing, false);
-    const topId = getDoorBlockId(true, facing, false);
+    const bottomId = getDoorBlockId(false, facing, false, hinge);
+    const topId = getDoorBlockId(true, facing, false, hinge);
     this.world.setBlock(x, y, z, bottomId);
     this.world.setBlock(x, y + 1, z, topId);
     this.onBlockChanged?.({ x, y, z, blockId: bottomId });
     this.onBlockChanged?.({ x, y: y + 1, z, blockId: topId });
+    if (partner) {
+      const partnerState = getDoorState(this.world.getBlock(partner.x, y, partner.z));
+      if (partnerState && !partnerState.upper) {
+        const partnerHinge = getDoorHingeAwayFromNeighbor(facing, x - partner.x, z - partner.z);
+        const partnerBottomId = getDoorBlockId(false, facing, partnerState.open, partnerHinge);
+        const partnerTopId = getDoorBlockId(true, facing, partnerState.open, partnerHinge);
+        this.world.setBlock(partner.x, y, partner.z, partnerBottomId);
+        this.world.setBlock(partner.x, y + 1, partner.z, partnerTopId);
+        this.onBlockChanged?.({ x: partner.x, y, z: partner.z, blockId: partnerBottomId });
+        this.onBlockChanged?.({ x: partner.x, y: y + 1, z: partner.z, blockId: partnerTopId });
+      }
+    }
     this.rebuildVisibleWorld();
     this.rebuildTorchVisuals();
     Sound.placeBlock('wood');
