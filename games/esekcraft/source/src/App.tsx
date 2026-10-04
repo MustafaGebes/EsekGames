@@ -11,11 +11,22 @@ import { ControlsModal } from './components/ControlsModal';
 
 const LOCAL_STORAGE_KEY = 'esekcraft_worlds_v1';
 const SETTINGS_KEY = 'esekcraft_settings_v1';
+type OnlineRoom = {
+  id: string;
+  name: string;
+  gameId: string;
+  maxPlayers: number;
+  currentPlayers: number;
+  mapName?: string;
+  hostName?: string;
+  worldOptions?: { name: string; seed: string; difficulty: number; gameMode: 'survival' | 'creative' } | null;
+  isOpen: boolean;
+};
 
 export default function App() {
-  // App navigation state: 'boot' | 'title' | 'settings' | 'play_menu' | 'worlds' | 'create_world' | 'generating' | 'in_game'
+  // App navigation state: 'boot' | 'title' | 'settings' | 'play_menu' | 'worlds' | 'create_world' | 'online_rooms' | 'online_create' | 'generating' | 'in_game'
   const [appState, setAppState] = useState<
-    'boot' | 'title' | 'settings' | 'play_menu' | 'worlds' | 'create_world' | 'generating' | 'in_game'
+    'boot' | 'title' | 'settings' | 'play_menu' | 'worlds' | 'create_world' | 'online_rooms' | 'online_create' | 'generating' | 'in_game'
   >('boot');
 
   const [uiState, setUIState] = useState<string>('playing');
@@ -38,6 +49,12 @@ export default function App() {
   const [thirdPerson, setThirdPerson] = useState(false);
   const [settingsFrom, setSettingsFrom] = useState<'title' | 'in_game'>('title');
   const [showControlsModal, setShowControlsModal] = useState(false);
+  // Online EsekCraft lobby state
+  const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([]);
+  const [selectedOnlineRoom, setSelectedOnlineRoom] = useState<string | null>(null);
+  const [onlineMaxPlayers, setOnlineMaxPlayers] = useState(1);
+  const onlineSocketRef = useRef<WebSocket | null>(null);
+  const onlineRoomRef = useRef<OnlineRoom | null>(null);
   const [keyBindings, setKeyBindings] = useState<KeyBindings>(DEFAULT_KEY_BINDINGS);
 
   // New world form state
@@ -193,6 +210,66 @@ export default function App() {
     }, 250);
   };
 
+  const closeOnlineConnection = () => {
+    const ws = onlineSocketRef.current;
+    onlineSocketRef.current = null;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    onlineRoomRef.current = null;
+  };
+  const sendOnlineMessage = (payload: Record<string, unknown>) => {
+    const ws = onlineSocketRef.current;
+    if (!ws) return;
+    const send = () => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+    };
+    if (ws.readyState === WebSocket.OPEN) send();
+    else ws.addEventListener('open', send, { once: true });
+  };
+  const roomToWorldMeta = (room: OnlineRoom): WorldMeta => {
+    const options = room.worldOptions || { name: room.name, seed: `online-${room.id}`, difficulty: 1, gameMode: 'survival' as const };
+    return {
+      id: `online-${room.id}`,
+      name: options.name || room.name,
+      seed: options.seed,
+      difficulty: options.difficulty,
+      gameMode: options.gameMode,
+      created: Date.now(), saved: Date.now(), mods: {}, furnaces: {}, chests: {}
+    };
+  };
+  const connectOnline = () => {
+    if (onlineSocketRef.current && onlineSocketRef.current.readyState <= WebSocket.OPEN) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+    onlineSocketRef.current = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'rooms_request', gameId: 'esekcraft' }));
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'rooms_list') setOnlineRooms(message.rooms || []);
+        if (message.type === 'room_error') showToast(message.message || 'Sunucu işlemi başarısız.');
+        if (message.type === 'room_created' || message.type === 'room_joined') {
+          const room = message.room as OnlineRoom;
+          onlineRoomRef.current = room;
+          setSelectedOnlineRoom(room.id);
+          launchWorld(roomToWorldMeta(room));
+        }
+      } catch {}
+    };
+    ws.onerror = () => showToast('Online sunucuya bağlanılamadı.');
+    ws.onclose = () => {
+      if (onlineSocketRef.current === ws) onlineSocketRef.current = null;
+    };
+  };
+  const handleCreateOnlineRoom = () => {
+    connectOnline();
+    sendOnlineMessage({
+      type: 'create_room', gameId: 'esekcraft', name: newWorldName.trim() || 'EsekCraft Lobisi',
+      maxPlayers: onlineMaxPlayers, worldOptions: {
+        name: newWorldName.trim() || 'Çevrimiçi Dünya', seed: newWorldSeed.trim(),
+        difficulty: newWorldDifficulty, gameMode: newWorldMode
+      }
+    });
+  };
   const handleSaveAndQuit = () => {
     const eng = engineRef.current;
     const meta = activeMetaRef.current;
@@ -232,12 +309,14 @@ export default function App() {
       } catch {}
     }
 
+    if (onlineRoomRef.current) sendOnlineMessage({ type: 'leave_room' });
     if (eng) {
       eng.exitPointerLock();
       eng.destroy();
       engineRef.current = null;
     }
 
+    closeOnlineConnection();
     setAppState('title');
     setUIState('title');
   };
@@ -407,13 +486,16 @@ export default function App() {
               Tek Başına
             </button>
 
-            {/* Online (Multiplayer - Disabled) */}
+            {/* Online multiplayer */}
             <button
-              disabled
-              title="Çok oyunculu mod yakında!"
-              className="mc-btn w-full !py-3 !text-base disabled:opacity-60"
+              onClick={() => {
+                Sound.click();
+                connectOnline();
+                setAppState('online_rooms');
+              }}
+              className="mc-btn w-full !py-3 !text-base bg-emerald-800 border-emerald-600"
             >
-              Online (Yakında!)
+              Online Sunucular
             </button>
 
             {/* Geri Button */}
@@ -432,6 +514,37 @@ export default function App() {
         </div>
       )}
 
+      {/* ================= ONLINE SUNUCULAR ================= */}
+      {appState === 'online_rooms' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-[2px]">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[560px] max-w-[94vw] bg-red-950/95 border-2 border-red-500 px-3 py-2 text-center text-red-200 font-bold text-xs">
+            UYARI: Sunucuda 0 kişi kalırsa lobi 5 dakika sonra otomatik silinir.
+          </div>
+          <div className="mc-panel p-6 flex flex-col items-center gap-3 w-[560px] max-w-[94vw] max-h-[78vh]">
+            <h2 className="text-2xl font-bold text-white">EsekCraft Sunucuları</h2>
+            <div className="w-full text-xs text-[#bbb] text-center">En fazla 6 kişi · Bir sunucuya katılınca dünya otomatik açılır.</div>
+            <div className="w-full min-h-[180px] max-h-[320px] overflow-y-auto mc-scroll flex flex-col gap-2 p-2 bg-[#111] border-2 border-[#555]">
+              {onlineRooms.length === 0 ? (
+                <div className="text-sm text-[#999] text-center py-14">Açık sunucu yok. İlk lobiyi sen oluştur!</div>
+              ) : onlineRooms.map((room) => (
+                <div key={room.id} onClick={() => setSelectedOnlineRoom(room.id)} className={`p-3 cursor-pointer border-2 flex items-center justify-between ${selectedOnlineRoom === room.id ? 'bg-[#455a8a] border-[#8ab4ff]' : 'bg-[#262626] border-[#444] hover:bg-[#343f58]'}`}>
+                  <div>
+                    <div className="font-bold text-base">{room.name}</div>
+                    <div className="text-xs text-[#bbb]">Kurucu: {room.hostName || 'Oyuncu'} · Seed: {room.worldOptions?.seed || 'rastgele'}</div>
+                    <div className="text-xs text-[#aaa]">{room.worldOptions?.gameMode === 'creative' ? 'Yaratıcı' : 'Hayatta Kalma'} · {room.worldOptions?.difficulty === 0 ? 'Kolay' : room.worldOptions?.difficulty === 2 ? 'Zor' : 'Normal'}</div>
+                  </div>
+                  <div className={`font-mono font-bold ${room.currentPlayers >= room.maxPlayers ? 'text-red-400' : 'text-emerald-300'}`}>{room.currentPlayers}/{room.maxPlayers}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 w-full">
+              <button onClick={() => { Sound.click(); setNewWorldName('Çevrimiçi Dünya'); setNewWorldSeed(''); setNewWorldDifficulty(1); setNewWorldMode('survival'); setOnlineMaxPlayers(1); setAppState('online_create'); }} className="mc-btn flex-1 bg-emerald-800 border-emerald-600">Lobi Oluştur</button>
+              <button disabled={!selectedOnlineRoom || !onlineRooms.find((r) => r.id === selectedOnlineRoom)?.isOpen} onClick={() => { Sound.click(); sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: selectedOnlineRoom }); }} className="mc-btn flex-1">Katıl</button>
+              <button onClick={() => { Sound.click(); closeOnlineConnection(); setAppState('play_menu'); }} className="mc-btn flex-1">Geri</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ================= 4. DÜNYALAR SCREEN ================= */}
       {appState === 'worlds' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-[2px]">
@@ -521,11 +634,11 @@ export default function App() {
       )}
 
       {/* ================= 5. DÜNYA OLUŞTUR SCREEN ================= */}
-      {appState === 'create_world' && (
+      {(appState === 'create_world' || appState === 'online_create') && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/75">
           <div className="mc-panel p-6 flex flex-col gap-3.5 w-[420px] max-w-[92vw]">
             <h2 className="text-2xl font-bold text-white text-center drop-shadow-[2px_2px_0_#222] mb-1">
-              Dünya Oluştur
+              {appState === 'online_create' ? 'Online Lobi Oluştur' : 'Dünya Oluştur'}
             </h2>
 
             {/* Dünya Adı */}
@@ -593,21 +706,33 @@ export default function App() {
               </div>
             </div>
 
+            {appState === 'online_create' && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-bold text-[#ddd] w-24">Kişi Sayısı</label>
+                <div className="flex items-center gap-2 flex-1">
+                  <button type="button" onClick={() => setOnlineMaxPlayers(Math.max(1, onlineMaxPlayers - 1))} className="mc-btn !px-4 !py-1">−</button>
+                  <span className="flex-1 text-center font-mono text-lg">{onlineMaxPlayers}</span>
+                  <button type="button" onClick={() => setOnlineMaxPlayers(Math.min(6, onlineMaxPlayers + 1))} className="mc-btn !px-4 !py-1">+</button>
+                  <span className="text-xs text-[#999]">(1–6)</span>
+                </div>
+              </div>
+            )}
             {/* Buttons */}
             <div className="flex gap-2 mt-3">
               <button
                 onClick={() => {
                   Sound.click();
-                  handleCreateNewWorld();
+                  if (appState === 'online_create') handleCreateOnlineRoom();
+                  else handleCreateNewWorld();
                 }}
                 className="mc-btn flex-1 bg-emerald-800 border-emerald-600"
               >
-                Dünyayı Oluştur!
+                {appState === 'online_create' ? 'Lobiyi Oluştur!' : 'Dünyayı Oluştur!'}
               </button>
               <button
                 onClick={() => {
                   Sound.click();
-                  setAppState('worlds');
+                  setAppState(appState === 'online_create' ? 'online_rooms' : 'worlds');
                 }}
                 className="mc-btn flex-1"
               >

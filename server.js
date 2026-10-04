@@ -30,12 +30,18 @@ const ROOM_MAPS = Object.freeze({
         id: "city", name: "Şehir", icon: "🏙️",
         description: "Geniş mahalleler, ara sokaklar ve dağlık şehir sınırı.",
         boundary: "Dağlık şehir sınırı", boundaryRadius: 146
+    },
+    overworld: {
+        id: "overworld", name: "EsekCraft Dünyası", icon: "🌍",
+        description: "Seed tabanlı voxel dünyası.", boundary: "Dünya sınırı", boundaryRadius: 240
     }
 });
 const rooms = new Map();
 const ROOM_NAME_MAX = 32;
 const ROOM_TTL_MS = 30 * 60 * 1000;
+const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
 const ROOM_MAX_PLAYERS = 10;
+const ESEKCRAFT_MAX_PLAYERS = 6;
 const CITY_DOOR_IDS = new Set([
     "icecream-shop", "weapons-shop", "cafe", "market", "grocery",
     "tool-shop", "clothing-shop", "home-one", "home-two", "city-hospital"
@@ -53,6 +59,9 @@ function roomPlayerCount(room) {
     for (const id of [...room.members]) if (!players.has(id)) room.members.delete(id);
     return room.members.size;
 }
+function roomGameId(room) {
+    return room && room.gameId === "esekcraft" ? "esekcraft" : "city";
+}
 function publicRoom(room) {
     const map = ROOM_MAPS[room.mapId] || ROOM_MAPS.city;
     const host = players.get(room.hostId);
@@ -60,6 +69,7 @@ function publicRoom(room) {
     return {
         id: room.id,
         name: room.name,
+        gameId: roomGameId(room),
         maxPlayers: room.maxPlayers,
         currentPlayers,
         mapId: map.id,
@@ -68,13 +78,16 @@ function publicRoom(room) {
         mapDescription: map.description,
         boundary: map.boundary,
         hostName: host && host.name ? host.name : "Oyuncu",
+        worldOptions: room.worldOptions || null,
         isOpen: currentPlayers < room.maxPlayers
     };
 }
-function sendRoomList(player) {
+function sendRoomList(player, requestedGameId) {
     if (!player) return;
+    const gameId = requestedGameId === "esekcraft" ? "esekcraft" : (player.lobbyGame || "city");
+    player.lobbyGame = gameId;
     const list = [...rooms.values()]
-        .filter(room => roomPlayerCount(room) > 0)
+        .filter(room => roomPlayerCount(room) > 0 && roomGameId(room) === gameId)
         .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
         .map(publicRoom);
     sendTo(player, { type: "rooms_list", rooms: list, maps: ROOM_MAPS });
@@ -91,7 +104,7 @@ function removePlayerFromRoom(player) {
     room.members.delete(player.id);
     if (room.hostId === player.id) room.hostId = [...room.members][0] || null;
     room.lastActivityAt = Date.now();
-    if (!room.members.size) rooms.delete(room.id);
+    room.emptySince = room.members.size ? null : (room.emptySince || Date.now());
     broadcastRoomLists();
 }
 function getPlayerRoom(player) {
@@ -119,14 +132,27 @@ function handleAttack(player, data = {}) {
     broadcastToRoom(room.id, { type: "attack", id: player.id });
     if (data && (data.targetCitizenId || Array.isArray(data.targetCitizenIds))) handleCityCitizenHit(player, data);
 }
-function handleRoomsRequest(player) {
-    sendRoomList(player);
+function handleRoomsRequest(player, data = {}) {
+    const requested = String(data.gameId || "").toLowerCase();
+    player.lobbyGame = requested === "esekcraft" ? "esekcraft" : "city";
+    sendRoomList(player, player.lobbyGame);
+}
+function sanitizeEsekCraftWorldOptions(data) {
+    const options = data && data.worldOptions && typeof data.worldOptions === "object" ? data.worldOptions : {};
+    return {
+        name: normalizeRoomName(options.name) || "Çevrimiçi Dünya",
+        seed: String(options.seed || `online-${Date.now()}`).trim().slice(0, 32),
+        difficulty: Math.max(0, Math.min(2, Math.round(Number(options.difficulty) || 0))),
+        gameMode: options.gameMode === "creative" ? "creative" : "survival"
+    };
 }
 function handleCreateRoom(player, data) {
     if (!player || player.inGame) return;
+    const gameId = String((data && data.gameId) || "city").toLowerCase() === "esekcraft" ? "esekcraft" : "city";
     const name = normalizeRoomName(data && data.name);
-    const maxPlayers = Math.max(1, Math.min(ROOM_MAX_PLAYERS, Math.round(Number(data && data.maxPlayers) || 1)));
-    const mapId = String((data && data.mapId) || "city");
+    const limit = gameId === "esekcraft" ? ESEKCRAFT_MAX_PLAYERS : ROOM_MAX_PLAYERS;
+    const maxPlayers = Math.max(1, Math.min(limit, Math.round(Number(data && data.maxPlayers) || 1)));
+    const mapId = gameId === "esekcraft" ? "overworld" : String((data && data.mapId) || "city");
     if (name.length < 2) {
         sendTo(player, { type: "room_error", message: "Sunucu adı en az 2 karakter olmalı." });
         return;
@@ -137,12 +163,15 @@ function handleCreateRoom(player, data) {
     }
     if (player.roomId) removePlayerFromRoom(player);
     const room = {
-        id: makeRoomId(), name, maxPlayers, mapId,
-        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(), lastActivityAt: Date.now()
+        id: makeRoomId(), gameId, name, maxPlayers, mapId,
+        worldOptions: gameId === "esekcraft" ? sanitizeEsekCraftWorldOptions(data) : null,
+        hostId: player.id, members: new Set([player.id]), doorStates: new Map(), cityCitizens: createCityCitizenStates(),
+        lastActivityAt: Date.now(), emptySince: null
     };
     rooms.set(room.id, room);
     player.roomId = room.id;
     player.mapId = mapId;
+    player.lobbyGame = gameId;
     sendTo(player, { type: "room_created", room: publicRoom(room) });
     broadcastRoomLists();
 }
@@ -152,7 +181,12 @@ function handleJoinRoom(player, data) {
     const room = rooms.get(roomId);
     if (!room) {
         sendTo(player, { type: "room_error", message: "Bu sunucu artık mevcut değil." });
-        sendRoomList(player);
+        sendRoomList(player, player.lobbyGame);
+        return;
+    }
+    const gameId = roomGameId(room);
+    if (data && data.gameId && String(data.gameId).toLowerCase() !== gameId) {
+        sendTo(player, { type: "room_error", message: "Bu sunucu farklı bir oyun için oluşturulmuş." });
         return;
     }
     if (roomPlayerCount(room) >= room.maxPlayers && !room.members.has(player.id)) {
@@ -161,19 +195,25 @@ function handleJoinRoom(player, data) {
     }
     if (player.roomId && player.roomId !== room.id) removePlayerFromRoom(player);
     room.members.add(player.id);
+    room.emptySince = null;
     player.roomId = room.id;
     player.mapId = room.mapId;
+    player.lobbyGame = gameId;
     room.lastActivityAt = Date.now();
     sendTo(player, { type: "room_joined", room: publicRoom(room) });
-    joinGame(player, { ...data, roomId: room.id });
-    if (player.inGame) sendTo(player, { type: "building_door_states", doors: [...room.doorStates].map(([buildingId, open]) => ({ buildingId, open })) });
+    if (gameId === "city") {
+        joinGame(player, { ...data, roomId: room.id });
+        if (player.inGame) sendTo(player, { type: "building_door_states", doors: [...room.doorStates].map(([buildingId, open]) => ({ buildingId, open })) });
+    } else {
+        sendTo(player, { type: "esekcraft_room_players", count: roomPlayerCount(room) });
+    }
     broadcastRoomLists();
 }
 function handleLeaveRoom(player) {
     if (!player) return;
     if (player.inGame) leaveGame(player);
     removePlayerFromRoom(player);
-    sendRoomList(player);
+    sendRoomList(player, player.lobbyGame);
 }
 function getRoomBoundaryRadius(player) {
     const room = getPlayerRoom(player);
@@ -1192,6 +1232,7 @@ function createPlayer(ws) {
 
         roomId: null,
         mapId: "farm",
+        lobbyGame: "city",
 
         connectedAt: Date.now()
     };
@@ -2249,7 +2290,7 @@ wss.on("connection", (ws, req) => {
 
         switch (type) {
             case "rooms_request":
-                handleRoomsRequest(player);
+                handleRoomsRequest(player, data);
                 break;
 
             case "create_room":
@@ -2475,8 +2516,14 @@ setInterval(() => {
     const now = Date.now();
     let changed = false;
     for (const [id, room] of rooms) {
-        roomPlayerCount(room);
-        if (!room.members.size || now - room.lastActivityAt > ROOM_TTL_MS) {
+        const count = roomPlayerCount(room);
+        if (!count) {
+            room.emptySince = room.emptySince || now;
+            if (now - room.emptySince >= EMPTY_ROOM_TTL_MS) {
+                rooms.delete(id);
+                changed = true;
+            }
+        } else if (now - room.lastActivityAt > ROOM_TTL_MS) {
             rooms.delete(id);
             changed = true;
         }
