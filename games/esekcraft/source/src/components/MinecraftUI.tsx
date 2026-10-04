@@ -832,7 +832,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                 <div className="grid grid-cols-12 gap-1 max-h-24 overflow-y-auto">
                   {Object.entries(BLOCK_DEFS).filter(([id]) => {
                     const blockId = Number(id) as BlockType;
-                    return blockId > 0 && blockId < 100 && !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR) && (!isBedBlock(blockId) || blockId === BlockType.BED);
+                    return blockId > 0 && blockId < 100 && blockId !== BlockType.FURNACE_LIT && !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR) && (!isBedBlock(blockId) || blockId === BlockType.BED);
                   }).map(([id, def]) => (
                     <button key={id} title={def.name} onClick={() => { engine.giveCreativeItem(Number(id) as AnyItemId); rerender(); }} className="mc-slot !w-9 !h-9 !p-0">
                       <img src={getItemIcon(Number(id) as AnyItemId)} alt={def.name} className="w-7 h-7 pixelated" />
@@ -1294,16 +1294,27 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
           }}
         >
           {(() => {
-            const idx = (engine.currentChestPos.y * 80 + engine.currentChestPos.z) * 80 + engine.currentChestPos.x;
-            if (!engine.world.chests[idx]) {
-              engine.world.chests[idx] = { slots: new Array(27).fill(null) };
-            }
-            const chest = engine.world.chests[idx];
+            const primary = engine.currentChestPos;
+            const partner = engine.world.getAdjacentChest(primary.x, primary.y, primary.z);
+            const chestPositions = partner
+              ? [primary, partner].sort((a, b) => a.z - b.z || a.x - b.x)
+              : [primary];
+            const chestData = chestPositions.map((pos) => {
+              const idx = (pos.y * 80 + pos.z) * 80 + pos.x;
+              let data = engine.world.chests[idx];
+              if (!data || !Array.isArray(data.slots)) {
+                data = { slots: new Array(27).fill(null) };
+                engine.world.chests[idx] = data;
+              }
+              while (data.slots.length < 27) data.slots.push(null);
+              return data;
+            });
+            const chestSlots = chestData.flatMap((data) => data.slots.slice(0, 27));
 
             return (
-              <div className="mc-panel p-4 flex flex-col gap-3 relative" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="mc-panel p-4 flex flex-col gap-3 relative max-h-[90vh] overflow-y-auto" onMouseDown={(e) => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm font-bold text-[#333]">Sandık (Chest - 27 Yuva)</span>
+                  <span className="text-sm font-bold text-[#333]">{chestPositions.length === 2 ? 'Büyük Sandık (54 Yuva)' : 'Sandık (27 Yuva)'}</span>
                   <button
                     onClick={closeOpenContainer}
                     className="text-xs font-bold px-2 py-0.5 bg-[#8b8b8b] hover:bg-red-800 hover:text-white border border-[#373737]"
@@ -1312,11 +1323,14 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                   </button>
                 </div>
 
-                {/* 27 Chest Slots */}
+                {/* One chest has 27 slots; a paired chest has 54. */}
                 <div className="grid grid-cols-9 gap-1 p-2 bg-[#a8a8a8] border-2 border-[#555] mb-2">
-                  {chest.slots.map((stack, i) =>
+                  {chestSlots.map((stack, i) =>
                     renderSlot(stack, (e) =>
-                      handleSlotClick(stack, (s) => (chest.slots[i] = s), e)
+                      handleSlotClick(stack, (s) => {
+                        const data = chestData[Math.floor(i / 27)];
+                        data.slots[i % 27] = s;
+                      }, e)
                     )
                   )}
                 </div>

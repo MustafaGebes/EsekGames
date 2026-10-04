@@ -2604,6 +2604,12 @@ export class MinecraftEngine {
           return;
         }
         if (hit.id === BlockType.CHEST) {
+          const adjacentChest = this.world.getAdjacentChest(hit.x, hit.y, hit.z);
+          if (this.isChestBlockedByCeiling(hit.x, hit.y, hit.z) ||
+              (adjacentChest && this.isChestBlockedByCeiling(adjacentChest.x, adjacentChest.y, adjacentChest.z))) {
+            this.onToast?.('Sandığın üstünde açılmasını engelleyen bir blok var.');
+            return;
+          }
           this.currentChestPos = { x: hit.x, y: hit.y, z: hit.z };
           this.isGUIOpen = true;
           this.exitPointerLock();
@@ -2809,6 +2815,32 @@ export class MinecraftEngine {
     Sound.click();
   }
 
+  private isChestBlockedByCeiling(x: number, y: number, z: number): boolean {
+    const above = this.world.getBlock(x, y + 1, z);
+    if (above === BlockType.AIR || above === BlockType.CHEST) return false;
+    // Bedrock-like lid clearance requested: a lower slab touches the lid, while
+    // an upper slab leaves headroom. Java normally permits both slab positions.
+    if (isSlabBlock(above)) return getBlockOffsetY(above) === 0;
+    const def = BLOCK_DEFS[above];
+    return !!def && !def.transparent && !isDoorBlock(above) && !isBedBlock(above) &&
+      getBlockOffsetY(above) === 0 && getBlockHeight(above) >= 1;
+  }
+
+  private canPlaceChest(x: number, y: number, z: number): boolean {
+    const neighbors = [{ x: -1, z: 0 }, { x: 1, z: 0 }, { x: 0, z: -1 }, { x: 0, z: 1 }];
+    const adjacent = neighbors.filter((offset) => this.world.getBlock(x + offset.x, y, z + offset.z) === BlockType.CHEST);
+    if (adjacent.length > 1) return false;
+    if (adjacent.length === 0) return true;
+
+    const partner = adjacent[0];
+    return neighbors.every((offset) => {
+      const neighborX = x + partner.x + offset.x;
+      const neighborZ = z + partner.z + offset.z;
+      if (neighborX === x && neighborZ === z) return true;
+      return this.world.getBlock(neighborX, y, neighborZ) !== BlockType.CHEST;
+    });
+  }
+
   private tryPlaceDoor(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number }, held: ItemStack) {
     const x = hit.x + hit.nx;
     const y = hit.y + hit.ny;
@@ -2966,6 +2998,10 @@ export class MinecraftEngine {
 
     if (!inBounds(px, py, pz)) return;
     if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return;
+    if (placeId === BlockType.CHEST && !this.canPlaceChest(px, py, pz)) {
+      this.onToast?.('Sandıklar en fazla ikili birleşebilir.');
+      return;
+    }
 
     // Check collision with player
     const intersectsPlayer =

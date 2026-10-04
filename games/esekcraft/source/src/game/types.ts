@@ -371,6 +371,7 @@ export interface BlockDef {
   bottom: number;
   side: number;
   front?: number;
+  frontFaces?: readonly number[];
   hardness: number; // break time base in seconds
   requiredTool: ToolType;
   minHarvestLevel: number;

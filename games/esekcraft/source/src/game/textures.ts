@@ -231,22 +231,24 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     drop: BlockType.CRAFTING_TABLE,
   },
   [BlockType.FURNACE]: {
-    name: 'Ocak',
+    name: 'Fırın',
     top: TILE.STONE,
     bottom: TILE.STONE,
     side: TILE.FURNACE_SIDE,
     front: TILE.FURNACE_FRONT,
+    frontFaces: [0, 1, 4, 5],
     hardness: 3.5,
     requiredTool: 'pickaxe',
     minHarvestLevel: 0,
     drop: BlockType.FURNACE,
   },
   [BlockType.FURNACE_LIT]: {
-    name: 'Yanan Ocak',
+    name: 'Yanan Fırın',
     top: TILE.STONE,
     bottom: TILE.STONE,
     side: TILE.FURNACE_SIDE,
     front: TILE.FURNACE_LIT,
+    frontFaces: [0, 1, 4, 5],
     hardness: 3.5,
     requiredTool: 'pickaxe',
     minHarvestLevel: 0,
@@ -824,17 +826,23 @@ export function initTextures() {
     return pick(r, ['#9c7f4e', '#8f7445', '#a68754', '#947746']);
   });
 
-  // 13 Furnace Front (inactive stone arch mouth)
+  // 13 Furnace Front (unlit firebox with a readable iron frame and grate)
   tile(TILE.FURNACE_FRONT, (x, y, r) => {
-    if (x >= 3 && x <= 12 && y >= 7 && y <= 13) {
-      if (y === 7 && (x === 3 || x === 12)) return '#3b3b3b';
-      // Iron grate bars inside
-      if ((x === 5 || x === 7 || x === 9 || x === 11) && y >= 11) return '#2b2b2b';
-      return '#141414'; // dark hollow opening
+    if (y >= 3 && y <= 14 && x >= 2 && x <= 13) {
+      if (y === 3 && x >= 6 && x <= 9) return '#383b3d'; // exhaust slots
+      if (y === 4 && x >= 6 && x <= 9) return '#222526';
+      if (x === 2 || x === 13 || y === 6 || y === 14) return '#303437';
+      if ((x === 3 || x === 12) && y >= 7 && y <= 13) return '#a4a7a5'; // iron uprights
+      if (y === 7 || y === 13) return '#737a7a'; // upper/lower iron lip
+      if (x >= 4 && x <= 11 && y >= 8 && y <= 12) {
+        if ((x === 5 || x === 8 || x === 10) && y >= 10) return '#777b78'; // grate bars
+        if (y === 12 && x >= 6 && x <= 9) return '#49352a'; // cold ash/coal
+        if ((x + y) % 5 === 0) return '#202324';
+        return '#111516'; // deep hollow firebox
+      }
     }
-    // Stone bricks around
-    if ((x + y) % 4 === 0) return '#616161';
-    return pick(r, ['#757575', '#808080', '#6b6b6b', '#878787']);
+    if ((x + y) % 4 === 0) return '#575c5e';
+    return pick(r, ['#707779', '#858a8b', '#686e70', '#929697']);
   });
 
   // 14 Furnace Front (LIT - glowing intense fire & embers)

@@ -117,6 +117,15 @@ export class VoxelWorld {
     return this.data[IDX(x, y, z)];
   }
 
+  public getAdjacentChest(x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+    for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      if (this.getBlock(x + dx, y, z + dz) === BlockType.CHEST) {
+        return { x: x + dx, y, z: z + dz };
+      }
+    }
+    return null;
+  }
+
   public getBlockMesh(x: number, y: number, z: number): BlockType {
     if (y < 0) return BlockType.BEDROCK;
     if (!inBounds(x, y, z)) return BlockType.AIR;
@@ -267,12 +276,103 @@ export class VoxelWorld {
       }
     }, 60, 72, 'Ağaçlar ve bitki örtüsü yükleniyor...');
 
+    // Carve after vegetation so no tree trunk can block the cave mouth.
+    this.carveSurfaceCaveEntrance();
+    onProgress?.(72, 'Yüzeye açılan mağara girişi hazırlanıyor...', fps);
+
     // Apply saved modifications if any
     for (const key in this.mods) {
       this.data[Number(key)] = this.mods[key];
     }
 
     onProgress?.(74, 'Kayıtlı blok değişiklikleri uygulanıyor...', fps);
+  }
+
+  private carveSurfaceCaveEntrance() {
+    const centerX = Math.floor(SX / 2);
+    const centerZ = Math.floor(SZ / 2);
+    const terrainTop = (x: number, z: number) => {
+      for (let y = SY - 1; y >= 0; y--) {
+        const block = this.getBlock(x, y, z);
+        if (block !== BlockType.AIR && block !== BlockType.OAK_LOG && block !== BlockType.OAK_LEAVES &&
+            block !== BlockType.TORCH && !isDoorBlock(block)) return y;
+      }
+      return 0;
+    };
+    const directions = [{ x: 0, z: 1 }, { x: 1, z: 0 }, { x: 0, z: -1 }, { x: -1, z: 0 }];
+    let entrance = { x: centerX, z: centerZ + 8, inwardX: 0, inwardZ: -1, surfaceY: terrainTop(centerX, centerZ + 8) };
+    let bestScore = -Infinity;
+
+    // Prefer a nearby hillside so the tunnel mouth emerges from its lower face.
+    for (let radius = 7; radius <= 12; radius++) {
+      for (let i = 0; i < directions.length; i++) {
+        const outward = directions[i];
+        const x = centerX + outward.x * radius;
+        const z = centerZ + outward.z * radius;
+        const inwardX = -outward.x;
+        const inwardZ = -outward.z;
+        const surfaceY = terrainTop(x, z);
+        const innerSurface = terrainTop(x + inwardX, z + inwardZ);
+        const seedTieBreak = ((this.seed >>> (i * 5)) & 31) / 100;
+        const score = (innerSurface - surfaceY) * 10 - Math.abs(radius - 9) * 0.15 + seedTieBreak;
+        if (score > bestScore) {
+          bestScore = score;
+          entrance = { x, z, inwardX, inwardZ, surfaceY };
+        }
+      }
+    }
+
+    const startFloor = entrance.surfaceY - 1;
+    const tunnelLength = 16;
+    for (let step = 0; step < tunnelLength; step++) {
+      const x = entrance.x + entrance.inwardX * step;
+      const z = entrance.z + entrance.inwardZ * step;
+      const surface = terrainTop(x, z);
+      const floorY = Math.max(3, Math.min(startFloor - Math.floor(step / 3), surface - 1));
+      for (let side = -1; side <= 1; side++) {
+        const px = x + (entrance.inwardX === 0 ? side : 0);
+        const pz = z + (entrance.inwardZ === 0 ? side : 0);
+        if (!inBounds(px, floorY, pz)) continue;
+        const columnSurface = terrainTop(px, pz);
+        const columnFloor = Math.max(2, Math.min(floorY, columnSurface - 1));
+        for (let treeY = columnSurface + 1; treeY <= Math.min(SY - 1, columnSurface + 8); treeY++) {
+          const vegetation = this.getBlock(px, treeY, pz);
+          if (vegetation === BlockType.OAK_LOG || vegetation === BlockType.OAK_LEAVES) {
+            this.data[IDX(px, treeY, pz)] = BlockType.AIR;
+          }
+        }
+        if (this.getBlock(px, columnFloor, pz) === BlockType.AIR) {
+          this.data[IDX(px, columnFloor, pz)] = BlockType.STONE;
+        }
+        for (let dy = 1; dy <= 3; dy++) {
+          const py = columnFloor + dy;
+          if (inBounds(px, py, pz) && this.getBlock(px, py, pz) !== BlockType.BEDROCK) {
+            this.data[IDX(px, py, pz)] = BlockType.AIR;
+          }
+        }
+      }
+    }
+
+    // Finish in a small irregular chamber that intersects the existing cave pockets.
+    const chamberX = entrance.x + entrance.inwardX * (tunnelLength - 1);
+    const chamberZ = entrance.z + entrance.inwardZ * (tunnelLength - 1);
+    const chamberFloor = Math.max(3, startFloor - Math.floor((tunnelLength - 1) / 3) - 1);
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2 && ((this.seed + dx * 7 + dz * 11) & 1) === 0) continue;
+        const x = chamberX + dx;
+        const z = chamberZ + dz;
+        const floorY = Math.max(2, Math.min(chamberFloor, terrainTop(x, z) - 1));
+        if (!inBounds(x, floorY, z)) continue;
+        if (this.getBlock(x, floorY, z) === BlockType.AIR) this.data[IDX(x, floorY, z)] = BlockType.STONE;
+        for (let dy = 1; dy <= 5; dy++) {
+          const y = floorY + dy;
+          if (inBounds(x, y, z) && this.getBlock(x, y, z) !== BlockType.BEDROCK) {
+            this.data[IDX(x, y, z)] = BlockType.AIR;
+          }
+        }
+      }
+    }
   }
 
   private spawnTree(x: number, y: number, z: number) {
@@ -382,6 +482,35 @@ export class VoxelWorld {
             continue;
           }
 
+          if (block === BlockType.CHEST) {
+            const hasNegativeX = this.getBlock(x - 1, y, z) === BlockType.CHEST;
+            const hasNegativeZ = this.getBlock(x, y, z - 1) === BlockType.CHEST;
+            let originX = x;
+            let originZ = z;
+            let spanX = 1;
+            let spanZ = 1;
+            if (hasNegativeX) {
+              if (visible[z * SX + x - 1]) continue;
+              originX = x - 1;
+              spanX = 2;
+            } else if (hasNegativeZ) {
+              if (visible[(z - 1) * SX + x]) continue;
+              originZ = z - 1;
+              spanZ = 2;
+            } else if (this.getBlock(x + 1, y, z) === BlockType.CHEST) {
+              spanX = 2;
+            } else if (this.getBlock(x, y, z + 1) === BlockType.CHEST) {
+              spanZ = 2;
+            }
+            const chestTiles = [TILE.CHEST_SIDE, TILE.CHEST_SIDE, TILE.PLANKS, TILE.CHEST_TOP, TILE.CHEST_SIDE, TILE.CHEST_FRONT];
+            emitTexturedBox(
+              originX, y, originZ,
+              0.0625, spanX - 0.0625, 0.04, 0.875, 0.0625, spanZ - 0.0625,
+              chestTiles,
+            );
+            continue;
+          }
+
           const bedState = getBedState(block);
           if (bedState) {
             const headTopTiles = [TILE.BED_HEAD_NORTH, TILE.BED_HEAD_WEST, TILE.BED_HEAD_SOUTH, TILE.BED_HEAD_EAST];
@@ -429,7 +558,7 @@ export class VoxelWorld {
             // Hide only the part of a face which is actually covered by the adjacent block.
             if (neighbor !== BlockType.AIR) {
               const nDef = BLOCK_DEFS[neighbor];
-              if (nDef?.transparent) {
+              if (nDef?.transparent || isBedBlock(neighbor) || neighbor === BlockType.CHEST) {
                 if (def.transparent && neighbor === block) continue; // don't draw inner leaves
               } else if (d[1] === 0) {
                 const neighborBottom = getBlockOffsetY(neighbor);
@@ -456,7 +585,7 @@ export class VoxelWorld {
               tileIdx = def.top; // +Y
             } else if (f === 2) {
               tileIdx = def.bottom; // -Y
-            } else if (f === 5 && def.front !== undefined) {
+            } else if (def.front !== undefined && (f === 5 || def.frontFaces?.includes(f))) {
               tileIdx = def.front; // +Z (Front)
             } else {
               tileIdx = def.side;
