@@ -230,11 +230,17 @@ export class VoxelWorld {
     let vc = 0;
 
     const tileUvSize = TILE_SIZE / ATLAS_SIZE;
+    // Compute visible X/Z columns once; doing this inside every block face was a major startup cost.
+    const visible = new Uint8Array(SX * SZ);
+    const fullView = renderDistance >= Math.max(SX, SZ);
+    for (let z = 0; z < SZ; z++) for (let x = 0; x < SX; x++) {
+      if (fullView || Math.hypot(x + 0.5 - centerX, z + 0.5 - centerZ) <= renderDistance) visible[z * SX + x] = 1;
+    }
 
     for (let y = 0; y < SY; y++) {
       for (let z = 0; z < SZ; z++) {
         for (let x = 0; x < SX; x++) {
-          if (renderDistance < Math.max(SX, SZ) && Math.hypot(x + 0.5 - centerX, z + 0.5 - centerZ) > renderDistance) continue;
+          if (!visible[z * SX + x]) continue;
           const block = this.data[IDX(x, y, z)];
           // Torches are rendered as dedicated models with point lights by the engine.
           if (block === BlockType.AIR || block === BlockType.TORCH) continue;
@@ -246,7 +252,7 @@ export class VoxelWorld {
           for (let f = 0; f < 6; f++) {
             const d = FACES[f].dir;
             const nx = x + d[0]; const nz = z + d[2];
-            const neighborInView = renderDistance >= Math.max(SX, SZ) || Math.hypot(nx + 0.5 - centerX, nz + 0.5 - centerZ) <= renderDistance;
+            const neighborInView = nx >= 0 && nx < SX && nz >= 0 && nz < SZ && (fullView || visible[nz * SX + nx] === 1);
             const neighbor = neighborInView ? this.getBlockMesh(nx, y + d[1], nz) : BlockType.AIR;
 
             // If neighbor is solid, skip hidden face (unless neighbor is transparent and this isn't same transparent)

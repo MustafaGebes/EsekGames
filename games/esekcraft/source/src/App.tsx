@@ -207,7 +207,13 @@ export default function App() {
           eng.onAttackPlayer = (payload) => {
             if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_attack', ...payload });
           };
-          eng.start();
+          eng.start(() => {
+            setGenProgress(100);
+            setGenText('Hazır!');
+            setAppState('in_game');
+            setUIState('playing');
+            eng.requestPointerLock();
+          });
           if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
           if (onlineRoomRef.current) {
             onlineMoveTimerRef.current = window.setInterval(() => {

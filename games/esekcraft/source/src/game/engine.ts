@@ -80,7 +80,7 @@ export class MinecraftEngine {
   public isThirdPerson = false;
   public fov = 75;
   public mouseSensitivity = 1.0;
-  public renderDistance = 40;
+  public renderDistance = 24;
   public fps = 0;
   private fpsFrames = 0;
   private fpsClock = 0;
@@ -556,7 +556,7 @@ export class MinecraftEngine {
     this.visibleMeshChunk = { x: Math.floor(cx / 16), z: Math.floor(cz / 16) };
   }
 
-  public start() {
+  public start(onReady?: () => void) {
     // Let the React loading screen paint before the synchronous voxel generator/mesh work.
     // A double RAF prevents the first world build from blocking the initial frame.
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -568,6 +568,7 @@ export class MinecraftEngine {
         this.spawnMobs(30);
         this.lastTime = performance.now();
         this.animate(this.lastTime);
+        onReady?.();
       });
     }));
   }
