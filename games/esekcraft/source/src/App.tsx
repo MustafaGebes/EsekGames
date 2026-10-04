@@ -158,80 +158,65 @@ export default function App() {
     initAudio();
     activeMetaRef.current = meta;
     setAppState('generating');
-    setGenProgress(20);
-    setGenText('Arazi oluşturuluyor...');
+    setGenProgress(2);
+    setGenText('Yükleme ekranı hazırlanıyor...');
 
-    setTimeout(() => {
-      setGenProgress(65);
-      setGenText('Ağaçlar ve madenler dikiliyor...');
+    // Paint the loading screen before constructing the engine and beginning staged work.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const container = canvasContainerRef.current;
+      if (!container) return;
 
-      setTimeout(() => {
-        setGenProgress(90);
-        setGenText('Dünya inşa ediliyor...');
+      if (engineRef.current) {
+        engineRef.current.destroy();
+        engineRef.current = null;
+      }
+      container.innerHTML = '';
 
-        setTimeout(() => {
-          if (!canvasContainerRef.current) return;
+      const eng = new MinecraftEngine(container, meta);
+      eng.mouseSensitivity = sensitivity / 100;
+      eng.fov = fov;
+      eng.camera.fov = fov;
+      eng.camera.updateProjectionMatrix();
+      eng.isThirdPerson = thirdPerson;
+      engineRef.current = eng;
+      eng.onlineMode = !!onlineRoomRef.current;
 
-          // Clean up previous engine if any
-          if (engineRef.current) {
-            engineRef.current.destroy();
-            engineRef.current = null;
-          }
+      eng.onUIStateChange = (st) => setUIState(st);
+      eng.onHUDUpdate = () => setUIState((prev) => prev);
+      eng.onToast = (msg) => showToast(msg);
+      eng.onBlockChanged = (change) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });
+      };
+      eng.onAttackPlayer = (payload) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_attack', ...payload });
+      };
 
-          canvasContainerRef.current.innerHTML = '';
-
-          // Initialize Engine with saved settings
-          const eng = new MinecraftEngine(canvasContainerRef.current, meta);
-          eng.mouseSensitivity = sensitivity / 100;
-          eng.fov = fov;
-          eng.camera.fov = fov;
-          eng.camera.updateProjectionMatrix();
-          eng.isThirdPerson = thirdPerson;
-
-          engineRef.current = eng;
-          eng.onlineMode = !!onlineRoomRef.current;
-
-          eng.onUIStateChange = (st) => {
-            setUIState(st);
-          };
-          eng.onHUDUpdate = () => {
-            setUIState((prev) => prev);
-          };
-          eng.onToast = (msg) => {
-            showToast(msg);
-          };
-
-          eng.onBlockChanged = (change) => {
-            if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_block_change', ...change });
-          };
-          eng.onAttackPlayer = (payload) => {
-            if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_attack', ...payload });
-          };
-          eng.start(() => {
-            setGenProgress(100);
-            setGenText('Hazır!');
-            setAppState('in_game');
-            setUIState('playing');
-            eng.requestPointerLock();
-          });
-          if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
-          if (onlineRoomRef.current) {
-            onlineMoveTimerRef.current = window.setInterval(() => {
-              const current = engineRef.current;
-              if (!current || !onlineRoomRef.current) return;
-              sendOnlineMessage({
-                type: 'move', x: current.pos.x, y: current.pos.y, z: current.pos.z,
-                yaw: current.yaw, pitch: current.pitch,
-                isMoving: Math.hypot(current.vel.x, current.vel.z) > 0.05,
-                isCrouching: current.isSneaking, isSprinting: current.isSprinting,
-                isJumping: !current.onGround, platform: 'pc'
-              });
-              sendOnlineMessage({ type: 'esekcraft_tile_state', furnaces: current.world.furnaces, chests: current.world.chests });
-            }, 50);
-          }
-        }, 800);
-      }, 650);
-    }, 650);
+      eng.start(() => {
+        setGenProgress(100);
+        setGenText('Dünya hazır!');
+        setAppState('in_game');
+        setUIState('playing');
+        eng.requestPointerLock();
+        if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
+        if (onlineRoomRef.current) {
+          onlineMoveTimerRef.current = window.setInterval(() => {
+            const current = engineRef.current;
+            if (!current || !onlineRoomRef.current) return;
+            sendOnlineMessage({
+              type: 'move', x: current.pos.x, y: current.pos.y, z: current.pos.z,
+              yaw: current.yaw, pitch: current.pitch,
+              isMoving: Math.hypot(current.vel.x, current.vel.z) > 0.05,
+              isCrouching: current.isSneaking, isSprinting: current.isSprinting,
+              isJumping: !current.onGround, platform: 'pc'
+            });
+            sendOnlineMessage({ type: 'esekcraft_tile_state', furnaces: current.world.furnaces, chests: current.world.chests });
+          }, 50);
+        }
+      }, (progress, stage, fps) => {
+        setGenProgress(Math.max(2, Math.min(99, Math.round(progress))));
+        setGenText(fps > 0 ? `${stage} · ${fps} FPS` : stage);
+      });
+    }));
   };
 
   const closeOnlineConnection = () => {
@@ -941,7 +926,7 @@ export default function App() {
           </div>
           <div className="text-[#ddd] font-mono text-sm mt-3">{genText}</div>
           <div className="mt-5 max-w-[390px] px-4 text-center text-xs leading-5 text-[#aeb7c4]">
-            Dünya arka planda yükleniyor. İlk girişte işlem uzun sürebilir; hazır olana kadar bu ekranı kapatma.
+            Arazi ve bloklar FPS değerine göre parça parça hazırlanıyor. İlk görüntü tamamen yüklenince oyun açılacak.
           </div>
         </div>
       )}

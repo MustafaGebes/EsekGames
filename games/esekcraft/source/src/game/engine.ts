@@ -556,21 +556,49 @@ export class MinecraftEngine {
     this.visibleMeshCenter = { x: cx, z: cz };
   }
 
-  public start(onReady?: () => void) {
-    // Let the React loading screen paint before the synchronous voxel generator/mesh work.
-    // A double RAF prevents the first world build from blocking the initial frame.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      this.world.generate();
-      this.recoverFromBlockCollision();
-      requestAnimationFrame(() => {
-        this.rebuildVisibleWorld();
+  public start(
+    onReady?: () => void,
+    onLoadingProgress?: (pct: number, stage: string, fps: number) => void
+  ) {
+    const loadingStartedAt = performance.now();
+    const initialize = async () => {
+      try {
+        await this.world.generate((pct, stage, fps) => {
+          onLoadingProgress?.(pct, stage, fps);
+        });
+        this.recoverFromBlockCollision();
+
+        const centerX = this.pos.x;
+        const centerZ = this.pos.z;
+        await this.world.buildMeshAdaptive(
+          this.scene,
+          this.worldMaterial,
+          this.renderDistance,
+          centerX,
+          centerZ,
+          (pct, stage, fps) => onLoadingProgress?.(74 + pct * 0.24, stage, fps)
+        );
+        this.visibleMeshCenter = { x: centerX, z: centerZ };
         this.rebuildTorchVisuals();
         this.spawnMobs(30);
         this.lastTime = performance.now();
         this.animate(this.lastTime);
-        onReady?.();
-      });
-    }));
+
+        // Keep the loading screen visible briefly after the first complete world frame.
+        const minimumLoadingMs = 1500;
+        const remaining = Math.max(0, minimumLoadingMs - (performance.now() - loadingStartedAt));
+        window.setTimeout(() => {
+          onLoadingProgress?.(100, 'Dünya hazır!', this.fps || 60);
+          onReady?.();
+        }, remaining);
+      } catch (error) {
+        console.error('EsekCraft world loading failed:', error);
+        onLoadingProgress?.(0, 'Dünya yüklenemedi. Yeniden deneyebilirsin.', 0);
+      }
+    };
+
+    // Give React two frames to paint the loading screen before CPU-heavy work begins.
+    requestAnimationFrame(() => requestAnimationFrame(() => void initialize()));
   }
 
   public destroy() {

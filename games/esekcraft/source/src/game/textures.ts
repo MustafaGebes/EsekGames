@@ -1083,13 +1083,12 @@ export function initTextures() {
     return '#e8e8e8';
   });
 
-  // 48 White Wool - fluffy ball
+  // 48 White Wool block face - opaque square textile pattern (not the round item icon).
   tile(TILE.ITEM_WHITE_WOOL, (x, y) => {
-    const d = Math.hypot(x - 7.5, y - 7.5);
-    if (d > 6) return null;
-    if (d > 5) return '#bfbfbf';
-    if ((x + y) % 3 === 0) return '#ffffff';
-    return pick(rnd, ['#e8e8e8', '#f4f4ee', '#dadada', '#f0f0ea']);
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#d1d1ca';
+    if ((x + y) % 7 === 0) return '#e3e3dc';
+    if ((x * 3 + y * 5) % 11 === 0) return '#fafaf4';
+    return pick(rnd, ['#eeeee7', '#f4f4ed', '#e9e9e2', '#f0f0e9']);
   });
 
   // 49 Raw Iron - speckled iron ore chunk

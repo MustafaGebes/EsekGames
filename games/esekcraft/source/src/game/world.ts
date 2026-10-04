@@ -114,13 +114,40 @@ export class VoxelWorld {
   /**
    * Procedural World Terrain Generator
    */
-  public generate(onProgress?: (pct: number, stage: string) => void) {
+  public async generate(onProgress?: (pct: number, stage: string, fps: number) => void): Promise<void> {
     const n1 = valueNoise(this.seed);
     const n2 = valueNoise(this.seed * 7 + 13);
     const n3 = valueNoise(this.seed * 31 + 19);
+    let fps = 60;
+    let rowsPerFrame = 1;
+    let previousFrame = performance.now();
+    const processRows = async (
+      start: number,
+      end: number,
+      processRow: (row: number) => void,
+      progressStart: number,
+      progressEnd: number,
+      stage: string
+    ) => {
+      let row = start;
+      while (row < end) {
+        const batchEnd = Math.min(end, row + rowsPerFrame);
+        while (row < batchEnd) processRow(row++);
+
+        const frameTime = await new Promise<number>((resolve) => requestAnimationFrame(resolve));
+        const frameMs = Math.max(1, frameTime - previousFrame);
+        previousFrame = frameTime;
+        fps = Math.round(1000 / frameMs);
+        if (fps < 38) rowsPerFrame = Math.max(1, Math.floor(rowsPerFrame / 2));
+        else if (fps > 54) rowsPerFrame = Math.min(6, rowsPerFrame + 1);
+
+        const pct = progressStart + ((row - start) / (end - start)) * (progressEnd - progressStart);
+        onProgress?.(pct, stage, fps);
+      }
+    };
 
     // Heightmap terrain
-    for (let z = 0; z < SZ; z++) {
+    await processRows(0, SZ, (z) => {
       for (let x = 0; x < SX; x++) {
         const heightNoise = (n1(x * 0.04, z * 0.04) * 1.0 + n2(x * 0.1, z * 0.1) * 0.4 + n3(x * 0.25, z * 0.25) * 0.15) / 1.55;
         const groundHeight = Math.max(10, Math.min(SY - 10, Math.floor(18 + heightNoise * 25)));
@@ -158,10 +185,10 @@ export class VoxelWorld {
           this.data[IDX(x, y, z)] = b;
         }
       }
-    }
+    }, 0, 36, 'Arazi katmanları oluşturuluyor...');
 
     // Carve deterministic underground cave pockets and tunnels below the surface.
-    for (let z = 2; z < SZ - 2; z++) {
+    await processRows(2, SZ - 2, (z) => {
       for (let x = 2; x < SX - 2; x++) {
         const surface = this.getTopSolid(x, z);
         for (let y = 4; y < Math.min(surface - 2, SY - 4); y++) {
@@ -170,11 +197,10 @@ export class VoxelWorld {
           if (tunnel > 0.78 && chamber > -0.25) this.data[IDX(x, y, z)] = BlockType.AIR;
         }
       }
-    }
-    if (onProgress) onProgress(60, 'Mağaralar, ağaçlar ve madenler oluşturuluyor...');
+    }, 36, 60, 'Mağaralar ve maden damarları hazırlanıyor...');
 
     // Trees
-    for (let z = 3; z < SZ - 3; z++) {
+    await processRows(3, SZ - 3, (z) => {
       for (let x = 3; x < SX - 3; x++) {
         const trnd = ((Math.sin(x * 91.1 + z * 47.7 + this.seed * 3) * 43758.5453) % 1 + 1) % 1;
         if (trnd < 0.02) {
@@ -184,14 +210,14 @@ export class VoxelWorld {
           }
         }
       }
-    }
+    }, 60, 72, 'Ağaçlar ve bitki örtüsü yükleniyor...');
 
     // Apply saved modifications if any
     for (const key in this.mods) {
       this.data[Number(key)] = this.mods[key];
     }
 
-    if (onProgress) onProgress(90, 'Blok ağları derleniyor...');
+    onProgress?.(74, 'Kayıtlı blok değişiklikleri uygulanıyor...', fps);
   }
 
   private spawnTree(x: number, y: number, z: number) {
@@ -218,10 +244,9 @@ export class VoxelWorld {
     }
   }
 
-  /**
-   * Builds the combined mesh for all visible block faces in the world
-   */
-  public buildMesh(scene: THREE.Scene, worldMaterial: THREE.Material, renderDistance = Math.max(SX, SZ), centerX = SX / 2, centerZ = SZ / 2) {
+  private *createMeshBuffers(renderDistance: number, centerX: number, centerZ: number): Generator<number, {
+    pos: number[]; norm: number[]; uv: number[]; col: number[]; idx: number[];
+  }, void> {
     const pos: number[] = [];
     const norm: number[] = [];
     const uv: number[] = [];
@@ -297,14 +322,22 @@ export class VoxelWorld {
           }
         }
       }
+      // A completed vertical layer is a safe yield point for the loading screen.
+      yield y + 1;
     }
 
+    return { pos, norm, uv, col, idx };
+  }
+
+  private installMesh(scene: THREE.Scene, worldMaterial: THREE.Material, buffers: {
+    pos: number[]; norm: number[]; uv: number[]; col: number[]; idx: number[];
+  }) {
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    geo.setIndex(idx);
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(buffers.pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(buffers.norm, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(buffers.uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(buffers.col, 3));
+    geo.setIndex(buffers.idx);
 
     if (this.mesh) {
       scene.remove(this.mesh);
@@ -314,6 +347,51 @@ export class VoxelWorld {
     this.mesh = new THREE.Mesh(geo, worldMaterial);
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
+  }
+
+  /** Builds the combined mesh synchronously for edits made after the game has started. */
+  public buildMesh(scene: THREE.Scene, worldMaterial: THREE.Material, renderDistance = Math.max(SX, SZ), centerX = SX / 2, centerZ = SZ / 2) {
+    const builder = this.createMeshBuffers(renderDistance, centerX, centerZ);
+    let result = builder.next();
+    while (!result.done) result = builder.next();
+    this.installMesh(scene, worldMaterial, result.value);
+  }
+
+  /** Build the initial visible mesh in FPS-adaptive frame slices while the loading screen stays responsive. */
+  public async buildMeshAdaptive(
+    scene: THREE.Scene,
+    worldMaterial: THREE.Material,
+    renderDistance: number,
+    centerX: number,
+    centerZ: number,
+    onProgress?: (pct: number, stage: string, fps: number) => void
+  ): Promise<void> {
+    const builder = this.createMeshBuffers(renderDistance, centerX, centerZ);
+    let result = builder.next();
+    let layersPerFrame = 1;
+    let previousFrame = performance.now();
+    let fps = 60;
+
+    while (!result.done) {
+      let layers = 0;
+      while (!result.done && layers < layersPerFrame) {
+        result = builder.next();
+        layers++;
+      }
+
+      const frameTime = await new Promise<number>((resolve) => requestAnimationFrame(resolve));
+      const frameMs = Math.max(1, frameTime - previousFrame);
+      previousFrame = frameTime;
+      fps = Math.round(1000 / frameMs);
+      if (fps < 38) layersPerFrame = Math.max(1, Math.floor(layersPerFrame / 2));
+      else if (fps > 54) layersPerFrame = Math.min(5, layersPerFrame + 1);
+
+      const completedLayers = result.done ? SY : result.value;
+      onProgress?.((completedLayers / SY) * 100, 'Görünür blok yüzeyleri hazırlanıyor...', fps);
+    }
+
+    this.installMesh(scene, worldMaterial, result.value);
+    onProgress?.(100, 'Arka plan ve bloklar hazır.', fps);
   }
 
   /**
