@@ -177,7 +177,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     }
 
     scene.add(root);
-    return { root, torso, arms, legs, hitbox: { radius: 0.78, height: 2.05 } };
+    const hitMaterials=[];root.traverse(node=>{if(!node.isMesh||!node.material)return;node.material=node.material.clone();hitMaterials.push({material:node.material,base:node.material.color.clone(),emissive:node.material.emissive?.clone()||null})});return { root, torso, arms, legs, hitbox: { radius: 0.95, height: 2.05 }, hitMaterials, hitFlashUntil: 0, hitTinted: false };
   }
 
   const nodes = new Map();
@@ -357,9 +357,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
       const dx = citizen.x - position.x;
       const dz = citizen.z - position.z;
       const distance = Math.hypot(dx, dz);
-      const hitRadius = citizen.hitbox?.radius || 0.78;
+      const hitRadius = citizen.hitbox?.radius || 0.95;
       const facing = forward ? (dx * forward.x + dz * forward.z) / Math.max(distance, 0.001) : 1;
-      if (distance <= bestDistance + hitRadius && facing >= 0.18 && distance < bestDistance) { bestDistance = distance; nearest = citizen; }
+      if (distance <= bestDistance + hitRadius && facing >= -0.35 && distance < bestDistance) { bestDistance = distance; nearest = citizen; }
     }
     return nearest;
   }
@@ -393,6 +393,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const citizen = citizens.find((entry) => entry.id === id && entry.alive);
     if (!citizen) return;
     citizen.attackFlash = 0.42;
+    citizen.hitFlashUntil = Math.max(citizen.hitFlashUntil || 0, elapsed + 0.28);
   }
 
   function updateStationaryPeople(dt) {
@@ -402,6 +403,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
       person.gait += dt * 1.6;
       const threat = person.attackFlash > 0;
       if (person.attackFlash > 0) person.attackFlash = Math.max(0, person.attackFlash - dt);
+      const flashing = (person.hitFlashUntil || 0) > elapsed;
+      if (flashing && !person.hitTinted) { person.hitMaterials?.forEach(entry => { entry.material.color.setHex(0xff3f38); if (entry.material.emissive) entry.material.emissive.setHex(0x66100b); }); person.hitTinted = true; }
+      else if (!flashing && person.hitTinted) { person.hitMaterials?.forEach(entry => { entry.material.color.copy(entry.base); if (entry.material.emissive && entry.emissive) entry.material.emissive.copy(entry.emissive); }); person.hitTinted = false; }
       person.torso.position.y = 1.08 + Math.sin(person.gait) * 0.009;
       person.arms[0].rotation.x = threat ? -0.8 : Math.sin(person.gait) * 0.025;
       person.arms[1].rotation.x = threat ? 0.35 : -Math.sin(person.gait) * 0.025;

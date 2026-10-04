@@ -1,7 +1,7 @@
 const DATA = window.EsekCityData;
 const byId = (id) => document.getElementById(id);
 
-export function createCityGameplay({ state, player, citySimulation, enterableWorld, send, showToast, toggleNearbyDoor, passNearbyDoor }) {
+export function createCityGameplay({ state, player, citySimulation, enterableWorld, send, showToast, toggleNearbyDoor, passNearbyDoor, onPlayerHit = () => {} }) {
   if (!DATA) throw new Error('EsekCityData yüklenmedi.');
 
   const style = document.createElement('style');
@@ -214,7 +214,9 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
 
   function handleMessage(message) {
     if (message.type === 'needs') {
+      const previousHealth = profile.health;
       setProfile({ health: message.health, maxHealth: message.maxHealth });
+      if (Number(message.health) < Number(previousHealth)) onPlayerHit();
       return;
     }
     if (message.type === 'city_state') {
@@ -231,6 +233,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     }
     if (message.type === 'city_citizen_attack') {
       citySimulation.animateCitizenAttack(message.npcId);
+      if (message.targetId === state.myId) onPlayerHit();
       return;
     }
     if (message.type === 'city_shop_open') {
@@ -320,7 +323,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     byId('cityBagTouch').classList.toggle('show', screen === 'game' && mode === 'mobile');
     if (screen !== 'game') closeAllOverlays();
   }
-  function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestCitizen(player.position, 4.6, forward); }
+  function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestCitizen(player.position, 5.0, forward); }
 
   renderHud();
   return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, get profile() { return profile; } };

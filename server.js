@@ -815,7 +815,7 @@ function handleCityCitizenHit(player, data) {
     const forwardZ = Math.cos(Number(player.yaw) || 0);
     const facing = (dx * forwardX + dz * forwardZ) / Math.max(distance, 0.001);
     // Torso hitbox: a little forgiving at the edge, but attacks must be in front.
-    if (distance > 4.6 || facing < 0.18) return;
+    if (distance > 5.0 || facing < -0.35) return;
     const now = Date.now();
     if (now - (player.lastCityAttackAt || 0) < 400) return;
     player.lastCityAttackAt = now;
