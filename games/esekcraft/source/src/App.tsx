@@ -66,12 +66,14 @@ export default function App() {
   const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([]);
   const [onlinePlayers, setOnlinePlayers] = useState<Record<string, any>>({});
   const [onlineIsAdmin, setOnlineIsAdmin] = useState(false);
+  const [mobilePlayerListOpen, setMobilePlayerListOpen] = useState(false);
   const [selectedOnlineRoom, setSelectedOnlineRoom] = useState<string | null>(null);
   const [onlineMaxPlayers, setOnlineMaxPlayers] = useState(1);
   const onlineSocketRef = useRef<WebSocket | null>(null);
   const onlineRoomRef = useRef<OnlineRoom | null>(null);
   const onlinePlayerIdRef = useRef<string | null>(null);
   const onlineMoveTimerRef = useRef<number | null>(null);
+  const pendingOnlineGameModeRef = useRef<'survival' | 'creative' | null>(null);
   const pendingOnlineBlockChangesRef = useRef<Array<{ x: number; y: number; z: number; blockId: number }>>([]);
   const worldReadyRef = useRef(false);
   const pendingOnlineTileStateRef = useRef<{ furnaces: Record<number, FurnaceData>; chests: Record<number, ChestData> } | null>(null);
@@ -180,6 +182,7 @@ export default function App() {
   // Launch into 3D Game with selected or new world
   const launchWorld = (meta: WorldMeta) => {
     setChatOpen(false);
+    setMobilePlayerListOpen(false);
     setChatMessages([]);
     initAudio();
     activeMetaRef.current = meta;
@@ -199,7 +202,11 @@ export default function App() {
       }
       container.innerHTML = '';
 
-      const eng = new MinecraftEngine(container, meta);
+      const pendingMode = pendingOnlineGameModeRef.current;
+      const worldMeta = onlineRoomRef.current && pendingMode ? { ...meta, gameMode: pendingMode } : meta;
+      pendingOnlineGameModeRef.current = null;
+      activeMetaRef.current = worldMeta;
+      const eng = new MinecraftEngine(container, worldMeta);
       eng.mobileControlsEnabled = controlMode === 'mobile';
       eng.mouseSensitivity = sensitivity / 100;
       eng.fov = fov;
@@ -401,6 +408,8 @@ export default function App() {
         }
         if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
+          pendingOnlineGameModeRef.current = null;
+          setMobilePlayerListOpen(false);
           pendingOnlineBlockChangesRef.current = [];
           worldReadyRef.current = false;
           pendingOnlineTileStateRef.current = null;
@@ -416,6 +425,14 @@ export default function App() {
           engineRef.current.setRemotePlayers(message.players || {}, onlinePlayerIdRef.current || undefined);
         }
         if (message.type === 'room_admin') setOnlineIsAdmin(!!message.isAdmin);
+        if (message.type === 'esekcraft_gamemode') {
+          const gameMode = message.gameMode === 'creative' ? 'creative' : message.gameMode === 'survival' ? 'survival' : null;
+          if (gameMode) {
+            if (engineRef.current) engineRef.current.setGameMode(gameMode);
+            else pendingOnlineGameModeRef.current = gameMode;
+            if (activeMetaRef.current) activeMetaRef.current.gameMode = gameMode;
+          }
+        }
         if (message.type === 'esekcraft_kicked') { showToast(message.message || 'Odadan çıkarıldın.'); handleSaveAndQuit(); return; }
         if (message.type === 'esekcraft_block_changes') {
           const changes = (Array.isArray(message.changes) ? message.changes : []).map((change: any) => ({
@@ -508,6 +525,8 @@ export default function App() {
   };
   const handleSaveAndQuit = () => {
     setChatOpen(false);
+    setMobilePlayerListOpen(false);
+    pendingOnlineGameModeRef.current = null;
     const eng = engineRef.current;
     const meta = activeMetaRef.current;
 
@@ -618,6 +637,7 @@ export default function App() {
           onSaveKeyBindings={handleSaveKeyBindings}
           onlinePlayers={onlinePlayers}
           onlineIsAdmin={onlineIsAdmin}
+          mobilePlayerListOpen={mobilePlayerListOpen}
           onlineSelfId={onlinePlayerIdRef.current}
           onKickPlayer={(id) => sendOnlineMessage({ type: 'esekcraft_kick', targetId: id })}
         />
@@ -635,8 +655,10 @@ export default function App() {
       {appState === 'in_game' && uiState === 'playing' && controlMode === 'mobile' && !chatOpen && engineRef.current && (
         <MobileControls
           engine={engineRef.current}
-          onOpenChat={() => setChatOpen(true)}
-          onDropItem={() => engineRef.current?.dropSelectedItem(true)}
+          playerListOpen={mobilePlayerListOpen}
+          onTogglePlayerList={() => setMobilePlayerListOpen((open) => !open)}
+          onOpenChat={() => { setMobilePlayerListOpen(false); setChatOpen(true); }}
+          onDropItem={() => engineRef.current?.dropSelectedItem(false)}
           onOpenInventory={() => {
             const eng = engineRef.current;
             if (!eng) return;
@@ -650,6 +672,7 @@ export default function App() {
             const eng = engineRef.current;
             if (!eng) return;
             setChatOpen(false);
+            setMobilePlayerListOpen(false);
             eng.isPaused = true;
             eng.mouseLeft = false;
             eng.mouseRight = false;

@@ -42,6 +42,7 @@ import {
   atlasTexture,
   crackTextures,
   getItemName,
+  getItemTexture,
 } from './textures';
 import { VoxelWorld, inBounds, IDX } from './world';
 import { Sound, SoundMaterial } from './audio';
@@ -1277,6 +1278,12 @@ export class MinecraftEngine {
     try {
       localStorage.setItem('esekcraft_keybinds', JSON.stringify(binds));
     } catch {}
+  }
+
+  public setGameMode(mode: 'survival' | 'creative') {
+    this.gameMode = mode;
+    if (mode === 'survival') this.isFlying = false;
+    this.onHUDUpdate?.();
   }
 
   public isActionActive(action: keyof KeyBindings): boolean {
@@ -3229,6 +3236,35 @@ export class MinecraftEngine {
     group.add(fire);
     return group;
   }
+
+  private createTexturedItemDrop(id: AnyItemId): THREE.Mesh | null {
+    const texture = getItemTexture(id);
+    if (!texture) return null;
+
+    const halfSize = 0.22;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+      -halfSize, -halfSize, 0, halfSize, -halfSize, 0,
+      halfSize, halfSize, 0, -halfSize, halfSize, 0,
+      0, -halfSize, halfSize, 0, -halfSize, -halfSize,
+      0, halfSize, -halfSize, 0, halfSize, halfSize,
+    ], 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute([
+      0, 0, 1, 0, 1, 1, 0, 1,
+      0, 0, 1, 0, 1, 1, 0, 1,
+    ], 2));
+    geometry.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+    geometry.computeVertexNormals();
+
+    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }));
+  }
+
   private disposeDropObject(object: THREE.Object3D) {
     object.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -3340,6 +3376,13 @@ export class MinecraftEngine {
       mesh.position.set(x, y, z);
       this.scene.add(mesh);
       registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
+      return;
+    }
+    const texturedMesh = this.createTexturedItemDrop(id);
+    if (texturedMesh) {
+      texturedMesh.position.set(x, y, z);
+      this.scene.add(texturedMesh);
+      registerDrop(texturedMesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
     if (id === ItemType.WHITE_WOOL) {

@@ -657,6 +657,15 @@ export let atlasCanvas: HTMLCanvasElement | null = null;
 export let atlasTexture: THREE.CanvasTexture | null = null;
 export let crackTextures: THREE.CanvasTexture[] = [];
 export const iconDataUrls: Record<number, string> = {};
+const itemIconCanvases = new Map<number, HTMLCanvasElement>();
+const itemIconTextures = new Map<number, THREE.CanvasTexture>();
+
+function cacheItemIcon(id: number, canvas: HTMLCanvasElement) {
+  itemIconTextures.get(id)?.dispose();
+  itemIconTextures.delete(id);
+  itemIconCanvases.set(id, canvas);
+  iconDataUrls[id] = canvas.toDataURL();
+}
 
 /**
  * Generate Atlas & Crack Textures
@@ -1358,6 +1367,11 @@ function buildCrackStages() {
  * Procedural Item Icon Generator
  */
 export function generateAllItemIcons() {
+  itemIconTextures.forEach((texture) => texture.dispose());
+  itemIconTextures.clear();
+  itemIconCanvases.clear();
+  Object.keys(iconDataUrls).forEach((id) => delete iconDataUrls[Number(id)]);
+
   // First, map block items from atlas
   for (const key in BLOCK_DEFS) {
     const blockId = Number(key);
@@ -1378,7 +1392,7 @@ export function generateAllItemIcons() {
     if (atlasCanvas) {
       ctx.drawImage(atlasCanvas, tx, ty, TILE_SIZE, TILE_SIZE, 2, 2, 28, 28);
     }
-    iconDataUrls[blockId] = canvas.toDataURL();
+    cacheItemIcon(blockId, canvas);
   }
 
   // Draw slabs as a half-height isometric block rather than a full-cube icon.
@@ -1416,7 +1430,7 @@ export function generateAllItemIcons() {
     ctx.moveTo(16, 17); ctx.lineTo(16, 25); ctx.lineTo(4, 18); ctx.lineTo(4, 10);
     ctx.moveTo(16, 25); ctx.lineTo(28, 18); ctx.lineTo(28, 10);
     ctx.stroke();
-    iconDataUrls[blockId] = canvas.toDataURL();
+    cacheItemIcon(blockId, canvas);
   }
 
   // Keep the inventory icon as one complete door sprite; the world itself uses
@@ -1430,7 +1444,7 @@ export function generateAllItemIcons() {
     const tx = (TILE.ITEM_OAK_DOOR % TILES_PER_ROW) * TILE_SIZE;
     const ty = Math.floor(TILE.ITEM_OAK_DOOR / TILES_PER_ROW) * TILE_SIZE;
     ctx.drawImage(atlasCanvas, tx, ty, TILE_SIZE, TILE_SIZE, 2, 2, 28, 28);
-    iconDataUrls[BlockType.OAK_DOOR] = doorCanvas.toDataURL();
+    cacheItemIcon(BlockType.OAK_DOOR, doorCanvas);
   }
 
   // One complete 3-D bed icon for crafting output and inventory (not a wood tile).
@@ -1456,7 +1470,7 @@ export function generateAllItemIcons() {
   bedPoly([[5, 14], [17, 21], [17, 25], [5, 18]], '#98242e');
   bedPoly([[17, 21], [29, 14], [29, 18], [17, 25]], '#7f2028');
   bedPoly([[8, 13], [16, 8.5], [22, 12], [14, 16]], '#f3ead9');
-  iconDataUrls[BlockType.BED] = bedCanvas.toDataURL();
+  cacheItemIcon(BlockType.BED, bedCanvas);
 
   // Draw standalone items (stick, tools, ores, ingots, food, armor)
   const drawIcon = (id: AnyItemId, drawFn: (ctx: CanvasRenderingContext2D) => void) => {
@@ -1466,7 +1480,7 @@ export function generateAllItemIcons() {
     const ctx = c.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
     drawFn(ctx);
-    iconDataUrls[id] = c.toDataURL();
+    cacheItemIcon(id, c);
   };
 
   // Stick
@@ -1816,4 +1830,22 @@ export function getItemIcon(id: AnyItemId): string {
   if (iconDataUrls[id]) return iconDataUrls[id];
   // Fallback
   return '';
+}
+
+/** Reuses the exact inventory pixel-art icon as a crisp 3D drop texture. */
+export function getItemTexture(id: AnyItemId): THREE.CanvasTexture | null {
+  const iconCanvas = itemIconCanvases.get(id) ??
+    (id === ItemType.WHITE_WOOL ? itemIconCanvases.get(BlockType.WHITE_WOOL_BLOCK) : undefined);
+  if (!iconCanvas) return null;
+
+  let texture = itemIconTextures.get(id);
+  if (!texture) {
+    texture = new THREE.CanvasTexture(iconCanvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    itemIconTextures.set(id, texture);
+  }
+  return texture;
 }

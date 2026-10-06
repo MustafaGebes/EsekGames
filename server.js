@@ -431,6 +431,23 @@ function handleEsekCraftItemDropRemove(player, data = {}) {
     room.lastActivityAt = Date.now();
     broadcastToRoom(room.id, { type: "esekcraft_item_drop_remove", sourceId: player.id, dropId });
 }
+function parseWhisperCommand(text) {
+    const match = String(text).match(/^\/msg\s+(?:"([^"\r\n]{1,48})"|(\S+))\s+([\s\S]+)$/i);
+    if (!match) return null;
+    const toName = String(match[1] || match[2] || "").trim();
+    let message = String(match[3] || "").trim();
+    const quoted = message.match(/^"([\s\S]*)"$/);
+    if (message.startsWith('"') && !quoted) return null;
+    if (quoted) message = quoted[1].trim();
+    if (!toName || !message || message.length > 200) return null;
+    return { toName, message };
+}
+function sendEsekCraftPrivateChat(player, text) {
+    sendTo(player, {
+        type: "esekcraft_chat_message", senderId: "server", sender: "Sunucu",
+        text, timestamp: Date.now()
+    });
+}
 function handleEsekCraftChat(player, data = {}) {
     if (!player || !player.inGame) return;
     const room = getPlayerRoom(player);
@@ -443,6 +460,63 @@ function handleEsekCraftChat(player, data = {}) {
     const sender = Array.from(String(player.name || "Oyuncu").replace(/[\u0000-\u001F\u007F]/g, "").trim()).slice(0, 24).join("") || "Oyuncu";
     player.lastEsekCraftChatAt = now;
     room.lastActivityAt = now;
+    if (/^\/msg(?:\s|$)/i.test(text)) {
+        const whisper = parseWhisperCommand(text);
+        if (!whisper) {
+            sendEsekCraftPrivateChat(player, 'Kullanım: /msg <oyuncu> "mesaj"');
+            return;
+        }
+        const target = [...room.members]
+            .map((id) => players.get(id))
+            .find((candidate) => candidate && candidate.id !== player.id && candidate.inGame && candidate.roomId === room.id &&
+                String(candidate.name || "").toLowerCase() === whisper.toName.toLowerCase());
+        if (!target) {
+            sendEsekCraftPrivateChat(player, `"${whisper.toName}" adlı oyuncu bu odada bulunamadı.`);
+            return;
+        }
+        sendTo(target, {
+            type: "esekcraft_chat_message", senderId: player.id,
+            sender: `${sender} (fısıltı)`, text: whisper.message, timestamp: now, private: true
+        });
+        return;
+    }
+    if (text.startsWith("/")) {
+        const commandMatch = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
+        const command = String(commandMatch?.[1] || "").toLowerCase();
+        const argument = String(commandMatch?.[2] || "").trim();
+        if (!isRoomAdmin(player, room)) {
+            sendEsekCraftPrivateChat(player, "Bu komut yalnızca oda yöneticisine açıktır.");
+            return;
+        }
+        if (command === "help" && !argument) {
+            sendEsekCraftPrivateChat(player, 'Yönetici komutları: /gamemode creative|survival · /kick <oyuncu> · Ortak komut: /msg <oyuncu> "mesaj"');
+            return;
+        }
+        if (command === "gamemode" && ["creative", "survival"].includes(argument.toLowerCase())) {
+            const gameMode = argument.toLowerCase();
+            const currentOptions = room.worldOptions || sanitizeEsekCraftWorldOptions({ name: room.name });
+            room.worldOptions = { ...currentOptions, gameMode };
+            room.lastActivityAt = now;
+            broadcastToRoom(room.id, { type: "esekcraft_gamemode", gameMode });
+            broadcastRoomLists();
+            sendEsekCraftPrivateChat(player, `Oyun modu ${gameMode === "creative" ? "Creative" : "Survival"} olarak değiştirildi.`);
+            return;
+        }
+        if (command === "kick" && argument) {
+            const targetName = argument.startsWith('"') && argument.endsWith('"') ? argument.slice(1, -1).trim() : argument;
+            const target = [...room.members]
+                .map((id) => players.get(id))
+                .find((candidate) => candidate && candidate.id !== player.id && candidate.inGame && candidate.roomId === room.id &&
+                    String(candidate.name || "").toLowerCase() === targetName.toLowerCase());
+            if (target) {
+                handleEsekCraftKick(player, { targetId: target.id });
+                sendEsekCraftPrivateChat(player, `${target.name || "Oyuncu"} odadan çıkarıldı.`);
+                return;
+            }
+        }
+        sendEsekCraftPrivateChat(player, "Komut yanlış. /help yazarak yönetici komutlarını görebilirsin.");
+        return;
+    }
     broadcastToRoom(room.id, { type: "esekcraft_chat_message", senderId: player.id, sender, text, timestamp: now });
 }
 function handleEsekCraftBlockChange(player, data = {}) {
@@ -2084,14 +2158,15 @@ function handleChat(player, data) {
     const clientId = String(data.clientId || "");
     const time = new Date().toISOString();
 
-    // Fısıltı: /msg isim mesaj
-    const whisper =
-        text.match(/^\/msg\s+(\S+)\s+"([\s\S]{1,220})"\s*$/i) ||
-        text.match(/^\/msg\s+(\S+)\s+([\s\S]{1,220})$/i);
-
-    if (whisper) {
-        const toName = whisper[1];
-        const whisperText = whisper[2];
+    // Fısıltı: /msg isim "mesaj" — sadece hedef oyuncuya iletilir.
+    if (/^\/msg(?:\s|$)/i.test(text)) {
+        const whisper = parseWhisperCommand(text);
+        if (!whisper) {
+            sendTo(player, { type: "chat_error", message: 'Kullanım: /msg <oyuncu> "mesaj"' });
+            return;
+        }
+        const toName = whisper.toName;
+        const whisperText = whisper.message;
 
         let target = null;
         for (const p of players.values()) {
@@ -2116,7 +2191,6 @@ function handleChat(player, data) {
         };
 
         sendTo(target, { type: "chat_message", message });
-        sendTo(player, { type: "chat_message", message });
         return;
     }
 
