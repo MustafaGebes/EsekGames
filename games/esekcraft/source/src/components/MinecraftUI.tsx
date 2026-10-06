@@ -40,6 +40,7 @@ interface MinecraftUIProps {
   onSaveKeyBindings?: (binds: KeyBindings) => void;
   onlinePlayers?: Record<string, any>;
   onlineIsAdmin?: boolean;
+  mobilePlayerListOpen?: boolean;
   onKickPlayer?: (id: string) => void;
   onlineSelfId?: string | null;
 }
@@ -223,6 +224,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   onSaveKeyBindings,
   onlinePlayers = {},
   onlineIsAdmin = false,
+  mobilePlayerListOpen = false,
   onKickPlayer,
   onlineSelfId = null,
 }) => {
@@ -659,7 +661,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               FPS: {engine.fps || '--'}
             </div>
           </div>
-          {showPlayerList && (
+          {(showPlayerList || mobilePlayerListOpen) && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[520px] max-w-[94vw] bg-black/85 border-2 border-[#777] shadow-2xl p-3 pointer-events-auto">
               <div className="text-center font-mono font-bold text-white mb-2">ONLINE OYUNCULAR</div>
               <div className="flex flex-col gap-1">
@@ -675,7 +677,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                 ))}
                 {Object.keys(onlinePlayers).length === 0 && <div className="text-center text-slate-400">Oyuncu listesi bekleniyor...</div>}
               </div>
-              <div className="text-center text-[10px] text-slate-400 mt-2">TAB basılı tutulurken gösterilir</div>
+              <div className="text-center text-[10px] text-slate-400 mt-2">TAB tuşuyla veya mobilde TAB düğmesiyle açılır</div>
             </div>
           )}
 

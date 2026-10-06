@@ -9,11 +9,13 @@ const ACTION_LABELS: Record<HoldAction, string> = { jump: 'Zıpla', sprint: 'Ko�
 
 export const MobileControls: React.FC<{
   engine: MinecraftEngine;
+  playerListOpen: boolean;
+  onTogglePlayerList: () => void;
   onOpenChat: () => void;
   onDropItem: () => void;
   onOpenInventory: () => void;
   onPause: () => void;
-}> = ({ engine, onOpenChat, onDropItem, onOpenInventory, onPause }) => {
+}> = ({ engine, playerListOpen, onTogglePlayerList, onOpenChat, onDropItem, onOpenInventory, onPause }) => {
   const padRef = useRef<HTMLDivElement>(null);
   const padPointerRef = useRef<number | null>(null);
   const [stick, setStick] = useState({ x: 0, y: 0 });
@@ -145,6 +147,11 @@ export const MobileControls: React.FC<{
         <button type="button" className={`${labelButton(false)} h-12 w-12 text-[9px] font-bold`} aria-label="Sohbeti aç" title="Sohbet" onClick={onOpenChat}>
           <span aria-hidden="true" className="text-lg leading-none">💬</span><span>Sohbet</span>
         </button>
+        {engine.onlineMode && (
+          <button type="button" className={`${labelButton(playerListOpen)} h-12 w-12 text-[9px] font-bold`} aria-label={playerListOpen ? 'Oyuncu listesini kapat' : 'Oyuncu listesini aç'} title="TAB / Oyuncular" aria-pressed={playerListOpen} onClick={onTogglePlayerList}>
+            <span aria-hidden="true" className="text-[11px] leading-none">TAB</span><span>Oyuncu</span>
+          </button>
+        )}
         <button type="button" className={`${labelButton(false)} h-12 w-12 text-[9px] font-bold`} aria-label="Eşyayı at" title="Eşyayı at" onClick={onDropItem}>
           <span aria-hidden="true" className="text-lg leading-none">↓</span><span>At</span>
         </button>

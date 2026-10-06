@@ -66,6 +66,7 @@ export default function App() {
   const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([]);
   const [onlinePlayers, setOnlinePlayers] = useState<Record<string, any>>({});
   const [onlineIsAdmin, setOnlineIsAdmin] = useState(false);
+  const [mobilePlayerListOpen, setMobilePlayerListOpen] = useState(false);
   const [selectedOnlineRoom, setSelectedOnlineRoom] = useState<string | null>(null);
   const [onlineMaxPlayers, setOnlineMaxPlayers] = useState(1);
   const onlineSocketRef = useRef<WebSocket | null>(null);
@@ -181,6 +182,7 @@ export default function App() {
   // Launch into 3D Game with selected or new world
   const launchWorld = (meta: WorldMeta) => {
     setChatOpen(false);
+    setMobilePlayerListOpen(false);
     setChatMessages([]);
     initAudio();
     activeMetaRef.current = meta;
@@ -407,6 +409,7 @@ export default function App() {
         if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
           pendingOnlineGameModeRef.current = null;
+          setMobilePlayerListOpen(false);
           pendingOnlineBlockChangesRef.current = [];
           worldReadyRef.current = false;
           pendingOnlineTileStateRef.current = null;
@@ -522,6 +525,7 @@ export default function App() {
   };
   const handleSaveAndQuit = () => {
     setChatOpen(false);
+    setMobilePlayerListOpen(false);
     pendingOnlineGameModeRef.current = null;
     const eng = engineRef.current;
     const meta = activeMetaRef.current;
@@ -633,6 +637,7 @@ export default function App() {
           onSaveKeyBindings={handleSaveKeyBindings}
           onlinePlayers={onlinePlayers}
           onlineIsAdmin={onlineIsAdmin}
+          mobilePlayerListOpen={mobilePlayerListOpen}
           onlineSelfId={onlinePlayerIdRef.current}
           onKickPlayer={(id) => sendOnlineMessage({ type: 'esekcraft_kick', targetId: id })}
         />
@@ -650,8 +655,10 @@ export default function App() {
       {appState === 'in_game' && uiState === 'playing' && controlMode === 'mobile' && !chatOpen && engineRef.current && (
         <MobileControls
           engine={engineRef.current}
-          onOpenChat={() => setChatOpen(true)}
-          onDropItem={() => engineRef.current?.dropSelectedItem()}
+          playerListOpen={mobilePlayerListOpen}
+          onTogglePlayerList={() => setMobilePlayerListOpen((open) => !open)}
+          onOpenChat={() => { setMobilePlayerListOpen(false); setChatOpen(true); }}
+          onDropItem={() => engineRef.current?.dropSelectedItem(false)}
           onOpenInventory={() => {
             const eng = engineRef.current;
             if (!eng) return;
@@ -665,6 +672,7 @@ export default function App() {
             const eng = engineRef.current;
             if (!eng) return;
             setChatOpen(false);
+            setMobilePlayerListOpen(false);
             eng.isPaused = true;
             eng.mouseLeft = false;
             eng.mouseRight = false;
