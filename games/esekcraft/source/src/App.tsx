@@ -72,6 +72,7 @@ export default function App() {
   const onlineRoomRef = useRef<OnlineRoom | null>(null);
   const onlinePlayerIdRef = useRef<string | null>(null);
   const onlineMoveTimerRef = useRef<number | null>(null);
+  const pendingOnlineGameModeRef = useRef<'survival' | 'creative' | null>(null);
   const pendingOnlineBlockChangesRef = useRef<Array<{ x: number; y: number; z: number; blockId: number }>>([]);
   const worldReadyRef = useRef(false);
   const pendingOnlineTileStateRef = useRef<{ furnaces: Record<number, FurnaceData>; chests: Record<number, ChestData> } | null>(null);
@@ -199,7 +200,11 @@ export default function App() {
       }
       container.innerHTML = '';
 
-      const eng = new MinecraftEngine(container, meta);
+      const pendingMode = pendingOnlineGameModeRef.current;
+      const worldMeta = onlineRoomRef.current && pendingMode ? { ...meta, gameMode: pendingMode } : meta;
+      pendingOnlineGameModeRef.current = null;
+      activeMetaRef.current = worldMeta;
+      const eng = new MinecraftEngine(container, worldMeta);
       eng.mobileControlsEnabled = controlMode === 'mobile';
       eng.mouseSensitivity = sensitivity / 100;
       eng.fov = fov;
@@ -401,6 +406,7 @@ export default function App() {
         }
         if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
+          pendingOnlineGameModeRef.current = null;
           pendingOnlineBlockChangesRef.current = [];
           worldReadyRef.current = false;
           pendingOnlineTileStateRef.current = null;
@@ -416,6 +422,14 @@ export default function App() {
           engineRef.current.setRemotePlayers(message.players || {}, onlinePlayerIdRef.current || undefined);
         }
         if (message.type === 'room_admin') setOnlineIsAdmin(!!message.isAdmin);
+        if (message.type === 'esekcraft_gamemode') {
+          const gameMode = message.gameMode === 'creative' ? 'creative' : message.gameMode === 'survival' ? 'survival' : null;
+          if (gameMode) {
+            if (engineRef.current) engineRef.current.setGameMode(gameMode);
+            else pendingOnlineGameModeRef.current = gameMode;
+            if (activeMetaRef.current) activeMetaRef.current.gameMode = gameMode;
+          }
+        }
         if (message.type === 'esekcraft_kicked') { showToast(message.message || 'Odadan çıkarıldın.'); handleSaveAndQuit(); return; }
         if (message.type === 'esekcraft_block_changes') {
           const changes = (Array.isArray(message.changes) ? message.changes : []).map((change: any) => ({
@@ -508,6 +522,7 @@ export default function App() {
   };
   const handleSaveAndQuit = () => {
     setChatOpen(false);
+    pendingOnlineGameModeRef.current = null;
     const eng = engineRef.current;
     const meta = activeMetaRef.current;
 

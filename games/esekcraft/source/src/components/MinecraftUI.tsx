@@ -1399,18 +1399,19 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               Oyuna Dön
             </button>
 
-            {/* Game mode toggle */}
-            <button
-              onClick={() => {
-                engine.gameMode = engine.gameMode === 'survival' ? 'creative' : 'survival';
-                if (engine.gameMode === 'survival') engine.isFlying = false;
-                Sound.click();
-                rerender();
-              }}
-              className="mc-btn w-64 text-sm"
-            >
-              Oyun Modu: {engine.gameMode === 'survival' ? 'Hayatta Kalma' : 'Yaratıcı (Creative)'}
-            </button>
+            {/* Online game mode is controlled by the room admin through /gamemode. */}
+            {!engine.onlineMode && (
+              <button
+                onClick={() => {
+                  engine.setGameMode(engine.gameMode === 'survival' ? 'creative' : 'survival');
+                  Sound.click();
+                  rerender();
+                }}
+                className="mc-btn w-64 text-sm"
+              >
+                Oyun Modu: {engine.gameMode === 'survival' ? 'Hayatta Kalma' : 'Yaratıcı (Creative)'}
+              </button>
+            )}
 
             {/* Settings (FOV & Sensitivity) */}
             <div className="w-full flex flex-col gap-2 my-2 p-2 bg-black/20 border border-[#888]">

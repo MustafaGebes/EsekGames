@@ -489,7 +489,17 @@ function handleEsekCraftChat(player, data = {}) {
             return;
         }
         if (command === "help" && !argument) {
-            sendEsekCraftPrivateChat(player, 'Yönetici komutları: /kick <oyuncu> · Ortak komut: /msg <oyuncu> "mesaj"');
+            sendEsekCraftPrivateChat(player, 'Yönetici komutları: /gamemode creative|survival · /kick <oyuncu> · Ortak komut: /msg <oyuncu> "mesaj"');
+            return;
+        }
+        if (command === "gamemode" && ["creative", "survival"].includes(argument.toLowerCase())) {
+            const gameMode = argument.toLowerCase();
+            const currentOptions = room.worldOptions || sanitizeEsekCraftWorldOptions({ name: room.name });
+            room.worldOptions = { ...currentOptions, gameMode };
+            room.lastActivityAt = now;
+            broadcastToRoom(room.id, { type: "esekcraft_gamemode", gameMode });
+            broadcastRoomLists();
+            sendEsekCraftPrivateChat(player, `Oyun modu ${gameMode === "creative" ? "Creative" : "Survival"} olarak değiştirildi.`);
             return;
         }
         if (command === "kick" && argument) {

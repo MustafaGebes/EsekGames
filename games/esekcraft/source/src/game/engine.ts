@@ -1280,6 +1280,12 @@ export class MinecraftEngine {
     } catch {}
   }
 
+  public setGameMode(mode: 'survival' | 'creative') {
+    this.gameMode = mode;
+    if (mode === 'survival') this.isFlying = false;
+    this.onHUDUpdate?.();
+  }
+
   public isActionActive(action: keyof KeyBindings): boolean {
     const code = this.keyBindings[action];
     if (!code) return false;
