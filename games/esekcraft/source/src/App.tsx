@@ -9,6 +9,7 @@ import { MinecraftEngine } from './game/engine';
 import { MinecraftUI } from './components/MinecraftUI';
 import { ControlsModal } from './components/ControlsModal';
 import { MobileControls } from './components/MobileControls';
+import { MinecraftChat, type ChatLine } from './components/MinecraftChat';
 
 const LOCAL_STORAGE_KEY = 'esekcraft_worlds_v1';
 const SETTINGS_KEY = 'esekcraft_settings_v1';
@@ -36,6 +37,8 @@ export default function App() {
   const [worlds, setWorlds] = useState<WorldMeta[]>([]);
   const [selectedWorldIdx, setSelectedWorldIdx] = useState<number>(-1);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatLine[]>([]);
 
   // Boot progress
   const [bootProgress, setBootProgress] = useState(15);
@@ -88,6 +91,9 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(CONTROL_MODE_KEY, controlMode); } catch {}
   }, [controlMode]);
+  useEffect(() => {
+    if (appState !== 'in_game' || uiState !== 'playing') setChatOpen(false);
+  }, [appState, uiState]);
 
   // Boot animation on startup
   useEffect(() => {
@@ -173,6 +179,8 @@ export default function App() {
 
   // Launch into 3D Game with selected or new world
   const launchWorld = (meta: WorldMeta) => {
+    setChatOpen(false);
+    setChatMessages([]);
     initAudio();
     activeMetaRef.current = meta;
     setAppState('generating');
@@ -252,7 +260,7 @@ export default function App() {
         setGenText('Dünya hazır!');
         setAppState('in_game');
         setUIState('playing');
-        eng.requestPointerLock();
+        if (!eng.mobileControlsEnabled) eng.requestPointerLock();
         if (onlineMoveTimerRef.current !== null) window.clearInterval(onlineMoveTimerRef.current);
         if (onlineRoomRef.current) {
           onlineMoveTimerRef.current = window.setInterval(() => {
@@ -263,7 +271,7 @@ export default function App() {
               yaw: current.yaw, pitch: current.pitch,
               isMoving: Math.hypot(current.vel.x, current.vel.z) > 0.05,
               isCrouching: current.isSneaking, isSprinting: current.isSprinting,
-              isJumping: !current.onGround, platform: 'pc'
+              isJumping: !current.onGround, platform: controlMode
             });
           }, 50);
         }
@@ -299,6 +307,18 @@ export default function App() {
     };
     if (ws.readyState === WebSocket.OPEN) send();
     else ws.addEventListener('open', send, { once: true });
+  };
+  const handleSendChat = (rawText: string) => {
+    const text = rawText.trim().slice(0, 200);
+    if (!text) return;
+    if (onlineRoomRef.current) {
+      sendOnlineMessage({ type: 'esekcraft_chat', text });
+      return;
+    }
+    setChatMessages((previous) => [...previous, {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      sender: 'Sen', text, timestamp: Date.now(),
+    }].slice(-60));
   };
   const persistActiveTileState = (eng: MinecraftEngine) => {
     const meta = activeMetaRef.current;
@@ -357,6 +377,15 @@ export default function App() {
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'init') onlinePlayerIdRef.current = message.id || null;
+        if (message.type === 'esekcraft_chat_message' && typeof message.text === 'string') {
+          const timestamp = Number(message.timestamp) || Date.now();
+          setChatMessages((previous) => [...previous, {
+            id: `${timestamp}-${String(message.senderId || 'player')}-${Math.random().toString(36).slice(2, 7)}`,
+            sender: String(message.sender || 'Oyuncu').slice(0, 24),
+            text: String(message.text).slice(0, 200),
+            timestamp,
+          }].slice(-60));
+        }
         if (message.type === 'esekcraft_joined') {
           onlinePlayerIdRef.current = message.id || null;
           if (engineRef.current) engineRef.current.networkPlayerId = onlinePlayerIdRef.current;
@@ -377,6 +406,8 @@ export default function App() {
           pendingOnlineTileStateRef.current = null;
           pendingOnlineDropsRef.current = null;
           onlineRoomRef.current = room;
+          setChatOpen(false);
+          setChatMessages([]);
           setSelectedOnlineRoom(room.id);
           launchWorld(roomToWorldMeta(room));
         }
@@ -476,6 +507,7 @@ export default function App() {
     });
   };
   const handleSaveAndQuit = () => {
+    setChatOpen(false);
     const eng = engineRef.current;
     const meta = activeMetaRef.current;
 
@@ -590,9 +622,21 @@ export default function App() {
           onKickPlayer={(id) => sendOnlineMessage({ type: 'esekcraft_kick', targetId: id })}
         />
       )}
-      {appState === 'in_game' && uiState === 'playing' && controlMode === 'mobile' && engineRef.current && (
+      {appState === 'in_game' && engineRef.current && (
+        <MinecraftChat
+          engine={engineRef.current}
+          enabled={uiState === 'playing'}
+          open={chatOpen}
+          messages={chatMessages}
+          onOpenChange={setChatOpen}
+          onSend={handleSendChat}
+        />
+      )}
+      {appState === 'in_game' && uiState === 'playing' && controlMode === 'mobile' && !chatOpen && engineRef.current && (
         <MobileControls
           engine={engineRef.current}
+          onOpenChat={() => setChatOpen(true)}
+          onDropItem={() => engineRef.current?.dropSelectedItem(true)}
           onOpenInventory={() => {
             const eng = engineRef.current;
             if (!eng) return;
@@ -605,6 +649,7 @@ export default function App() {
           onPause={() => {
             const eng = engineRef.current;
             if (!eng) return;
+            setChatOpen(false);
             eng.isPaused = true;
             eng.mouseLeft = false;
             eng.mouseRight = false;

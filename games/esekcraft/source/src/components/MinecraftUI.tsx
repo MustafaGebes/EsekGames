@@ -273,19 +273,21 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   // Minecraft-style TAB player list: hold Tab to show, release it to hide.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (engine?.mobileControlsEnabled) return;
       if (e.code !== 'Tab' || (e.target as HTMLElement).tagName === 'INPUT') return;
       e.preventDefault();
       setShowPlayerList(true);
     };
-    const up = (e: KeyboardEvent) => { if (e.code === 'Tab') setShowPlayerList(false); };
+    const up = (e: KeyboardEvent) => { if (!engine?.mobileControlsEnabled && e.code === 'Tab') setShowPlayerList(false); };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
-  }, []);
+  }, [engine]);
   // Listen to Inventory key (dynamic keybinding, default 'KeyE') to open/close inventory
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const target = e.target as HTMLElement;
+      if (engine?.mobileControlsEnabled || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       const invKey = engine?.keyBindings?.inventory || keyBindings?.inventory || 'KeyE';
       if (e.code === invKey) {
         e.preventDefault();
@@ -784,6 +786,12 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                   <div
                     key={idx}
                     className={`mc-slot ${idx === engine.selectedSlot ? 'active-slot' : ''}`}
+                    role="button"
+                    aria-label={`${idx + 1}. hızlı erişim yuvasını seç`}
+                    onClick={() => {
+                      engine.selectHotbarSlot(idx);
+                      Sound.click();
+                    }}
                   >
                     {stack && (
                       <>

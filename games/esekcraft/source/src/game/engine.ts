@@ -3262,6 +3262,36 @@ export class MinecraftEngine {
     const flicker = Math.sin(this.torchTime * 11.0) * 0.08 + Math.sin(this.torchTime * 23.0) * 0.04;
     for (const light of this.torchLights) { const dx = light.position.x - this.pos.x; const dz = light.position.z - this.pos.z; light.visible = dx * dx + dz * dz < this.renderDistance * this.renderDistance; if (light.visible) light.intensity = 1.25 + flicker; }
   }
+  public selectHotbarSlot(index: number) {
+    if (!Number.isFinite(index)) return;
+    const next = Math.max(0, Math.min(8, Math.floor(index)));
+    if (next === this.selectedSlot) return;
+    this.selectedSlot = next;
+    this.updateHeldItemModel();
+    this.onHUDUpdate?.();
+  }
+  public dropSelectedItem(dropWholeStack = false) {
+    if (this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return false;
+    const held = this.inventory[this.selectedSlot];
+    if (!held || held.count <= 0) return false;
+    const dir = this.getLookDir();
+    const horizontalLength = Math.hypot(dir.x, dir.z) || 1;
+    const droppedCount = dropWholeStack ? held.count : 1;
+    // A small spawn offset plus a modest speed increase makes the toss visibly travel farther.
+    this.spawnDrop(this.pos.x + dir.x * 1.0, this.pos.y + 1.2, this.pos.z + dir.z * 1.0, held.id, droppedCount, {
+      velocity: {
+        x: (dir.x / horizontalLength) * 3.2,
+        y: 0.8 + Math.max(0, dir.y) * 0.5,
+        z: (dir.z / horizontalLength) * 3.2,
+      },
+      pickupDelay: 2,
+    });
+    held.count -= droppedCount;
+    if (held.count <= 0) this.inventory[this.selectedSlot] = null;
+    this.updateHeldItemModel();
+    this.onHUDUpdate?.();
+    return true;
+  }
   public spawnDrop(
     x: number,
     y: number,
@@ -3920,7 +3950,8 @@ export class MinecraftEngine {
   // ================= INPUT LISTENERS =================
   private setupListeners() {
     window.addEventListener('keydown', (e) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const target = e.target as HTMLElement;
+      if (this.mobileControlsEnabled || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (this.bedSleepAnimation) return;
       this.keys[e.code] = true;
 
@@ -3940,23 +3971,7 @@ export class MinecraftEngine {
         // Drop held item
         else if (e.code === this.keyBindings.drop) {
           e.preventDefault();
-          const held = this.inventory[this.selectedSlot];
-          if (held && held.count > 0) {
-            const dir = this.getLookDir();
-            const horizontalLength = Math.hypot(dir.x, dir.z) || 1;
-            this.spawnDrop(this.pos.x + dir.x * 0.8, this.pos.y + 1.2, this.pos.z + dir.z * 0.8, held.id, 1, {
-              velocity: {
-                x: (dir.x / horizontalLength) * 2.6,
-                y: 0.7 + Math.max(0, dir.y) * 0.5,
-                z: (dir.z / horizontalLength) * 2.6,
-              },
-              pickupDelay: 2,
-            });
-            held.count--;
-            if (held.count <= 0) this.inventory[this.selectedSlot] = null;
-            this.updateHeldItemModel();
-            this.onHUDUpdate?.();
-          }
+          this.dropSelectedItem();
         }
         // Swap with offhand
         else if (e.code === this.keyBindings.offhand && !e.repeat) {
@@ -3989,6 +4004,7 @@ export class MinecraftEngine {
     });
 
     window.addEventListener('keyup', (e) => {
+      if (this.mobileControlsEnabled) return;
       this.keys[e.code] = false;
     });
 
@@ -4021,14 +4037,14 @@ export class MinecraftEngine {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.isPointerLocked || this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
+      if (this.mobileControlsEnabled || !this.isPointerLocked || this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
       const s = this.mouseSensitivity * 0.0022;
       this.yaw -= e.movementX * s;
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - e.movementY * s));
     });
 
     window.addEventListener('wheel', (e) => {
-      if (this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
+      if (this.mobileControlsEnabled || this.isPaused || this.isDead || this.isGUIOpen || this.bedSleepAnimation) return;
       this.selectedSlot = (this.selectedSlot + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
       this.updateHeldItemModel();
       this.onHUDUpdate?.();
@@ -4042,7 +4058,7 @@ export class MinecraftEngine {
 
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
-      if (!this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode && !this.bedSleepAnimation) {
+      if (!this.mobileControlsEnabled && !this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode && !this.bedSleepAnimation) {
         this.isPaused = true;
         this.mouseLeft = false;
         this.mouseRight = false;

@@ -9,9 +9,11 @@ const ACTION_LABELS: Record<HoldAction, string> = { jump: 'Zıpla', sprint: 'Ko�
 
 export const MobileControls: React.FC<{
   engine: MinecraftEngine;
+  onOpenChat: () => void;
+  onDropItem: () => void;
   onOpenInventory: () => void;
   onPause: () => void;
-}> = ({ engine, onOpenInventory, onPause }) => {
+}> = ({ engine, onOpenChat, onDropItem, onOpenInventory, onPause }) => {
   const padRef = useRef<HTMLDivElement>(null);
   const padPointerRef = useRef<number | null>(null);
   const [stick, setStick] = useState({ x: 0, y: 0 });
@@ -140,6 +142,12 @@ export const MobileControls: React.FC<{
   return (
     <div className="pointer-events-none absolute inset-0 z-[30] overflow-hidden" aria-label="Mobil oyun kontrolleri">
       <div className="pointer-events-none absolute right-3 top-3 flex gap-2">
+        <button type="button" className={`${labelButton(false)} h-12 w-12 text-[9px] font-bold`} aria-label="Sohbeti aç" title="Sohbet" onClick={onOpenChat}>
+          <span aria-hidden="true" className="text-lg leading-none">💬</span><span>Sohbet</span>
+        </button>
+        <button type="button" className={`${labelButton(false)} h-12 w-12 text-[9px] font-bold`} aria-label="Eşyayı at" title="Eşyayı at" onClick={onDropItem}>
+          <span aria-hidden="true" className="text-lg leading-none">↓</span><span>At</span>
+        </button>
         <button type="button" className={`${labelButton(false)} h-12 w-12 text-[9px] font-bold`} aria-label="Envanteri aç" title="Envanter" onClick={onOpenInventory}>
           <span aria-hidden="true" className="text-lg leading-none">▤</span><span>Çanta</span>
         </button>

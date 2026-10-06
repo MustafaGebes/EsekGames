@@ -431,6 +431,20 @@ function handleEsekCraftItemDropRemove(player, data = {}) {
     room.lastActivityAt = Date.now();
     broadcastToRoom(room.id, { type: "esekcraft_item_drop_remove", sourceId: player.id, dropId });
 }
+function handleEsekCraftChat(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft" || !room.members.has(player.id)) return;
+    const now = Date.now();
+    if (now - (player.lastEsekCraftChatAt || 0) < 450) return;
+    const rawText = String(data.text || "").replace(/[\r\n\t]+/g, " ").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+    const text = Array.from(rawText).slice(0, 200).join("");
+    if (!text) return;
+    const sender = Array.from(String(player.name || "Oyuncu").replace(/[\u0000-\u001F\u007F]/g, "").trim()).slice(0, 24).join("") || "Oyuncu";
+    player.lastEsekCraftChatAt = now;
+    room.lastActivityAt = now;
+    broadcastToRoom(room.id, { type: "esekcraft_chat_message", senderId: player.id, sender, text, timestamp: now });
+}
 function handleEsekCraftBlockChange(player, data = {}) {
     if (!player || !player.inGame) return;
     const room = getPlayerRoom(player);
@@ -2663,6 +2677,9 @@ wss.on("connection", (ws, req) => {
                 break;
             case "esekcraft_item_drop_remove":
                 handleEsekCraftItemDropRemove(player, data);
+                break;
+            case "esekcraft_chat":
+                handleEsekCraftChat(player, data);
                 break;
 
             case "building_door_state":

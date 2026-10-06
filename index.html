@@ -134,6 +134,7 @@
         .account-tab { flex:1; padding:10px; border:0; border-radius:8px; background:#202b39; color:#b9c5d0; font-weight:800; cursor:pointer; }
         .account-tab.active { background:#ffd43b; color:#171717; }
         .account-warning { margin-top:14px; padding:11px 12px; border-radius:9px; background:rgba(244,67,54,.12); border:1px solid rgba(244,67,54,.5); color:#ff7474; font-size:13px; line-height:1.45; font-weight:700; }
+        .account-warning-info { margin-top:9px; padding:11px 12px; border-radius:9px; background:rgba(255,193,7,.10); border:1px solid rgba(255,193,7,.45); color:#ffd875; font-size:13px; line-height:1.45; font-weight:700; }
         .account-error { min-height:20px; margin-top:10px; color:#ff7777; font-size:13px; }
         .account-actions { display:flex; gap:9px; margin-top:12px; }
         .account-actions button { flex:1; padding:12px; border:0; border-radius:9px; font-weight:900; cursor:pointer; }
@@ -1003,6 +1004,7 @@
                     <input id="newPassword2" type="password" maxlength="128" autocomplete="new-password">
                 </div>
                 <div class="account-warning">⚠️ Uyarı: Hesabınızın şifresini unutursanız hesabınız gidebilir.</div>
+                <div id="accountPersistenceWarning" class="account-warning-info" role="note" style="display:none">Bilgilendirme: Site güncellendiğinde veya sunucu verileri yenilendiğinde hesaplar ve oyun kayıtları sıfırlanabilir. Bu nedenle önemli bilgilerini ve kayıtlarını yedekle.</div>
                 <div id="accountError" class="account-error" role="alert"></div>
                 <div class="account-actions">
                     <button id="accountSubmit" type="submit">Giriş Yap</button>
@@ -1088,6 +1090,7 @@
         const newPassword2=document.getElementById('newPassword2');
         const currentPasswordLabel=document.getElementById('currentPasswordLabel');
         const accountError=document.getElementById('accountError');
+        const accountPersistenceWarning=document.getElementById('accountPersistenceWarning');
         const updateBanner=document.getElementById('updateBanner');
         const updateNowBtn=document.getElementById('updateNowBtn');
         let accountMode='login';
@@ -1117,6 +1120,7 @@
             accountUsername.required=!isPassword;
             if(isName){accountUsername.value=getStoredAccount()?.username||'';}
             confirmPasswordWrap.style.display=isRegister?'block':'none';
+            accountPersistenceWarning.style.display=isRegister?'block':'none';
             newPasswordWrap.style.display=isPassword?'block':'none';
             currentPasswordLabel.textContent=isPassword?'Mevcut şifre':'Şifre';
             accountPassword.autocomplete=isRegister?'new-password':'current-password';
