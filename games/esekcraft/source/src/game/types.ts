@@ -267,21 +267,25 @@ export enum ItemType {
   STONE_PICKAXE = 111,
   IRON_PICKAXE = 112,
   DIAMOND_PICKAXE = 113,
+  GOLD_PICKAXE = 114,
   
   WOODEN_AXE = 120,
   STONE_AXE = 121,
   IRON_AXE = 122,
   DIAMOND_AXE = 123,
+  GOLD_AXE = 124,
   
   WOODEN_SHOVEL = 130,
   STONE_SHOVEL = 131,
   IRON_SHOVEL = 132,
   DIAMOND_SHOVEL = 133,
+  GOLD_SHOVEL = 134,
   
   WOODEN_SWORD = 140,
   STONE_SWORD = 141,
   IRON_SWORD = 142,
   DIAMOND_SWORD = 143,
+  GOLD_SWORD = 144,
 
   // Food
   APPLE = 150,
@@ -307,6 +311,17 @@ export enum ItemType {
   IRON_LEGGINGS = 162,
   IRON_BOOTS = 163,
   DIAMOND_CHESTPLATE = 164,
+  LEATHER_HELMET = 175,
+  LEATHER_CHESTPLATE = 176,
+  LEATHER_LEGGINGS = 177,
+  LEATHER_BOOTS = 178,
+  GOLD_HELMET = 179,
+  GOLD_CHESTPLATE = 180,
+  GOLD_LEGGINGS = 181,
+  GOLD_BOOTS = 182,
+  DIAMOND_HELMET = 183,
+  DIAMOND_LEGGINGS = 184,
+  DIAMOND_BOOTS = 185,
 }
 
 export enum MobType {
@@ -354,7 +369,7 @@ export interface ItemStack {
 }
 
 export type ToolType = 'pickaxe' | 'axe' | 'shovel' | 'sword' | 'none';
-export type ToolMaterial = 'wood' | 'stone' | 'iron' | 'diamond';
+export type ToolMaterial = 'wood' | 'stone' | 'iron' | 'gold' | 'diamond';
 
 export interface ToolDef {
   type: ToolType;
@@ -392,6 +407,7 @@ export interface ItemDef {
   };
   armor?: {
     slot: 'helmet' | 'chest' | 'legs' | 'feet';
+    material: 'leather' | 'iron' | 'gold' | 'diamond';
     defense: number;
     durability: number;
   };

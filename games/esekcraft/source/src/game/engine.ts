@@ -885,6 +885,7 @@ export class MinecraftEngine {
       if (def?.tool) {
         if (def.tool.material === 'wood') headColor = 0x9a6b32;
         else if (def.tool.material === 'iron') headColor = 0xe0e0e0;
+        else if (def.tool.material === 'gold') headColor = 0xffd334;
         else if (def.tool.material === 'diamond') headColor = 0x38ebf5;
         else if (def.tool.material === 'stone') headColor = 0x808080;
       } else if (id === ItemType.GOLD_INGOT) {
@@ -1124,18 +1125,25 @@ export class MinecraftEngine {
           feather.position.set(0, 0.17, 0); feather.rotation.z = -0.25; toolGroup.add(feather);
           const quill = addBoxPart(0.012, 0.35, 0.012, new THREE.MeshLambertMaterial({ color: 0xcfc8b8 }), 0, 0.17, 0.012);
           quill.rotation.z = -0.25;
-        } else if ([ItemType.IRON_HELMET, ItemType.IRON_CHESTPLATE, ItemType.IRON_LEGGINGS, ItemType.IRON_BOOTS, ItemType.DIAMOND_CHESTPLATE].includes(id as ItemType)) {
-          const armorMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x40dce7 : 0xc4cbd0 });
-          const trimMat = new THREE.MeshLambertMaterial({ color: id === ItemType.DIAMOND_CHESTPLATE ? 0x178e9d : 0x737b80 });
-          if (id === ItemType.IRON_HELMET) {
+        } else if (def?.armor) {
+          const armorColors = {
+            leather: { main: 0x9a6338, trim: 0x57361f },
+            iron: { main: 0xc9d0d4, trim: 0x69747c },
+            gold: { main: 0xedc52e, trim: 0x8f6508 },
+            diamond: { main: 0x42d9dc, trim: 0x176f7a },
+          };
+          const colors = armorColors[def.armor.material];
+          const armorMat = new THREE.MeshLambertMaterial({ color: colors.main });
+          const trimMat = new THREE.MeshLambertMaterial({ color: colors.trim });
+          if (def.armor.slot === 'helmet') {
             addBoxPart(0.24, 0.14, 0.2, armorMat, 0, 0.18, 0);
             addBoxPart(0.28, 0.045, 0.23, trimMat, 0, 0.11, 0.015);
             addBoxPart(0.18, 0.055, 0.035, armorMat, 0, 0.255, -0.015);
-          } else if (id === ItemType.IRON_CHESTPLATE || id === ItemType.DIAMOND_CHESTPLATE) {
+          } else if (def.armor.slot === 'chest') {
             addBoxPart(0.24, 0.24, 0.13, armorMat, 0, 0.14, 0);
             addBoxPart(0.36, 0.09, 0.14, armorMat, 0, 0.28, 0);
             addBoxPart(0.12, 0.055, 0.145, trimMat, 0, 0.29, 0.005);
-          } else if (id === ItemType.IRON_LEGGINGS) {
+          } else if (def.armor.slot === 'legs') {
             addBoxPart(0.28, 0.08, 0.14, trimMat, 0, 0.28, 0);
             addBoxPart(0.12, 0.23, 0.14, armorMat, -0.075, 0.13, 0);
             addBoxPart(0.12, 0.23, 0.14, armorMat, 0.075, 0.13, 0);
@@ -1284,6 +1292,14 @@ export class MinecraftEngine {
     this.gameMode = mode;
     if (mode === 'survival') this.isFlying = false;
     this.onHUDUpdate?.();
+  }
+
+  public setMobileControlsMode(enabled: boolean) {
+    this.mobileControlsEnabled = enabled;
+    // The previous 1x pixel-ratio cap made pixel-art item drops look soft on high-DPI phones.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, enabled ? 1.5 : 1));
+    const canvas = this.renderer.domElement;
+    this.renderer.setSize(canvas.clientWidth || window.innerWidth, canvas.clientHeight || window.innerHeight, false);
   }
 
   public isActionActive(action: keyof KeyBindings): boolean {
@@ -3195,6 +3211,7 @@ export class MinecraftEngine {
     if (def.tool.material === 'wood') headColor = 0x9a6b32;
     if (def.tool.material === 'iron') headColor = 0xd9d9d9;
     if (def.tool.material === 'stone') headColor = 0x858585;
+    if (def.tool.material === 'gold') headColor = 0xffd334;
     if (def.tool.material === 'diamond') headColor = 0x38ebf5;
     const headMat = new THREE.MeshBasicMaterial({ color: headColor });
     if (def.tool.type === 'pickaxe') {
@@ -3387,6 +3404,7 @@ export class MinecraftEngine {
     const networkId = options.networkId || `${this.networkPlayerId || 'offline'}:${Date.now().toString(36)}:${(++this.dropSequence).toString(36)}:${Math.random().toString(36).slice(2, 6)}`;
     const isRemote = options.isRemote === true;
     const registerDrop = (mesh: THREE.Object3D, initialVelocity: { x: number; y: number; z: number }) => {
+      if (this.mobileControlsEnabled) mesh.scale.multiplyScalar(1.25);
       const velocity = options.velocity ? { ...options.velocity } : initialVelocity;
       const drop: DropItemEntity = {
         id, count, mesh, vel: velocity, age: 0, baseY: null, networkId, isRemote,

@@ -207,7 +207,7 @@ export default function App() {
       pendingOnlineGameModeRef.current = null;
       activeMetaRef.current = worldMeta;
       const eng = new MinecraftEngine(container, worldMeta);
-      eng.mobileControlsEnabled = controlMode === 'mobile';
+      eng.setMobileControlsMode(controlMode === 'mobile');
       eng.mouseSensitivity = sensitivity / 100;
       eng.fov = fov;
       eng.camera.fov = fov;
@@ -735,7 +735,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* EXACTLY 2 MAIN BUTTONS: OYNA & AYARLAR */}
+          {/* MAIN MENU ACTIONS: OYNA, AYARLAR & OYUNDAN ÇIK */}
           <div className="flex flex-col gap-3 w-[340px]">
             <button
               onClick={() => {
@@ -756,6 +756,13 @@ export default function App() {
               className="mc-btn w-full !py-3 !text-lg"
             >
               Ayarlar
+            </button>
+
+            <button
+              onClick={() => { Sound.click(); window.location.assign('/'); }}
+              className="mc-btn w-full !py-2 !text-sm bg-red-900/70 border-red-700"
+            >
+              Oyundan Çık
             </button>
           </div>
 

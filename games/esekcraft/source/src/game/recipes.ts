@@ -49,6 +49,30 @@ const RAW_IRN = ItemType.RAW_IRON;
 const RAW_GLD = ItemType.RAW_GOLD;
 const BREAD = ItemType.BREAD;
 
+function createArmorSetRecipes(
+  materialKey: string,
+  materialName: string,
+  ingredient: AnyItemId,
+  ids: [ItemType, ItemType, ItemType, ItemType],
+  durability: [number, number, number, number],
+): CraftingRecipe[] {
+  const pieces = [
+    { key: 'helmet', name: 'Kask', width: 3, height: 2, pattern: [ingredient, ingredient, ingredient, ingredient, _, ingredient] },
+    { key: 'chestplate', name: 'Göğüslük', width: 3, height: 3, pattern: [ingredient, _, ingredient, ingredient, ingredient, ingredient, ingredient, ingredient, ingredient] },
+    { key: 'leggings', name: 'Pantolon', width: 3, height: 3, pattern: [ingredient, ingredient, ingredient, ingredient, _, ingredient, ingredient, _, ingredient] },
+    { key: 'boots', name: 'Bot', width: 3, height: 2, pattern: [ingredient, _, ingredient, ingredient, _, ingredient] },
+  ];
+  return pieces.map((piece, index) => ({
+    id: `${materialKey}_${piece.key}`,
+    name: `${materialName} ${piece.name}`,
+    width: piece.width,
+    height: piece.height,
+    pattern: piece.pattern,
+    output: { id: ids[index], count: 1, durability: durability[index], maxDurability: durability[index] },
+    category: 'combat',
+  }));
+}
+
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // 1 Log -> 4 Planks (1x1 shapeless)
   {
@@ -159,6 +183,15 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     output: { id: ItemType.DIAMOND_PICKAXE, count: 1, durability: 1561, maxDurability: 1561 },
     category: 'tools',
   },
+  {
+    id: 'gold_pickaxe',
+    name: 'Altın Kazma',
+    width: 3,
+    height: 3,
+    pattern: [GLD, GLD, GLD, _, STK, _, _, STK, _],
+    output: { id: ItemType.GOLD_PICKAXE, count: 1, durability: 32, maxDurability: 32 },
+    category: 'tools',
+  },
 
   // AXES
   {
@@ -195,6 +228,15 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     height: 3,
     pattern: [DIA, DIA, DIA, STK, _, STK],
     output: { id: ItemType.DIAMOND_AXE, count: 1, durability: 1561, maxDurability: 1561 },
+    category: 'tools',
+  },
+  {
+    id: 'gold_axe',
+    name: 'Altın Balta',
+    width: 2,
+    height: 3,
+    pattern: [GLD, GLD, GLD, STK, _, STK],
+    output: { id: ItemType.GOLD_AXE, count: 1, durability: 32, maxDurability: 32 },
     category: 'tools',
   },
 
@@ -235,6 +277,15 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     output: { id: ItemType.DIAMOND_SHOVEL, count: 1, durability: 1561, maxDurability: 1561 },
     category: 'tools',
   },
+  {
+    id: 'gold_shovel',
+    name: 'Altın Kürek',
+    width: 1,
+    height: 3,
+    pattern: [GLD, STK, STK],
+    output: { id: ItemType.GOLD_SHOVEL, count: 1, durability: 32, maxDurability: 32 },
+    category: 'tools',
+  },
 
   // SWORDS
   {
@@ -273,53 +324,21 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     output: { id: ItemType.DIAMOND_SWORD, count: 1, durability: 1561, maxDurability: 1561 },
     category: 'combat',
   },
+  {
+    id: 'gold_sword',
+    name: 'Altın Kılıç',
+    width: 1,
+    height: 3,
+    pattern: [GLD, GLD, STK],
+    output: { id: ItemType.GOLD_SWORD, count: 1, durability: 32, maxDurability: 32 },
+    category: 'combat',
+  },
 
-  // ARMOR
-  {
-    id: 'iron_helmet',
-    name: 'Demir Kask',
-    width: 3,
-    height: 2,
-    pattern: [IRN, IRN, IRN, IRN, _, IRN],
-    output: { id: ItemType.IRON_HELMET, count: 1, durability: 165, maxDurability: 165 },
-    category: 'combat',
-  },
-  {
-    id: 'iron_chestplate',
-    name: 'Demir Zırh',
-    width: 3,
-    height: 3,
-    pattern: [IRN, _, IRN, IRN, IRN, IRN, IRN, IRN, IRN],
-    output: { id: ItemType.IRON_CHESTPLATE, count: 1, durability: 240, maxDurability: 240 },
-    category: 'combat',
-  },
-  {
-    id: 'iron_leggings',
-    name: 'Demir Pantolon',
-    width: 3,
-    height: 3,
-    pattern: [IRN, IRN, IRN, IRN, _, IRN, IRN, _, IRN],
-    output: { id: ItemType.IRON_LEGGINGS, count: 1, durability: 225, maxDurability: 225 },
-    category: 'combat',
-  },
-  {
-    id: 'iron_boots',
-    name: 'Demir Bot',
-    width: 3,
-    height: 2,
-    pattern: [IRN, _, IRN, IRN, _, IRN],
-    output: { id: ItemType.IRON_BOOTS, count: 1, durability: 195, maxDurability: 195 },
-    category: 'combat',
-  },
-  {
-    id: 'diamond_chestplate',
-    name: 'Elmas Zırh',
-    width: 3,
-    height: 3,
-    pattern: [DIA, _, DIA, DIA, DIA, DIA, DIA, DIA, DIA],
-    output: { id: ItemType.DIAMOND_CHESTPLATE, count: 1, durability: 528, maxDurability: 528 },
-    category: 'combat',
-  },
+  // Armor recipes use the standard Minecraft 3x3 shapes for every material.
+  ...createArmorSetRecipes('leather', 'Deri', ItemType.LEATHER, [ItemType.LEATHER_HELMET, ItemType.LEATHER_CHESTPLATE, ItemType.LEATHER_LEGGINGS, ItemType.LEATHER_BOOTS], [55, 80, 75, 65]),
+  ...createArmorSetRecipes('iron', 'Demir', IRN, [ItemType.IRON_HELMET, ItemType.IRON_CHESTPLATE, ItemType.IRON_LEGGINGS, ItemType.IRON_BOOTS], [165, 240, 225, 195]),
+  ...createArmorSetRecipes('gold', 'Altın', GLD, [ItemType.GOLD_HELMET, ItemType.GOLD_CHESTPLATE, ItemType.GOLD_LEGGINGS, ItemType.GOLD_BOOTS], [77, 112, 105, 91]),
+  ...createArmorSetRecipes('diamond', 'Elmas', DIA, [ItemType.DIAMOND_HELMET, ItemType.DIAMOND_CHESTPLATE, ItemType.DIAMOND_LEGGINGS, ItemType.DIAMOND_BOOTS], [363, 528, 495, 429]),
 
   // ====== NEW RECIPES (minecraft.wiki standard shapes) ======
 
