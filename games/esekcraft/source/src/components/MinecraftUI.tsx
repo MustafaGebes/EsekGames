@@ -1450,6 +1450,10 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               </div>
             </div>
 
+            <button onClick={onSaveAndQuit} className="mc-btn w-64 bg-red-900/60 border-red-700">
+              Oyundan Çık
+            </button>
+
             {/* Render distance / chunk budget */}
             <div className="w-full flex flex-col gap-1 my-1 p-2 bg-black/20 border border-[#888]">
               <div className="flex justify-between items-center text-xs text-white">
@@ -1479,9 +1483,6 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               🎮 Kontroller (Tuş Atamaları)
             </button>
 
-            <button onClick={onSaveAndQuit} className="mc-btn w-64 bg-red-900/60 border-red-700">
-              Kaydet ve Çık
-            </button>
           </div>
         </div>
       )}

@@ -3188,14 +3188,15 @@ export class MinecraftEngine {
     const group = new THREE.Group();
     const handle = new THREE.Mesh(
       new THREE.BoxGeometry(0.045, 0.42, 0.045),
-      new THREE.MeshLambertMaterial({ color: 0x704b24 })
+      new THREE.MeshBasicMaterial({ color: 0x704b24 })
     );
     group.add(handle);
     let headColor = 0x8a8a8a;
     if (def.tool.material === 'wood') headColor = 0x9a6b32;
     if (def.tool.material === 'iron') headColor = 0xd9d9d9;
+    if (def.tool.material === 'stone') headColor = 0x858585;
     if (def.tool.material === 'diamond') headColor = 0x38ebf5;
-    const headMat = new THREE.MeshLambertMaterial({ color: headColor });
+    const headMat = new THREE.MeshBasicMaterial({ color: headColor });
     if (def.tool.type === 'pickaxe') {
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.07), headMat);
       head.position.y = 0.21;
@@ -3235,6 +3236,53 @@ export class MinecraftEngine {
     fire.position.y = 0.18;
     group.add(fire);
     return group;
+  }
+
+  private createStickDrop(): THREE.Group {
+    const group = new THREE.Group();
+    const wood = new THREE.MeshBasicMaterial({ color: 0x9a7139 });
+    const grain = new THREE.MeshBasicMaterial({ color: 0x67451f });
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.36, 0.045), wood);
+    shaft.rotation.z = -0.58;
+    group.add(shaft);
+    for (const y of [-0.1, 0.02, 0.13]) {
+      const mark = new THREE.Mesh(new THREE.BoxGeometry(0.047, 0.018, 0.047), grain);
+      mark.position.y = y;
+      mark.rotation.z = -0.58;
+      group.add(mark);
+    }
+    return group;
+  }
+
+  private createDoorDrop(): THREE.Mesh {
+    const geometry = new THREE.BoxGeometry(0.24, 0.38, 0.055);
+    const texture = getItemTexture(BlockType.OAK_DOOR);
+    const material = new THREE.MeshBasicMaterial({
+      map: texture ?? undefined,
+      color: texture ? 0xffffff : 0x9a6b35,
+      transparent: !!texture,
+      alphaTest: texture ? 0.05 : 0,
+      side: THREE.DoubleSide,
+    });
+    const door = new THREE.Mesh(geometry, material);
+    door.rotation.set(0.12, 0.48, -0.1);
+    return door;
+  }
+
+  private createBlockDrop(id: AnyItemId): THREE.Mesh | null {
+    const blockId = id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : id;
+    if (!BLOCK_DEFS[blockId] || Number(blockId) >= 100) return null;
+
+    const height = isSlabBlock(blockId as BlockType) ? 0.5 : 1;
+    const geometry = new THREE.BoxGeometry(0.28, 0.28 * height, 0.28);
+    const material = new THREE.MeshBasicMaterial({
+      map: atlasTexture ?? undefined,
+      color: atlasTexture ? 0xffffff : 0x95836a,
+      transparent: !!atlasTexture,
+      alphaTest: atlasTexture ? 0.05 : 0,
+    });
+    this.setupMeshUVs(geometry, blockId);
+    return new THREE.Mesh(geometry, material);
   }
 
   private createTexturedItemDrop(id: AnyItemId): THREE.Mesh | null {
@@ -3378,20 +3426,25 @@ export class MinecraftEngine {
       registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
-    const texturedMesh = this.createTexturedItemDrop(id);
-    if (texturedMesh) {
-      texturedMesh.position.set(x, y, z);
-      this.scene.add(texturedMesh);
-      registerDrop(texturedMesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
-      return;
-    }
-    if (id === ItemType.WHITE_WOOL) {
-      const geometry = new THREE.BoxGeometry(0.28, 0.28, 0.28);
-      const mesh = new THREE.Mesh(geometry, this.worldMaterial);
-      this.setupMeshUVs(geometry, BlockType.WHITE_WOOL_BLOCK);
+    if (id === BlockType.OAK_DOOR) {
+      const mesh = this.createDoorDrop();
       mesh.position.set(x, y, z);
       this.scene.add(mesh);
-      registerDrop(mesh, { x: (Math.random() - 0.5) * 1.8, y: 0.05, z: (Math.random() - 0.5) * 1.8 });
+      registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
+      return;
+    }
+    const blockMesh = this.createBlockDrop(id);
+    if (blockMesh) {
+      blockMesh.position.set(x, y, z);
+      this.scene.add(blockMesh);
+      registerDrop(blockMesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
+      return;
+    }
+    if (id === ItemType.STICK) {
+      const mesh = this.createStickDrop();
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
       return;
     }
     const toolMesh = this.createToolDrop(id);
@@ -3410,7 +3463,7 @@ export class MinecraftEngine {
     };
     if (foodColors[id as number]) {
       const geo = id === ItemType.FEATHER ? new THREE.PlaneGeometry(0.32, 0.42) : new THREE.SphereGeometry(0.18, 8, 6);
-      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: foodColors[id as number] }));
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: foodColors[id as number] }));
       mesh.position.set(x, y, z); this.scene.add(mesh);
       registerDrop(mesh, { x: (Math.random()-0.5)*1.8, y: 1.8, z: (Math.random()-0.5)*1.8 });
       return;
@@ -3424,14 +3477,25 @@ export class MinecraftEngine {
       [ItemType.GOLD_INGOT]: 0xffd33d,
     };
     const mineralColor = mineralColors[id as number];
-    const geo = mineralColor
-      ? new THREE.IcosahedronGeometry(0.22, 0)
-      : new THREE.BoxGeometry(0.28, 0.28, 0.28);
-    const material = mineralColor
-      ? new THREE.MeshLambertMaterial({ color: mineralColor, emissive: mineralColor, emissiveIntensity: id === ItemType.DIAMOND ? 0.16 : 0.03 })
-      : this.worldMaterial;
-    const mesh = new THREE.Mesh(geo, material);
-    if (!mineralColor) this.setupMeshUVs(geo as THREE.BoxGeometry, id);
+    if (mineralColor) {
+      const mesh = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.22, 0),
+        new THREE.MeshBasicMaterial({ color: mineralColor })
+      );
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      registerDrop(mesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
+      return;
+    }
+    const texturedMesh = this.createTexturedItemDrop(id);
+    if (texturedMesh) {
+      texturedMesh.position.set(x, y, z);
+      this.scene.add(texturedMesh);
+      registerDrop(texturedMesh, { x: (Math.random() - 0.5) * 0.45, y: 0.05, z: (Math.random() - 0.5) * 0.45 });
+      return;
+    }
+    const geo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x999999 }));
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
 
