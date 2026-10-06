@@ -217,7 +217,12 @@ function joinEsekCraftGame(player, data = {}) {
     if (changes.length) sendTo(player, { type: "esekcraft_block_changes", changes });
     const tileState = room.esekcraftTileState || { furnaces: {}, chests: {} };
     sendTo(player, { type: "esekcraft_tile_state", furnaces: tileState.furnaces, chests: tileState.chests });
-    sendTo(player, { type: "esekcraft_drops_state", drops: [...(room.esekcraftDrops || new Map()).values()] });
+    const now = Date.now();
+    const drops = [...(room.esekcraftDrops || new Map()).values()].map((drop) => ({
+        ...drop,
+        pickupDelay: Math.max(0, (drop.pickupReadyAt - now) / 1000)
+    }));
+    sendTo(player, { type: "esekcraft_drops_state", drops });
     broadcastPlayers();
     broadcastRoomLists();
 }
@@ -302,15 +307,105 @@ function handleEsekCraftItemDrop(player, data = {}) {
         y: Math.max(-5, Math.min(5, Number(rawVelocity.y) || 0)),
         z: Math.max(-5, Math.min(5, Number(rawVelocity.z) || 0))
     };
+    const requestedDelay = Number(data.pickupDelay);
+    const pickupDelay = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(2, requestedDelay)) : 0.5;
+    const now = Date.now();
     if (!room.esekcraftDrops) room.esekcraftDrops = new Map();
     if (!room.esekcraftDrops.has(dropId) && room.esekcraftDrops.size >= 500) {
         const oldest = room.esekcraftDrops.keys().next().value;
         if (oldest) room.esekcraftDrops.delete(oldest);
     }
-    const drop = { dropId, id, count, x, y, z, velocity, ownerId: player.id };
+    const drop = {
+        dropId, id, count, x, y, z, velocity, pickupDelay,
+        createdAt: now, pickupReadyAt: now + pickupDelay * 1000,
+        lastPositionAt: now, ownerId: player.id
+    };
     room.esekcraftDrops.set(dropId, drop);
     room.lastActivityAt = Date.now();
     broadcastToRoom(room.id, { type: "esekcraft_item_drop", sourceId: player.id, drop });
+}
+function handleEsekCraftItemDropPosition(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
+    if (!drop || drop.ownerId !== player.id) return;
+    const x = Number(data.x), y = Number(data.y), z = Number(data.z);
+    if (![x, y, z].every(Number.isFinite) || x < -1 || x > 81 || y < -4 || y > 70 || z < -1 || z > 81) return;
+    const now = Date.now();
+    const elapsed = Math.max(0.05, (now - (drop.lastPositionAt || drop.createdAt || now)) / 1000);
+    const maxStep = 0.8 + elapsed * 10;
+    if (Math.hypot(x - drop.x, z - drop.z) > maxStep || Math.abs(y - drop.y) > maxStep) return;
+    drop.x = x; drop.y = y; drop.z = z; drop.lastPositionAt = now;
+    room.lastActivityAt = now;
+    broadcastToRoom(room.id, { type: "esekcraft_item_drop_position", sourceId: player.id, dropId, x, y, z });
+}
+function isPlayerInsideEsekCraftDropPickupBox(player, drop) {
+    const reach = 0.3 + 1 + 0.125;
+    const playerHeight = player.isCrouching ? 1.5 : 1.8;
+    const itemHalfHeight = 0.125;
+    return Math.abs(drop.x - player.x) <= reach &&
+        Math.abs(drop.z - player.z) <= reach &&
+        drop.y + itemHalfHeight > player.y - 0.5 &&
+        drop.y - itemHalfHeight < player.y + playerHeight + 0.5;
+}
+function rejectEsekCraftDropPickup(player, dropId) {
+    sendTo(player, { type: "esekcraft_item_drop_pickup_rejected", dropId });
+}
+function handleEsekCraftItemDropPickup(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
+    if (!drop) { rejectEsekCraftDropPickup(player, dropId); return; }
+    const now = Date.now();
+    if (drop.claimedBy && drop.claimExpiresAt > now) { rejectEsekCraftDropPickup(player, dropId); return; }
+    drop.claimedBy = null;
+    drop.claimExpiresAt = 0;
+    if (now < drop.pickupReadyAt || !isPlayerInsideEsekCraftDropPickupBox(player, drop)) {
+        rejectEsekCraftDropPickup(player, dropId);
+        return;
+    }
+    drop.claimedBy = player.id;
+    drop.claimExpiresAt = now + 4500;
+    sendTo(player, {
+        type: "esekcraft_item_drop_pickup_offer",
+        drop: { dropId: drop.dropId, id: drop.id, count: drop.count }
+    });
+}
+function handleEsekCraftItemDropPickupResult(player, data = {}) {
+    if (!player || !player.inGame) return;
+    const room = getPlayerRoom(player);
+    if (!room || roomGameId(room) !== "esekcraft") return;
+    const dropId = String(data.dropId || "").slice(0, 120);
+    const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
+    const now = Date.now();
+    if (!drop || drop.claimedBy !== player.id || drop.claimExpiresAt < now) {
+        rejectEsekCraftDropPickup(player, dropId);
+        return;
+    }
+    const remainingCount = Number(data.remainingCount);
+    if (!Number.isInteger(remainingCount) || remainingCount < 0 || remainingCount > drop.count) {
+        drop.claimedBy = null; drop.claimExpiresAt = 0;
+        rejectEsekCraftDropPickup(player, dropId);
+        return;
+    }
+    if (remainingCount === drop.count) {
+        drop.claimedBy = null; drop.claimExpiresAt = 0;
+        rejectEsekCraftDropPickup(player, dropId);
+        return;
+    }
+    if (remainingCount === 0) {
+        room.esekcraftDrops.delete(dropId);
+        broadcastToRoom(room.id, { type: "esekcraft_item_drop_remove", sourceId: player.id, dropId });
+    } else {
+        drop.count = remainingCount;
+        drop.claimedBy = null; drop.claimExpiresAt = 0;
+        broadcastToRoom(room.id, { type: "esekcraft_item_drop_update", sourceId: player.id, dropId, count: remainingCount });
+    }
+    room.lastActivityAt = now;
 }
 function handleEsekCraftItemDropUpdate(player, data = {}) {
     if (!player || !player.inGame) return;
@@ -318,7 +413,7 @@ function handleEsekCraftItemDropUpdate(player, data = {}) {
     if (!room || roomGameId(room) !== "esekcraft") return;
     const dropId = String(data.dropId || "").slice(0, 120);
     const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
-    if (!drop || drop.ownerId !== player.id) return;
+    if (!drop || drop.ownerId !== player.id || (drop.claimedBy && drop.claimExpiresAt > Date.now())) return;
     const count = Math.floor(Number(data.count));
     if (!Number.isInteger(count) || count < 1 || count > 64) return;
     drop.count = count;
@@ -331,7 +426,7 @@ function handleEsekCraftItemDropRemove(player, data = {}) {
     if (!room || roomGameId(room) !== "esekcraft") return;
     const dropId = String(data.dropId || "").slice(0, 120);
     const drop = room.esekcraftDrops && room.esekcraftDrops.get(dropId);
-    if (!drop || drop.ownerId !== player.id) return;
+    if (!drop || drop.ownerId !== player.id || (drop.claimedBy && drop.claimExpiresAt > Date.now())) return;
     room.esekcraftDrops.delete(dropId);
     room.lastActivityAt = Date.now();
     broadcastToRoom(room.id, { type: "esekcraft_item_drop_remove", sourceId: player.id, dropId });
@@ -2553,6 +2648,15 @@ wss.on("connection", (ws, req) => {
 
             case "esekcraft_item_drop":
                 handleEsekCraftItemDrop(player, data);
+                break;
+            case "esekcraft_item_drop_position":
+                handleEsekCraftItemDropPosition(player, data);
+                break;
+            case "esekcraft_item_drop_pickup":
+                handleEsekCraftItemDropPickup(player, data);
+                break;
+            case "esekcraft_item_drop_pickup_result":
+                handleEsekCraftItemDropPickupResult(player, data);
                 break;
             case "esekcraft_item_drop_update":
                 handleEsekCraftItemDropUpdate(player, data);

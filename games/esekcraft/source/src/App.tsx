@@ -208,6 +208,15 @@ export default function App() {
       eng.onItemDropRemoved = (dropId) => {
         if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_remove', dropId });
       };
+      eng.onItemDropPositionUpdated = (drop) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_position', ...drop });
+      };
+      eng.onItemDropPickupRequested = (dropId) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_pickup', dropId });
+      };
+      eng.onItemDropPickupResult = (result) => {
+        if (onlineRoomRef.current) sendOnlineMessage({ type: 'esekcraft_item_drop_pickup_result', ...result });
+      };
 
       if (pendingOnlineTileStateRef.current) {
         const state = pendingOnlineTileStateRef.current;
@@ -393,12 +402,28 @@ export default function App() {
             );
           }
         }
+        if (message.type === 'esekcraft_item_drop_position' && message.sourceId !== onlinePlayerIdRef.current && engineRef.current) {
+          engineRef.current.updateRemoteDropPosition(String(message.dropId || ''), Number(message.x), Number(message.y), Number(message.z));
+        }
         if (message.type === 'esekcraft_item_drop_remove' && message.sourceId !== onlinePlayerIdRef.current) {
           const dropId = String(message.dropId || '');
           if (engineRef.current) engineRef.current.removeRemoteDrop(dropId);
           else if (pendingOnlineDropsRef.current) {
             pendingOnlineDropsRef.current = pendingOnlineDropsRef.current.filter((drop: any) => drop?.dropId !== dropId);
           }
+        }
+        if (message.type === 'esekcraft_item_drop_pickup_offer') {
+          if (engineRef.current) engineRef.current.acceptRemoteDropPickupOffer(message.drop);
+          else if (message.drop && typeof message.drop.dropId === 'string') {
+            sendOnlineMessage({
+              type: 'esekcraft_item_drop_pickup_result',
+              dropId: message.drop.dropId,
+              remainingCount: Number(message.drop.count),
+            });
+          }
+        }
+        if (message.type === 'esekcraft_item_drop_pickup_rejected') {
+          engineRef.current?.rejectRemoteDropPickup(String(message.dropId || ''));
         }
         if (message.type === 'esekcraft_block_change') {
           const change = { x: Number(message.x), y: Number(message.y), z: Number(message.z), blockId: Number(message.blockId) };

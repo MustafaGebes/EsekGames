@@ -56,6 +56,11 @@ export interface DropItemEntity {
   baseY: number | null;
   networkId?: string;
   isRemote?: boolean;
+  pickupDelay: number;
+  pickupRequested: boolean;
+  pickupRequestAge: number;
+  pickupRetryTimer: number;
+  networkSyncTimer: number;
 }
 
 export interface ParticleEntity {
@@ -201,9 +206,12 @@ export class MinecraftEngine {
   public onBlockChanged?: (change: { x: number; y: number; z: number; blockId: number }) => void;
   public onAttackPlayer?: (payload: { targetId: string; weaponType: string }) => void;
   public onTileEntityChanged?: () => void;
-  public onItemDropSpawned?: (drop: { dropId: string; id: number; count: number; x: number; y: number; z: number; velocity: { x: number; y: number; z: number } }) => void;
+  public onItemDropSpawned?: (drop: { dropId: string; id: number; count: number; x: number; y: number; z: number; velocity: { x: number; y: number; z: number }; pickupDelay: number }) => void;
   public onItemDropUpdated?: (drop: { dropId: string; count: number }) => void;
   public onItemDropRemoved?: (dropId: string) => void;
+  public onItemDropPositionUpdated?: (drop: { dropId: string; x: number; y: number; z: number }) => void;
+  public onItemDropPickupRequested?: (dropId: string) => void;
+  public onItemDropPickupResult?: (result: { dropId: string; remainingCount: number }) => void;
 
   private lastTime = 0;
   private animFrameId = 0;
@@ -3259,16 +3267,20 @@ export class MinecraftEngine {
     z: number,
     id: AnyItemId,
     count: number,
-    options: { networkId?: string; isRemote?: boolean; velocity?: { x: number; y: number; z: number } } = {},
+    options: { networkId?: string; isRemote?: boolean; velocity?: { x: number; y: number; z: number }; pickupDelay?: number } = {},
   ) {
     const networkId = options.networkId || `${this.networkPlayerId || 'offline'}:${Date.now().toString(36)}:${(++this.dropSequence).toString(36)}:${Math.random().toString(36).slice(2, 6)}`;
     const isRemote = options.isRemote === true;
     const registerDrop = (mesh: THREE.Object3D, initialVelocity: { x: number; y: number; z: number }) => {
       const velocity = options.velocity ? { ...options.velocity } : initialVelocity;
-      const drop: DropItemEntity = { id, count, mesh, vel: velocity, age: 0, baseY: null, networkId, isRemote };
+      const drop: DropItemEntity = {
+        id, count, mesh, vel: velocity, age: 0, baseY: null, networkId, isRemote,
+        pickupDelay: Math.max(0, options.pickupDelay ?? 0.5),
+        pickupRequested: false, pickupRequestAge: 0, pickupRetryTimer: 0, networkSyncTimer: 0,
+      };
       this.drops.push(drop);
       if (!isRemote && this.onlineMode) {
-        this.onItemDropSpawned?.({ dropId: networkId, id: Number(id), count, x, y, z, velocity: { ...velocity } });
+        this.onItemDropSpawned?.({ dropId: networkId, id: Number(id), count, x, y, z, velocity: { ...velocity }, pickupDelay: drop.pickupDelay });
       }
     };
     if (id === BlockType.BED) {
@@ -3370,79 +3382,90 @@ export class MinecraftEngine {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const drop = this.drops[i];
       drop.age += dt;
-
-      // Remote copies are visual only; their owner is the only client allowed to collect them.
-      if (drop.isRemote) {
-        drop.vel.y -= 18 * dt;
-        let nx = drop.mesh.position.x + drop.vel.x * dt;
-        let ny = drop.mesh.position.y + drop.vel.y * dt;
-        let nz = drop.mesh.position.z + drop.vel.z * dt;
-        const by = Math.floor(ny - 0.15);
-        if (drop.vel.y < 0 && this.world.getBlockPhys(Math.floor(nx), by, Math.floor(nz)) !== BlockType.AIR) {
-          ny = by + 1 + 0.15;
-          drop.vel.y = 0;
-          drop.baseY = ny;
-          drop.vel.x *= 0.5;
-          drop.vel.z *= 0.5;
+      drop.pickupRetryTimer = Math.max(0, drop.pickupRetryTimer - dt);
+      if (drop.pickupRequested) {
+        drop.pickupRequestAge += dt;
+        if (drop.pickupRequestAge > 5) {
+          drop.pickupRequested = false;
+          drop.pickupRequestAge = 0;
+          drop.pickupRetryTimer = 0.75;
         }
-        drop.mesh.position.set(nx, ny, nz);
-        if (drop.baseY !== null && drop.vel.y === 0) {
-          drop.mesh.position.y = drop.baseY + Math.sin(drop.age * 2.8) * 0.05;
-        }
-        drop.mesh.rotation.y += dt * 2.2;
-        continue;
       }
 
-      // Magnetize toward player if close
-      const dx = this.pos.x - drop.mesh.position.x;
-      const dy = this.pos.y + 0.8 - drop.mesh.position.y;
-      const dz = this.pos.z - drop.mesh.position.z;
-      const dist = Math.hypot(dx, dy, dz);
+      // Dropped items move under gravity; there is no artificial pull toward the player.
+      drop.vel.y -= 18 * dt;
+      let nx = drop.mesh.position.x + drop.vel.x * dt;
+      let ny = drop.mesh.position.y + drop.vel.y * dt;
+      let nz = drop.mesh.position.z + drop.vel.z * dt;
+      const by = Math.floor(ny - 0.15);
+      if (drop.vel.y < 0 && this.world.getBlockPhys(Math.floor(nx), by, Math.floor(nz)) !== BlockType.AIR) {
+        ny = by + 1 + 0.15;
+        drop.vel.y = 0;
+        drop.baseY = ny;
+        drop.vel.x *= 0.5;
+        drop.vel.z *= 0.5;
+      }
+      drop.mesh.position.set(nx, ny, nz);
+      if (drop.baseY !== null && drop.vel.y === 0) {
+        drop.vel.x *= Math.exp(-8 * dt);
+        drop.vel.z *= Math.exp(-8 * dt);
+        drop.mesh.position.y = drop.baseY + Math.sin(drop.age * 2.8) * 0.05;
+      }
 
-      if (drop.age > 0.6 && dist < 3.2) {
-        const pullSpeed = Math.min(1, dt * (7 + (3.2 - dist) * 7));
-        drop.mesh.position.x += dx * pullSpeed;
-        drop.mesh.position.y += dy * pullSpeed;
-        drop.mesh.position.z += dz * pullSpeed;
+      // The owner periodically publishes the simulated position so the server can validate
+      // pickups against the actual item location, not just its original spawn point.
+      if (this.onlineMode && !drop.isRemote && drop.networkId && this.networkPlayerId) {
+        drop.networkSyncTimer += dt;
+        if (drop.networkSyncTimer >= 0.25) {
+          drop.networkSyncTimer = 0;
+          this.onItemDropPositionUpdated?.({
+            dropId: drop.networkId,
+            x: drop.mesh.position.x,
+            y: drop.mesh.position.y,
+            z: drop.mesh.position.z,
+          });
+        }
+      }
 
-        if (dist < 0.9) {
-          const remaining = this.addToInventory(drop.id, drop.count);
+      if (drop.age >= drop.pickupDelay && drop.pickupRetryTimer <= 0 && this.isDropInsidePickupBox(drop)) {
+        const canRequestOnlinePickup = this.onlineMode && !!this.networkPlayerId && !!drop.networkId;
+        if (canRequestOnlinePickup) {
+          if (!drop.pickupRequested) {
+            drop.pickupRequested = true;
+            drop.pickupRequestAge = 0;
+            this.onItemDropPickupRequested?.(drop.networkId!);
+          }
+        } else if (!drop.isRemote) {
+          const before = drop.count;
+          const remaining = this.addToInventory(drop.id, before);
+          const pickedUp = before - remaining;
+          if (pickedUp > 0) {
+            Sound.pickup();
+            this.onHUDUpdate?.();
+          }
           if (remaining <= 0) {
-            if (this.onlineMode && drop.networkId) this.onItemDropRemoved?.(drop.networkId);
             this.scene.remove(drop.mesh);
             this.disposeDropObject(drop.mesh);
             this.drops.splice(i, 1);
-            Sound.pickup();
-            this.onHUDUpdate?.();
             continue;
           }
           drop.count = remaining;
-          if (this.onlineMode && drop.networkId) this.onItemDropUpdated?.({ dropId: drop.networkId, count: remaining });
-        }
-      } else {
-        // Physics for dropped item
-        drop.vel.y -= 18 * dt;
-        let nx = drop.mesh.position.x + drop.vel.x * dt;
-        let ny = drop.mesh.position.y + drop.vel.y * dt;
-        let nz = drop.mesh.position.z + drop.vel.z * dt;
-
-        const by = Math.floor(ny - 0.15);
-        if (drop.vel.y < 0 && this.world.getBlockPhys(Math.floor(nx), by, Math.floor(nz)) !== BlockType.AIR) {
-          ny = by + 1 + 0.15;
-          drop.vel.y = 0;
-          drop.baseY = ny;
-          drop.vel.x *= 0.5;
-          drop.vel.z *= 0.5;
-        }
-
-        drop.mesh.position.set(nx, ny, nz);
-        if (drop.baseY !== null && drop.vel.y === 0) {
-          drop.mesh.position.y = drop.baseY + Math.sin(drop.age * 2.8) * 0.05;
+          drop.pickupRetryTimer = pickedUp > 0 ? 0.25 : 0.75;
         }
       }
-
       drop.mesh.rotation.y += dt * 2.2;
     }
+  }
+
+  private isDropInsidePickupBox(drop: DropItemEntity) {
+    const item = drop.mesh.position;
+    const horizontalReach = 0.3 + 1 + 0.125;
+    const playerHeight = this.isSneaking ? 1.5 : 1.8;
+    const itemHalfHeight = 0.125;
+    return Math.abs(item.x - this.pos.x) <= horizontalReach &&
+      Math.abs(item.z - this.pos.z) <= horizontalReach &&
+      item.y + itemHalfHeight > this.pos.y - 0.5 &&
+      item.y - itemHalfHeight < this.pos.y + playerHeight + 0.5;
   }
 
   private spawnBlockDebris(x: number, y: number, z: number, blockId: BlockType) {
@@ -3540,6 +3563,7 @@ export class MinecraftEngine {
       dropId?: unknown; id?: unknown; count?: unknown;
       x?: unknown; y?: unknown; z?: unknown;
       velocity?: { x?: unknown; y?: unknown; z?: unknown };
+      pickupDelay?: unknown;
     };
     if (typeof drop.dropId !== 'string' || !drop.dropId) return;
     const itemId = Number(drop.id);
@@ -3557,18 +3581,64 @@ export class MinecraftEngine {
       networkId: drop.dropId,
       isRemote: true,
       velocity,
+      pickupDelay: Number.isFinite(Number(drop.pickupDelay)) ? Math.max(0, Number(drop.pickupDelay)) : 0.5,
     });
   }
   public updateRemoteDrop(dropId: string, count: number) {
-    const drop = this.drops.find((entry) => entry.isRemote && entry.networkId === dropId);
+    const drop = this.drops.find((entry) => entry.networkId === dropId);
     if (drop) drop.count = Math.max(1, Math.min(64, Math.floor(count)));
   }
+  public updateRemoteDropPosition(dropId: string, x: number, y: number, z: number) {
+    if (![x, y, z].every(Number.isFinite)) return;
+    const drop = this.drops.find((entry) => entry.isRemote && entry.networkId === dropId);
+    if (!drop) return;
+    drop.mesh.position.set(x, y, z);
+    drop.baseY = null;
+  }
   public removeRemoteDrop(dropId: string) {
-    const index = this.drops.findIndex((entry) => entry.isRemote && entry.networkId === dropId);
+    const index = this.drops.findIndex((entry) => entry.networkId === dropId);
     if (index < 0) return;
     this.scene.remove(this.drops[index].mesh);
     this.disposeDropObject(this.drops[index].mesh);
     this.drops.splice(index, 1);
+  }
+  public rejectRemoteDropPickup(dropId: string) {
+    const drop = this.drops.find((entry) => entry.networkId === dropId);
+    if (!drop) return;
+    drop.pickupRequested = false;
+    drop.pickupRequestAge = 0;
+    drop.pickupRetryTimer = 0.5;
+  }
+  public acceptRemoteDropPickupOffer(payload: unknown) {
+    if (!payload || typeof payload !== 'object') return;
+    const offer = payload as { dropId?: unknown; id?: unknown; count?: unknown };
+    const dropId = typeof offer.dropId === 'string' ? offer.dropId : '';
+    const id = Number(offer.id);
+    const count = Math.floor(Number(offer.count));
+    if (!dropId || !Number.isInteger(id) || !Number.isInteger(count) || count < 1 || count > 64 ||
+        (!BLOCK_DEFS[id as BlockType] && !ITEM_DEFS[id as ItemType])) return;
+
+    const localDrop = this.drops.find((entry) => entry.networkId === dropId);
+    const remainingCount = this.addToInventory(id as AnyItemId, count);
+    const pickedUp = count - remainingCount;
+    if (localDrop) {
+      localDrop.pickupRequested = false;
+      localDrop.pickupRequestAge = 0;
+      if (remainingCount <= 0) {
+        const index = this.drops.indexOf(localDrop);
+        this.scene.remove(localDrop.mesh);
+        this.disposeDropObject(localDrop.mesh);
+        if (index >= 0) this.drops.splice(index, 1);
+      } else {
+        localDrop.count = remainingCount;
+        localDrop.pickupRetryTimer = pickedUp > 0 ? 0.25 : 0.75;
+      }
+    }
+    if (pickedUp > 0) {
+      Sound.pickup();
+      this.onHUDUpdate?.();
+    }
+    this.onItemDropPickupResult?.({ dropId, remainingCount });
   }
   // ================= FURNACE TICKING =================
   private tickFurnaces(dt: number) {
@@ -3872,7 +3942,15 @@ export class MinecraftEngine {
           const held = this.inventory[this.selectedSlot];
           if (held && held.count > 0) {
             const dir = this.getLookDir();
-            this.spawnDrop(this.pos.x + dir.x * 0.8, this.pos.y + 1.2, this.pos.z + dir.z * 0.8, held.id, 1);
+            const horizontalLength = Math.hypot(dir.x, dir.z) || 1;
+            this.spawnDrop(this.pos.x + dir.x * 0.8, this.pos.y + 1.2, this.pos.z + dir.z * 0.8, held.id, 1, {
+              velocity: {
+                x: (dir.x / horizontalLength) * 2.6,
+                y: 0.7 + Math.max(0, dir.y) * 0.5,
+                z: (dir.z / horizontalLength) * 2.6,
+              },
+              pickupDelay: 2,
+            });
             held.count--;
             if (held.count <= 0) this.inventory[this.selectedSlot] = null;
             this.updateHeldItemModel();
