@@ -159,7 +159,7 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
     hardness: 0.2,
     requiredTool: 'none',
     minHarvestLevel: 0,
-    drop: ItemType.APPLE,
+    drop: null,
     transparent: true,
   },
   [BlockType.OAK_PLANKS]: {
@@ -391,6 +391,7 @@ const ITEM_TILE_ENTRIES: Array<{
   { id: ItemType.RAW_IRON, name: 'Ham Demir', tile: TILE.ITEM_RAW_IRON },
   { id: ItemType.RAW_GOLD, name: 'Ham Altın', tile: TILE.ITEM_RAW_GOLD },
   { id: ItemType.FLINT, name: 'Çakmak Taşı', tile: TILE.ITEM_FLINT },
+  { id: ItemType.OAK_SAPLING, name: 'Meşe Fidanı', tile: TILE.LEAVES },
   { id: ItemType.APPLE, name: 'Elma', tile: TILE.ITEM_APPLE },
   { id: ItemType.BREAD, name: 'Ekmek', tile: TILE.ITEM_BREAD },
   { id: ItemType.RAW_BEEF, name: 'Çiğ Sığır Eti', tile: TILE.ITEM_RAW_BEEF },
@@ -498,6 +499,7 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   [ItemType.FLINT]: { name: 'Çakmak Taşı' },
   [ItemType.RAW_IRON]: { name: 'Ham Demir' },
   [ItemType.RAW_GOLD]: { name: 'Ham Altın' },
+  [ItemType.OAK_SAPLING]: { name: 'Meşe Fidanı', fuelValue: 5 },
 
   // Pickaxes
   [ItemType.WOODEN_PICKAXE]: {
@@ -677,16 +679,18 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
 
 // Item fuel values for blocks
 export function getItemFuelValue(id: AnyItemId): number {
-  if (id === BlockType.OAK_LOG) return 15;
-  if (id === BlockType.OAK_PLANKS) return 15;
-  if (id === BlockType.OAK_PLANKS_SLAB) return 7.5;
-  if (id === BlockType.CRAFTING_TABLE) return 15;
-  if (id === BlockType.CHEST) return 15;
-  if (id === ItemType.STICK) return 5;
+  if ([
+    BlockType.OAK_LOG,
+    BlockType.OAK_PLANKS,
+    BlockType.CRAFTING_TABLE,
+    BlockType.CHEST,
+    BlockType.OAK_DOOR,
+  ].includes(id as BlockType)) return 15;
+  if ([BlockType.OAK_PLANKS_SLAB, BlockType.OAK_PLANKS_SLAB_TOP].includes(id as BlockType)) return 7.5;
+  if (id === ItemType.STICK || id === ItemType.OAK_SAPLING) return 5;
   if (id === ItemType.COAL || id === ItemType.CHARCOAL) return 80;
   const def = ITEM_DEFS[id];
-  if (def && def.fuelValue) return def.fuelValue;
-  return 0;
+  return def?.fuelValue ?? 0;
 }
 
 export function getItemName(id: AnyItemId): string {
@@ -1533,6 +1537,40 @@ export function generateAllItemIcons() {
     }
   });
 
+  drawIcon(ItemType.OAK_SAPLING, (ctx) => {
+    ctx.fillStyle = '#71461f';
+    ctx.fillRect(15, 14, 3, 13);
+    ctx.fillRect(11, 19, 5, 2);
+    ctx.fillRect(17, 22, 5, 2);
+    ctx.fillStyle = '#2c842e';
+    ctx.fillRect(12, 7, 9, 8);
+    ctx.fillRect(7, 11, 8, 7);
+    ctx.fillRect(18, 11, 8, 7);
+    ctx.fillStyle = '#62b83d';
+    ctx.fillRect(12, 8, 5, 4);
+    ctx.fillRect(19, 12, 4, 3);
+    ctx.fillStyle = '#1e6427';
+    ctx.fillRect(9, 16, 6, 3);
+  });
+
+  drawIcon(ItemType.SHEARS, (ctx) => {
+    ctx.fillStyle = '#dce4e8';
+    ctx.fillRect(12, 5, 3, 12);
+    ctx.fillRect(18, 5, 3, 12);
+    ctx.fillRect(10, 7, 3, 7);
+    ctx.fillRect(20, 7, 3, 7);
+    ctx.fillStyle = '#8a969d';
+    ctx.fillRect(14, 13, 5, 4);
+    ctx.fillRect(8, 12, 9, 3);
+    ctx.fillRect(15, 12, 9, 3);
+    ctx.fillStyle = '#b23c36';
+    ctx.fillRect(5, 19, 8, 8);
+    ctx.fillRect(19, 19, 8, 8);
+    ctx.fillStyle = '#252b30';
+    ctx.fillRect(8, 22, 3, 3);
+    ctx.fillRect(21, 22, 3, 3);
+  });
+
   // Coal
   drawIcon(ItemType.COAL, (ctx) => {
     ctx.fillStyle = '#222';
@@ -1752,12 +1790,15 @@ export function generateAllItemIcons() {
       drawStick(ctx);
       const col = materials[matKey];
       ctx.fillStyle = col.head;
-      ctx.fillRect(18, 4, 10, 4);
-      ctx.fillRect(24, 6, 4, 6);
-      ctx.fillRect(14, 6, 6, 4);
-      ctx.fillRect(10, 10, 4, 6);
+      ctx.fillRect(9, 4, 18, 4);
+      ctx.fillRect(6, 6, 24, 4);
+      ctx.fillRect(4, 8, 5, 4);
+      ctx.fillRect(27, 8, 5, 4);
       ctx.fillStyle = col.light;
-      ctx.fillRect(20, 4, 6, 2);
+      ctx.fillRect(10, 5, 14, 2);
+      ctx.fillStyle = col.dark;
+      ctx.fillRect(4, 10, 5, 2);
+      ctx.fillRect(27, 10, 5, 2);
     });
   });
 
@@ -1900,6 +1941,35 @@ export function generateAllItemIcons() {
     drawArmorIcon(set.ids[1], 'chest', set.colors);
     drawArmorIcon(set.ids[2], 'legs', set.colors);
     drawArmorIcon(set.ids[3], 'boots', set.colors);
+  }
+
+  // Never leave a registered item as a transparent/white-looking blank icon.
+  for (const [rawId, def] of Object.entries(ITEM_DEFS)) {
+    const id = Number(rawId) as AnyItemId;
+    const canvas = itemIconCanvases.get(id);
+    const data = canvas?.getContext('2d')?.getImageData(0, 0, 32, 32).data;
+    let hasVisiblePixel = false;
+    if (data) {
+      for (let alpha = 3; alpha < data.length; alpha += 4) {
+        if (data[alpha] > 0) {
+          hasVisiblePixel = true;
+          break;
+        }
+      }
+    }
+    if (hasVisiblePixel) continue;
+    drawIcon(id, (ctx) => {
+      const hue = (id * 47) % 360;
+      ctx.fillStyle = `hsl(${hue}, 62%, 48%)`;
+      ctx.fillRect(7, 7, 18, 18);
+      ctx.fillStyle = '#202020';
+      ctx.fillRect(9, 9, 14, 14);
+      ctx.fillStyle = `hsl(${hue}, 72%, 66%)`;
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.name.slice(0, 1).toLocaleUpperCase('tr'), 16, 16);
+    });
   }
 }
 

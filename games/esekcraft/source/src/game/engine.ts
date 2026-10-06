@@ -42,11 +42,13 @@ import {
   atlasTexture,
   crackTextures,
   getItemName,
+  getItemFuelValue,
   getItemTexture,
 } from './textures';
 import { VoxelWorld, inBounds, IDX } from './world';
 import { Sound, SoundMaterial } from './audio';
 import { findSmeltRecipe } from './recipes';
+import { rollOakLeafDrops } from './drops';
 
 export interface DropItemEntity {
   id: AnyItemId;
@@ -2887,7 +2889,12 @@ export class MinecraftEngine {
         canHarvest = itemDef?.tool?.type === bDef.requiredTool && (itemDef.tool.harvestLevel ?? 0) >= bDef.minHarvestLevel;
       }
 
-      if (bDef.drop && canHarvest) {
+      if (hit.id === BlockType.OAK_LEAVES && canHarvest) {
+        const dropPos = this.findDropPosition(hit);
+        for (const drop of rollOakLeafDrops()) {
+          this.spawnDrop(dropPos.x, dropPos.y, dropPos.z, drop.id, drop.count);
+        }
+      } else if (bDef.drop && canHarvest) {
         const dropCount = bDef.dropCount || 1;
         const dropPos = this.findDropPosition(hit);
         this.spawnDrop(dropPos.x, dropPos.y, dropPos.z, bDef.drop, dropCount);
@@ -3681,12 +3688,25 @@ export class MinecraftEngine {
   // ================= INVENTORY HELPERS =================
   public giveCreativeItem(id: AnyItemId) {
     if (this.gameMode !== 'creative') return;
-    const selected = this.inventory[this.selectedSlot];
-    if (selected && selected.id === id) {
-      selected.count = 64;
+    const itemDef = ITEM_DEFS[id];
+    const isNonStackable = Boolean(itemDef?.tool || itemDef?.armor);
+    if (isNonStackable) {
+      const emptySlot = this.inventory.findIndex((stack, index) => index < 36 && !stack);
+      const slot = emptySlot >= 0 ? emptySlot : this.selectedSlot;
+      const durability = itemDef?.tool?.durability ?? itemDef?.armor?.durability;
+      this.inventory[slot] = {
+        id,
+        count: 1,
+        ...(durability ? { durability, maxDurability: durability } : {}),
+      };
     } else {
-      const left = this.addToInventory(id, 64);
-      if (left === 64) this.inventory[this.selectedSlot] = { id, count: 64 };
+      const selected = this.inventory[this.selectedSlot];
+      if (selected && selected.id === id) {
+        selected.count = 64;
+      } else {
+        const left = this.addToInventory(id, 64);
+        if (left === 64) this.inventory[this.selectedSlot] = { id, count: 64 };
+      }
     }
     this.hp = this.maxHp;
     this.hunger = this.maxHunger;
@@ -3829,7 +3849,7 @@ export class MinecraftEngine {
         smelt && (!f.output || (f.output.id === smelt.output.id && f.output.count + smelt.output.count <= 64));
 
       if (f.burnTimeRemaining <= 0 && canSmelt && f.fuel && f.fuel.count > 0) {
-        const fuelVal = ITEM_DEFS[f.fuel.id]?.fuelValue || (f.fuel.id === BlockType.OAK_LOG ? 15 : 0);
+        const fuelVal = getItemFuelValue(f.fuel.id);
         if (fuelVal > 0) {
           f.fuel.count--;
           if (f.fuel.count <= 0) f.fuel = null;

@@ -234,6 +234,8 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showControlsModal, setShowControlsModal] = useState(false);
   const [showPlayerList, setShowPlayerList] = useState(false);
+  const [creativePaletteTab, setCreativePaletteTab] = useState<'blocks' | 'items'>('blocks');
+  const [creativeSearch, setCreativeSearch] = useState('');
 
   // 2x2 player crafting grid
   const [playerCraftGrid, setPlayerCraftGrid] = useState<(ItemStack | null)[]>(new Array(4).fill(null));
@@ -248,6 +250,20 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   // Trigger state refresh on engine changes
   const [, setTick] = useState(0);
   const rerender = () => setTick((t) => t + 1);
+  const normalizedCreativeSearch = creativeSearch.trim().toLocaleLowerCase('tr');
+  const creativePaletteEntries = creativePaletteTab === 'blocks'
+    ? Object.entries(BLOCK_DEFS)
+      .filter(([id, def]) => {
+        const blockId = Number(id) as BlockType;
+        return blockId > 0 && blockId < 100 && blockId !== BlockType.FURNACE_LIT &&
+          !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR) &&
+          (!isBedBlock(blockId) || blockId === BlockType.BED) &&
+          def.name.toLocaleLowerCase('tr').includes(normalizedCreativeSearch);
+      })
+      .map(([id, def]) => ({ id: Number(id), name: def.name }))
+    : Object.entries(ITEM_DEFS)
+      .filter(([, def]) => def.name.toLocaleLowerCase('tr').includes(normalizedCreativeSearch))
+      .map(([id, def]) => ({ id: Number(id), name: def.name }));
 
   // Mouse move tracker for held cursor item
   useEffect(() => {
@@ -867,15 +883,29 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
         >
           <div className="mc-panel p-4 flex gap-4 relative" onMouseDown={(e) => e.stopPropagation()}>
             {engine.gameMode === 'creative' && (
-              <div className="absolute -top-28 left-0 right-0 bg-black/90 border-2 border-[#777] p-2 z-20">
-                <div className="text-xs text-yellow-200 font-bold mb-1">CREATIVE BLOK PALETİ — sınırsız seçim</div>
-                <div className="grid grid-cols-12 gap-1 max-h-24 overflow-y-auto">
-                  {Object.entries(BLOCK_DEFS).filter(([id]) => {
-                    const blockId = Number(id) as BlockType;
-                    return blockId > 0 && blockId < 100 && blockId !== BlockType.FURNACE_LIT && !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR) && (!isBedBlock(blockId) || blockId === BlockType.BED);
-                  }).map(([id, def]) => (
-                    <button key={id} title={def.name} onClick={() => { engine.giveCreativeItem(Number(id) as AnyItemId); rerender(); }} className="mc-slot !w-9 !h-9 !p-0">
-                      <img src={getItemIcon(Number(id) as AnyItemId)} alt={def.name} className="w-7 h-7 pixelated" />
+              <div className="fixed left-1/2 top-3 z-[40] w-[min(96vw,720px)] max-h-[45vh] -translate-x-1/2 overflow-hidden border-2 border-[#777] bg-black/95 p-2 shadow-xl">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-bold text-yellow-200">YARATICI KATALOĞU · sınırsız eşya</div>
+                  <div className="flex gap-1">
+                    {(['blocks', 'items'] as const).map((tab) => (
+                      <button key={tab} onClick={() => setCreativePaletteTab(tab)} className={`border border-[#777] px-2 py-1 text-xs ${creativePaletteTab === tab ? 'bg-[#555] text-yellow-100' : 'bg-[#222] text-gray-300'}`}>
+                        {tab === 'blocks' ? 'Bloklar' : 'Eşyalar'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <input
+                  value={creativeSearch}
+                  onChange={(event) => setCreativeSearch(event.target.value)}
+                  placeholder={creativePaletteTab === 'blocks' ? 'Blok ara…' : 'Eşya ara…'}
+                  aria-label="Yaratıcı kataloğunda ara"
+                  className="mb-2 w-full border-2 border-[#555] bg-[#222] px-2 py-1 text-xs text-white outline-none placeholder:text-gray-400"
+                />
+                <div className="mb-1 text-[10px] text-gray-300">{creativePaletteEntries.length} sonuç · seçince envantere eklenir</div>
+                <div className="grid max-h-[30vh] grid-cols-8 gap-1 overflow-y-auto sm:grid-cols-12">
+                  {creativePaletteEntries.map(({ id, name }) => (
+                    <button key={id} title={name} onClick={() => { engine.giveCreativeItem(id as AnyItemId); rerender(); }} className="mc-slot !h-9 !w-9 !p-0">
+                      <img src={getItemIcon(id as AnyItemId)} alt={name} className="h-7 w-7 pixelated" />
                     </button>
                   ))}
                 </div>
