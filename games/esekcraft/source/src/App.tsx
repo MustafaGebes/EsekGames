@@ -636,7 +636,7 @@ export default function App() {
         <MobileControls
           engine={engineRef.current}
           onOpenChat={() => setChatOpen(true)}
-          onDropItem={() => engineRef.current?.dropSelectedItem(true)}
+          onDropItem={() => engineRef.current?.dropSelectedItem()}
           onOpenInventory={() => {
             const eng = engineRef.current;
             if (!eng) return;
