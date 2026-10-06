@@ -3,9 +3,9 @@ import { MinecraftEngine } from '../game/engine';
 import { KeyBindings } from '../game/types';
 
 type MovementAction = 'forward' | 'backward' | 'left' | 'right';
-type HoldAction = 'jump' | 'sprint';
+type HoldAction = 'jump' | 'sprint' | 'sneak';
 
-const ACTION_LABELS: Record<HoldAction, string> = { jump: 'Zıpla', sprint: 'Koş' };
+const ACTION_LABELS: Record<HoldAction, string> = { jump: 'Zıpla', sprint: 'Koş', sneak: 'Eğil' };
 
 export const MobileControls: React.FC<{
   engine: MinecraftEngine;
@@ -20,7 +20,11 @@ export const MobileControls: React.FC<{
   const padPointerRef = useRef<number | null>(null);
   const [stick, setStick] = useState({ x: 0, y: 0 });
   const [sneakOn, setSneakOn] = useState(false);
+  const [flightActive, setFlightActive] = useState(engine.isFlying);
   const [held, setHeld] = useState<Record<string, boolean>>({});
+  const lastJumpTapRef = useRef<number | null>(null);
+
+  useEffect(() => { setFlightActive(engine.isFlying); }, [engine, engine.gameMode, engine.isFlying]);
 
   const setMovement = (x: number, y: number) => {
     const bindings: KeyBindings = engine.keyBindings;
@@ -85,6 +89,28 @@ export const MobileControls: React.FC<{
     const next = !sneakOn;
     setSneakOn(next);
     setKeyAction('sneak', next);
+  };
+
+  const toggleFlight = () => {
+    if (engine.gameMode !== 'creative') return;
+    lastJumpTapRef.current = null;
+    setSneakOn(false);
+    setKeyAction('sneak', false);
+    engine.toggleFlight();
+    setFlightActive(engine.isFlying);
+  };
+
+  const beginJump = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (engine.gameMode === 'creative') {
+      const now = performance.now();
+      if (lastJumpTapRef.current !== null && now - lastJumpTapRef.current < 320) {
+        toggleFlight();
+        lastJumpTapRef.current = null;
+      } else {
+        lastJumpTapRef.current = now;
+      }
+    }
+    beginHold('jump')(event);
   };
 
   useEffect(() => {
@@ -190,11 +216,22 @@ export const MobileControls: React.FC<{
           <button type="button" className={`${labelButton(!!held.sprint)} h-12 w-12 text-[9px] font-bold`} aria-label="Koş" title="Koş" onPointerDown={beginHold('sprint')} onPointerUp={endHold('sprint')} onPointerCancel={endHold('sprint')} onLostPointerCapture={endHold('sprint')}>
             <span aria-hidden="true" className="text-lg leading-none">»</span><span>{ACTION_LABELS.sprint}</span>
           </button>
-          <button type="button" className={`${labelButton(sneakOn)} h-12 w-12 text-[9px] font-bold`} aria-label="Eğil" title="Eğil" aria-pressed={sneakOn} onClick={toggleSneak}>
-            <span aria-hidden="true" className="text-lg leading-none">⌄</span><span>{sneakOn ? 'Kalk' : 'Eğil'}</span>
-          </button>
-          <button type="button" className={`${labelButton(!!held.jump)} h-[clamp(56px,8vh,68px)] w-[clamp(56px,8vh,68px)] text-[10px] font-bold`} aria-label="Zıpla" title="Zıpla" onPointerDown={beginHold('jump')} onPointerUp={endHold('jump')} onPointerCancel={endHold('jump')} onLostPointerCapture={endHold('jump')}>
-            <span aria-hidden="true" className="text-2xl leading-none">↑</span><span>{ACTION_LABELS.jump}</span>
+          {flightActive ? (
+            <button type="button" className={`${labelButton(!!held.sneak)} h-12 w-12 text-[9px] font-bold`} aria-label="Alçal" title="Basılı tutarak alçal" onPointerDown={beginHold('sneak')} onPointerUp={endHold('sneak')} onPointerCancel={endHold('sneak')} onLostPointerCapture={endHold('sneak')}>
+              <span aria-hidden="true" className="text-lg leading-none">↓</span><span>Alçal</span>
+            </button>
+          ) : (
+            <button type="button" className={`${labelButton(sneakOn)} h-12 w-12 text-[9px] font-bold`} aria-label="Eğil" title="Eğil" aria-pressed={sneakOn} onClick={toggleSneak}>
+              <span aria-hidden="true" className="text-lg leading-none">⌄</span><span>{sneakOn ? 'Kalk' : 'Eğil'}</span>
+            </button>
+          )}
+          {engine.gameMode === 'creative' && (
+            <button type="button" className={`${labelButton(flightActive)} h-12 w-12 text-[8px] font-bold`} aria-label={flightActive ? 'Uçuşu kapat' : 'Uçuşu aç'} title="Yaratıcı uçuşu aç veya kapat" aria-pressed={flightActive} onClick={toggleFlight}>
+              <span aria-hidden="true" className="text-lg leading-none">✈</span><span>Uçuş</span><span>{flightActive ? 'Kapat' : 'Aç'}</span>
+            </button>
+          )}
+          <button type="button" className={`${labelButton(!!held.jump)} h-[clamp(56px,8vh,68px)] w-[clamp(56px,8vh,68px)] text-[10px] font-bold`} aria-label={flightActive ? 'Yüksel' : 'Zıpla'} title={engine.gameMode === 'creative' ? 'İki kez dokunarak uçuşu aç; basılı tutarak yüksel' : 'Zıpla'} onPointerDown={beginJump} onPointerUp={endHold('jump')} onPointerCancel={endHold('jump')} onLostPointerCapture={endHold('jump')}>
+            <span aria-hidden="true" className="text-2xl leading-none">↑</span><span>{flightActive ? 'Yüksel' : ACTION_LABELS.jump}</span>
           </button>
         </div>
         <div className="flex gap-2">

@@ -1294,6 +1294,20 @@ export class MinecraftEngine {
     this.onHUDUpdate?.();
   }
 
+  public toggleFlight() {
+    if (this.gameMode !== 'creative') return false;
+    this.isFlying = !this.isFlying;
+    if (this.isFlying) {
+      this.onGround = false;
+    } else {
+      this.vel = { x: 0, y: 0, z: 0 };
+      this.recoverFromBlockCollision();
+    }
+    this.onToast?.(this.isFlying ? 'Uçuş Modu Açık' : 'Uçuş Modu Kapalı');
+    this.onHUDUpdate?.();
+    return true;
+  }
+
   public setMobileControlsMode(enabled: boolean) {
     this.mobileControlsEnabled = enabled;
     // The previous 1x pixel-ratio cap made pixel-art item drops look soft on high-DPI phones.
@@ -4078,6 +4092,24 @@ export class MinecraftEngine {
       const target = e.target as HTMLElement;
       if (this.mobileControlsEnabled || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (this.bedSleepAnimation) return;
+
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        if (this.isDead || this.isGUIOpen) return;
+        if (this.isPaused) {
+          this.isPaused = false;
+          this.onUIStateChange?.('playing');
+          this.requestPointerLock();
+        } else {
+          this.isPaused = true;
+          this.mouseLeft = false;
+          this.mouseRight = false;
+          this.exitPointerLock();
+          this.onUIStateChange?.('paused');
+        }
+        return;
+      }
+
       this.keys[e.code] = true;
 
       if (!this.isPaused && !this.isDead) {
@@ -4111,16 +4143,9 @@ export class MinecraftEngine {
         else if (e.code === this.keyBindings.jump && this.gameMode === 'creative' && !e.repeat) {
           const now = performance.now();
           if (now - this.flyCooldown < 300) {
-            this.isFlying = !this.isFlying;
             // A completed double-tap must not combine with the next intentional jump/ascend press.
             this.flyCooldown = -Infinity;
-            if (this.isFlying) {
-              this.onGround = false;
-            } else {
-              this.vel = { x: 0, y: 0, z: 0 };
-              this.recoverFromBlockCollision();
-            }
-            this.onToast?.(this.isFlying ? 'Uçuş Modu Açık' : 'Uçuş Modu Kapalı');
+            this.toggleFlight();
           } else {
             this.flyCooldown = now;
           }
@@ -4183,7 +4208,7 @@ export class MinecraftEngine {
 
     document.addEventListener('pointerlockchange', () => {
       this.isPointerLocked = document.pointerLockElement === this.renderer.domElement;
-      if (!this.mobileControlsEnabled && !this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.onlineMode && !this.bedSleepAnimation) {
+      if (!this.mobileControlsEnabled && !this.isPointerLocked && !this.isPaused && !this.isDead && !this.isGUIOpen && !this.bedSleepAnimation) {
         this.isPaused = true;
         this.mouseLeft = false;
         this.mouseRight = false;

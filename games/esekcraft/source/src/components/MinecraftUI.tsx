@@ -230,6 +230,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
 }) => {
   // Cursor item held in hand across all inventory/crafting menus
   const [cursorItem, setCursorItem] = useState<ItemStack | null>(null);
+  const [inspectedItem, setInspectedItem] = useState<ItemStack | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showControlsModal, setShowControlsModal] = useState(false);
   const [showPlayerList, setShowPlayerList] = useState(false);
@@ -325,6 +326,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   // Cleanly close any open inventory and return floating items to player
   const closeOpenContainer = () => {
     if (!engine) return;
+    setInspectedItem(null);
 
     // Return cursor item
     if (cursorItem) {
@@ -573,7 +575,15 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
       <div
         className={`mc-slot pixelated ${customClass}`}
         style={{ width: `${size}px`, height: `${size}px` }}
-        onMouseDown={onClick}
+        tabIndex={stack ? 0 : -1}
+        aria-label={stack ? getItemName(stack.id) : 'Boş eşya yuvası'}
+        onMouseEnter={() => setInspectedItem(stack ? { ...stack } : null)}
+        onFocus={() => setInspectedItem(stack ? { ...stack } : null)}
+        onTouchStart={() => setInspectedItem(stack ? { ...stack } : null)}
+        onMouseDown={(event) => {
+          setInspectedItem(stack ? { ...stack } : null);
+          onClick(event);
+        }}
         onContextMenu={(e) => e.preventDefault()}
         title={stack ? getItemName(stack.id) : ''}
       >
@@ -615,6 +625,13 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   // Calculate matched outputs
   const playerCraftOutput = matchRecipe(playerCraftGrid, 2)?.output || null;
   const tableCraftOutput = matchRecipe(tableCraftGrid, 3)?.output || null;
+  const inspectedDefinition = inspectedItem ? ITEM_DEFS[inspectedItem.id] : null;
+  const inspectedMaxDurability = inspectedItem
+    ? inspectedItem.maxDurability ?? inspectedDefinition?.tool?.durability ?? inspectedDefinition?.armor?.durability
+    : undefined;
+  const inspectedDurability = inspectedItem?.durability ?? inspectedMaxDurability;
+  const toolTypeNames: Record<string, string> = { pickaxe: 'Kazma', axe: 'Balta', shovel: 'Kürek', sword: 'Kılıç', none: 'Alet' };
+  const toolMaterialNames: Record<string, string> = { wood: 'Tahta', stone: 'Taş', iron: 'Demir', gold: 'Altın', diamond: 'Elmas' };
 
   return (
     <>
@@ -1042,6 +1059,29 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               ✕ Kapat
             </button>
           </div>
+          {inspectedItem && (
+            <div className="pointer-events-none fixed left-1/2 top-3 z-[60] w-[min(92vw,360px)] -translate-x-1/2">
+              <div className="mc-panel flex items-center gap-3 border-2 border-[#333] bg-[#c6c6c6] p-3 text-left text-[#222] shadow-xl">
+                <div className="mc-slot pixelated !h-12 !w-12 shrink-0">
+                  <img src={getItemIcon(inspectedItem.id)} alt="" className="h-9 w-9 pixelated" />
+                </div>
+                <div className="min-w-0 flex-1 font-mono text-xs">
+                  <div className="truncate text-sm font-bold">{getItemName(inspectedItem.id)}</div>
+                  {inspectedItem.count > 1 && <div>Miktar: {inspectedItem.count}</div>}
+                  {inspectedDefinition?.tool && (
+                    <>
+                      <div>{toolMaterialNames[inspectedDefinition.tool.material] || ''} {toolTypeNames[inspectedDefinition.tool.type] || 'Alet'}</div>
+                      <div>Saldırı hasarı: +{inspectedDefinition.tool.damage}</div>
+                    </>
+                  )}
+                  {inspectedDefinition?.armor && <div>Koruma: +{inspectedDefinition.armor.defense}</div>}
+                  {inspectedMaxDurability !== undefined && inspectedDurability !== undefined && (
+                    <div>Dayanıklılık: {Math.max(0, inspectedDurability)} / {inspectedMaxDurability}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
