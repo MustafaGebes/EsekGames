@@ -361,7 +361,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
     engine.isPaused = false;
 
     setUIState('playing');
-    engine.requestPointerLock();
+    if (!engine.mobileControlsEnabled) engine.requestPointerLock();
     engine.updateHeldItemModel();
     rerender();
   };
@@ -1384,7 +1384,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               onClick={() => {
                 setUIState('playing');
                 engine.isPaused = false;
-                engine.requestPointerLock();
+                if (!engine.mobileControlsEnabled) engine.requestPointerLock();
               }}
               className="mc-btn w-64"
             >

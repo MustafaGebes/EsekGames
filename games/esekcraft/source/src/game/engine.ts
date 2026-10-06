@@ -197,6 +197,7 @@ export class MinecraftEngine {
   public isDead = false;
   public isGUIOpen = false;
   public onlineMode = false;
+  public mobileControlsEnabled = false;
   public networkPlayerId: string | null = null;
 
   // Callbacks to React UI
@@ -3996,6 +3997,7 @@ export class MinecraftEngine {
       if ((e.target as HTMLElement)?.closest('.mc-panel, .mc-slot, .mc-btn, input, select, button')) {
         return;
       }
+      if (this.mobileControlsEnabled) return;
       if (!this.isPointerLocked) {
         this.requestPointerLock();
         return;

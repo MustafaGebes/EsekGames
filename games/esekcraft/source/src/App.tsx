@@ -8,9 +8,11 @@ import { initAudio, Sound, setMasterVolume } from './game/audio';
 import { MinecraftEngine } from './game/engine';
 import { MinecraftUI } from './components/MinecraftUI';
 import { ControlsModal } from './components/ControlsModal';
+import { MobileControls } from './components/MobileControls';
 
 const LOCAL_STORAGE_KEY = 'esekcraft_worlds_v1';
 const SETTINGS_KEY = 'esekcraft_settings_v1';
+const CONTROL_MODE_KEY = 'esekcraft_control_mode_v1';
 type OnlineRoom = {
   id: string;
   name: string;
@@ -50,6 +52,13 @@ export default function App() {
   const [thirdPerson, setThirdPerson] = useState(false);
   const [settingsFrom, setSettingsFrom] = useState<'title' | 'in_game'>('title');
   const [showControlsModal, setShowControlsModal] = useState(false);
+  const [controlMode, setControlMode] = useState<'pc' | 'mobile'>(() => {
+    try {
+      const saved = localStorage.getItem(CONTROL_MODE_KEY);
+      if (saved === 'pc' || saved === 'mobile') return saved;
+    } catch {}
+    return typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 ? 'mobile' : 'pc';
+  });
   // Online EsekCraft lobby state
   const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([]);
   const [onlinePlayers, setOnlinePlayers] = useState<Record<string, any>>({});
@@ -75,6 +84,10 @@ export default function App() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<MinecraftEngine | null>(null);
   const activeMetaRef = useRef<WorldMeta | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(CONTROL_MODE_KEY, controlMode); } catch {}
+  }, [controlMode]);
 
   // Boot animation on startup
   useEffect(() => {
@@ -179,6 +192,7 @@ export default function App() {
       container.innerHTML = '';
 
       const eng = new MinecraftEngine(container, meta);
+      eng.mobileControlsEnabled = controlMode === 'mobile';
       eng.mouseSensitivity = sensitivity / 100;
       eng.fov = fov;
       eng.camera.fov = fov;
@@ -354,7 +368,7 @@ export default function App() {
           const room = message.room as OnlineRoom;
           onlineRoomRef.current = room;
           setSelectedOnlineRoom(room.id);
-          sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: room.id, platform: 'pc' });
+          sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: room.id, platform: controlMode });
         }
         if (message.type === 'room_joined') {
           const room = message.room as OnlineRoom;
@@ -576,6 +590,30 @@ export default function App() {
           onKickPlayer={(id) => sendOnlineMessage({ type: 'esekcraft_kick', targetId: id })}
         />
       )}
+      {appState === 'in_game' && uiState === 'playing' && controlMode === 'mobile' && engineRef.current && (
+        <MobileControls
+          engine={engineRef.current}
+          onOpenInventory={() => {
+            const eng = engineRef.current;
+            if (!eng) return;
+            eng.isGUIOpen = true;
+            eng.isPaused = false;
+            eng.exitPointerLock();
+            setUIState('inventory');
+            Sound.click();
+          }}
+          onPause={() => {
+            const eng = engineRef.current;
+            if (!eng) return;
+            eng.isPaused = true;
+            eng.mouseLeft = false;
+            eng.mouseRight = false;
+            eng.exitPointerLock();
+            setUIState('paused');
+            Sound.click();
+          }}
+        />
+      )}
 
       {/* ================= 1. BOOT / INITIAL LOADING SCREEN ================= */}
       {appState === 'boot' && (
@@ -651,6 +689,30 @@ export default function App() {
             >
               Ayarlar
             </button>
+          </div>
+
+          <div className="mt-4 w-[340px] max-w-[90vw]">
+            <div className="mb-1.5 text-center text-[11px] font-bold uppercase tracking-wider text-white drop-shadow-[1px_1px_0_#222]">
+              Kontrol Biçimi
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                aria-pressed={controlMode === 'pc'}
+                onClick={() => { Sound.click(); setControlMode('pc'); }}
+                className={`mc-btn flex-1 !py-2 !text-xs !tracking-normal ${controlMode === 'pc' ? '!border-blue-300 !bg-blue-700 !ring-2 !ring-blue-300/80' : ''}`}
+              >
+                <span className="mr-1.5" aria-hidden="true">⌨</span> PC Kontrolü
+              </button>
+              <button
+                type="button"
+                aria-pressed={controlMode === 'mobile'}
+                onClick={() => { Sound.click(); setControlMode('mobile'); }}
+                className={`mc-btn flex-1 !py-2 !text-xs !tracking-normal ${controlMode === 'mobile' ? '!border-blue-300 !bg-blue-700 !ring-2 !ring-blue-300/80' : ''}`}
+              >
+                <span className="mr-1.5" aria-hidden="true">▯</span> Mobil Kontrolü
+              </button>
+            </div>
           </div>
 
           {/* Version & Credits */}
@@ -737,7 +799,7 @@ export default function App() {
             </div>
             <div className="flex gap-2 w-full">
               <button onClick={() => { Sound.click(); setNewWorldName('Çevrimiçi Dünya'); setNewWorldSeed(''); setNewWorldDifficulty(1); setNewWorldMode('survival'); setOnlineMaxPlayers(1); setAppState('online_create'); }} className="mc-btn flex-1 bg-emerald-800 border-emerald-600">Lobi Oluştur</button>
-              <button disabled={!selectedOnlineRoom || !onlineRooms.find((r) => r.id === selectedOnlineRoom)?.isOpen} onClick={() => { Sound.click(); sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: selectedOnlineRoom }); }} className="mc-btn flex-1">Katıl</button>
+              <button disabled={!selectedOnlineRoom || !onlineRooms.find((r) => r.id === selectedOnlineRoom)?.isOpen} onClick={() => { Sound.click(); sendOnlineMessage({ type: 'join_room', gameId: 'esekcraft', roomId: selectedOnlineRoom, platform: controlMode }); }} className="mc-btn flex-1">Katıl</button>
               <button onClick={() => { Sound.click(); closeOnlineConnection(); setAppState('play_menu'); }} className="mc-btn flex-1">Geri</button>
             </div>
           </div>

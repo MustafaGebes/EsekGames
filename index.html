@@ -469,6 +469,40 @@
         }
 
 
+        .platform-support {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 18px;
+        }
+
+        .platform-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 9px;
+            border: 1px solid rgba(115, 190, 255, 0.42);
+            border-radius: 999px;
+            background: rgba(40, 105, 160, 0.18);
+            color: #d6edff;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .platform-badge svg {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+
         .game-content h3 {
             margin:
                 0 0 9px;
@@ -830,6 +864,18 @@
                     </p>
 
 
+                    <div class="platform-support" aria-label="PC ve mobil cihazlarda oynanabilir">
+                        <span class="platform-badge" title="Bilgisayar">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"></rect><path d="M8 21h8m-4-4v4"></path></svg>
+                            PC
+                        </span>
+                        <span class="platform-badge" title="Telefon ve tablet">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2"></rect><path d="M10 18.5h4"></path></svg>
+                            Mobil
+                        </span>
+                    </div>
+
+
                     <a
                         class="play-button"
                         href="/games/eseksimulator/"
@@ -863,6 +909,17 @@
                         Blokları kaz, kaynak topla ve kendi dünyanı kur.
                         Tek oyunculu hayatta kalma demosu.
                     </p>
+
+                    <div class="platform-support" aria-label="PC ve mobil cihazlarda oynanabilir">
+                        <span class="platform-badge" title="Bilgisayar">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"></rect><path d="M8 21h8m-4-4v4"></path></svg>
+                            PC
+                        </span>
+                        <span class="platform-badge" title="Telefon ve tablet">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2"></rect><path d="M10 18.5h4"></path></svg>
+                            Mobil
+                        </span>
+                    </div>
 
                     <a
                         class="play-button"
