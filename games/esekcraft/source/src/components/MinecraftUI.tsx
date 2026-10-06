@@ -1385,7 +1385,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
       {/* ================= PAUSE MENU (ESC) ================= */}
       {uiState === 'paused' && engine && (
         <div className="fixed inset-0 z-30 flex flex-col items-center justify-center bg-black/65">
-          <div className="mc-panel p-6 flex flex-col items-center gap-3 min-w-[340px]">
+          <div className="mc-panel p-6 flex flex-col items-center gap-3 min-w-[340px] max-h-[92dvh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-white mb-2 drop-shadow-[2px_2px_0_#000]">
               Oyun Duraklatıldı
             </h2>
@@ -1399,6 +1399,10 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               className="mc-btn w-64"
             >
               Oyuna Dön
+            </button>
+
+            <button onClick={onSaveAndQuit} className="mc-btn w-64 bg-red-900/60 border-red-700">
+              Oyundan Çık
             </button>
 
             {/* Online game mode is controlled by the room admin through /gamemode. */}
@@ -1449,10 +1453,6 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                 />
               </div>
             </div>
-
-            <button onClick={onSaveAndQuit} className="mc-btn w-64 bg-red-900/60 border-red-700">
-              Oyundan Çık
-            </button>
 
             {/* Render distance / chunk budget */}
             <div className="w-full flex flex-col gap-1 my-1 p-2 bg-black/20 border border-[#888]">

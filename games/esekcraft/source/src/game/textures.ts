@@ -408,23 +408,38 @@ const ITEM_TILE_ENTRIES: Array<{
   { id: ItemType.STONE_PICKAXE, name: 'Taş Kazma', tile: TILE.ITEM_COAL },
   { id: ItemType.IRON_PICKAXE, name: 'Demir Kazma', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_PICKAXE, name: 'Elmas Kazma', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.GOLD_PICKAXE, name: 'Altın Kazma', tile: TILE.ITEM_GOLD_INGOT },
   { id: ItemType.WOODEN_AXE, name: 'Tahta Balta', tile: TILE.ITEM_STICK },
   { id: ItemType.STONE_AXE, name: 'Taş Balta', tile: TILE.ITEM_COAL },
   { id: ItemType.IRON_AXE, name: 'Demir Balta', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_AXE, name: 'Elmas Balta', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.GOLD_AXE, name: 'Altın Balta', tile: TILE.ITEM_GOLD_INGOT },
   { id: ItemType.WOODEN_SHOVEL, name: 'Tahta Kürek', tile: TILE.ITEM_STICK },
   { id: ItemType.STONE_SHOVEL, name: 'Taş Kürek', tile: TILE.ITEM_COAL },
   { id: ItemType.IRON_SHOVEL, name: 'Demir Kürek', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_SHOVEL, name: 'Elmas Kürek', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.GOLD_SHOVEL, name: 'Altın Kürek', tile: TILE.ITEM_GOLD_INGOT },
   { id: ItemType.WOODEN_SWORD, name: 'Tahta Kılıç', tile: TILE.ITEM_STICK },
   { id: ItemType.STONE_SWORD, name: 'Taş Kılıç', tile: TILE.ITEM_COAL },
   { id: ItemType.IRON_SWORD, name: 'Demir Kılıç', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_SWORD, name: 'Elmas Kılıç', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.GOLD_SWORD, name: 'Altın Kılıç', tile: TILE.ITEM_GOLD_INGOT },
   { id: ItemType.IRON_HELMET, name: 'Demir Kask', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.IRON_CHESTPLATE, name: 'Demir Zırh', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.IRON_LEGGINGS, name: 'Demir Pantolon', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.IRON_BOOTS, name: 'Demir Bot', tile: TILE.ITEM_IRON_INGOT },
   { id: ItemType.DIAMOND_CHESTPLATE, name: 'Elmas Zırh', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.LEATHER_HELMET, name: 'Deri Kask', tile: TILE.ITEM_LEATHER },
+  { id: ItemType.LEATHER_CHESTPLATE, name: 'Deri Göğüslük', tile: TILE.ITEM_LEATHER },
+  { id: ItemType.LEATHER_LEGGINGS, name: 'Deri Pantolon', tile: TILE.ITEM_LEATHER },
+  { id: ItemType.LEATHER_BOOTS, name: 'Deri Bot', tile: TILE.ITEM_LEATHER },
+  { id: ItemType.GOLD_HELMET, name: 'Altın Kask', tile: TILE.ITEM_GOLD_INGOT },
+  { id: ItemType.GOLD_CHESTPLATE, name: 'Altın Göğüslük', tile: TILE.ITEM_GOLD_INGOT },
+  { id: ItemType.GOLD_LEGGINGS, name: 'Altın Pantolon', tile: TILE.ITEM_GOLD_INGOT },
+  { id: ItemType.GOLD_BOOTS, name: 'Altın Bot', tile: TILE.ITEM_GOLD_INGOT },
+  { id: ItemType.DIAMOND_HELMET, name: 'Elmas Kask', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.DIAMOND_LEGGINGS, name: 'Elmas Pantolon', tile: TILE.ITEM_DIAMOND },
+  { id: ItemType.DIAMOND_BOOTS, name: 'Elmas Bot', tile: TILE.ITEM_DIAMOND },
   { id: ItemType.SHEARS, name: 'Makas', tile: TILE.SHEARS },
 ];
 
@@ -502,6 +517,10 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
     name: 'Elmas Kazma',
     tool: { type: 'pickaxe', material: 'diamond', durability: 1561, speed: 8, damage: 5, harvestLevel: 3 },
   },
+  [ItemType.GOLD_PICKAXE]: {
+    name: 'Altın Kazma',
+    tool: { type: 'pickaxe', material: 'gold', durability: 32, speed: 12, damage: 2, harvestLevel: 0 },
+  },
 
   // Axes
   [ItemType.WOODEN_AXE]: {
@@ -520,6 +539,10 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   [ItemType.DIAMOND_AXE]: {
     name: 'Elmas Balta',
     tool: { type: 'axe', material: 'diamond', durability: 1561, speed: 8, damage: 7, harvestLevel: 3 },
+  },
+  [ItemType.GOLD_AXE]: {
+    name: 'Altın Balta',
+    tool: { type: 'axe', material: 'gold', durability: 32, speed: 12, damage: 5, harvestLevel: 0 },
   },
 
   // Shovels
@@ -540,6 +563,10 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
     name: 'Elmas Kürek',
     tool: { type: 'shovel', material: 'diamond', durability: 1561, speed: 8, damage: 4, harvestLevel: 3 },
   },
+  [ItemType.GOLD_SHOVEL]: {
+    name: 'Altın Kürek',
+    tool: { type: 'shovel', material: 'gold', durability: 32, speed: 12, damage: 1, harvestLevel: 0 },
+  },
 
   // Swords
   [ItemType.WOODEN_SWORD]: {
@@ -558,6 +585,10 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   [ItemType.DIAMOND_SWORD]: {
     name: 'Elmas Kılıç',
     tool: { type: 'sword', material: 'diamond', durability: 1561, speed: 1.5, damage: 7, harvestLevel: 3 },
+  },
+  [ItemType.GOLD_SWORD]: {
+    name: 'Altın Kılıç',
+    tool: { type: 'sword', material: 'gold', durability: 32, speed: 1.5, damage: 4, harvestLevel: 0 },
   },
 
   // Food
@@ -613,24 +644,35 @@ export const ITEM_DEFS: Record<number, ItemDef> = {
   // Armor
   [ItemType.IRON_HELMET]: {
     name: 'Demir Kask',
-    armor: { slot: 'helmet', defense: 2, durability: 165 },
+    armor: { slot: 'helmet', material: 'iron', defense: 2, durability: 165 },
   },
   [ItemType.IRON_CHESTPLATE]: {
     name: 'Demir Zırh',
-    armor: { slot: 'chest', defense: 6, durability: 240 },
+    armor: { slot: 'chest', material: 'iron', defense: 6, durability: 240 },
   },
   [ItemType.IRON_LEGGINGS]: {
     name: 'Demir Pantolon',
-    armor: { slot: 'legs', defense: 5, durability: 225 },
+    armor: { slot: 'legs', material: 'iron', defense: 5, durability: 225 },
   },
   [ItemType.IRON_BOOTS]: {
     name: 'Demir Bot',
-    armor: { slot: 'feet', defense: 2, durability: 195 },
+    armor: { slot: 'feet', material: 'iron', defense: 2, durability: 195 },
   },
   [ItemType.DIAMOND_CHESTPLATE]: {
     name: 'Elmas Zırh',
-    armor: { slot: 'chest', defense: 8, durability: 528 },
+    armor: { slot: 'chest', material: 'diamond', defense: 8, durability: 528 },
   },
+  [ItemType.LEATHER_HELMET]: { name: 'Deri Kask', armor: { slot: 'helmet', material: 'leather', defense: 1, durability: 55 } },
+  [ItemType.LEATHER_CHESTPLATE]: { name: 'Deri Göğüslük', armor: { slot: 'chest', material: 'leather', defense: 3, durability: 80 } },
+  [ItemType.LEATHER_LEGGINGS]: { name: 'Deri Pantolon', armor: { slot: 'legs', material: 'leather', defense: 2, durability: 75 } },
+  [ItemType.LEATHER_BOOTS]: { name: 'Deri Bot', armor: { slot: 'feet', material: 'leather', defense: 1, durability: 65 } },
+  [ItemType.GOLD_HELMET]: { name: 'Altın Kask', armor: { slot: 'helmet', material: 'gold', defense: 2, durability: 77 } },
+  [ItemType.GOLD_CHESTPLATE]: { name: 'Altın Göğüslük', armor: { slot: 'chest', material: 'gold', defense: 5, durability: 112 } },
+  [ItemType.GOLD_LEGGINGS]: { name: 'Altın Pantolon', armor: { slot: 'legs', material: 'gold', defense: 3, durability: 105 } },
+  [ItemType.GOLD_BOOTS]: { name: 'Altın Bot', armor: { slot: 'feet', material: 'gold', defense: 1, durability: 91 } },
+  [ItemType.DIAMOND_HELMET]: { name: 'Elmas Kask', armor: { slot: 'helmet', material: 'diamond', defense: 3, durability: 363 } },
+  [ItemType.DIAMOND_LEGGINGS]: { name: 'Elmas Pantolon', armor: { slot: 'legs', material: 'diamond', defense: 6, durability: 495 } },
+  [ItemType.DIAMOND_BOOTS]: { name: 'Elmas Bot', armor: { slot: 'feet', material: 'diamond', defense: 3, durability: 429 } },
 };
 
 // Item fuel values for blocks
@@ -1686,6 +1728,7 @@ export function generateAllItemIcons() {
     wood: { head: '#9c7f4e', light: '#b89860', dark: '#5e4823' },
     stone: { head: '#7f7f7f', light: '#a0a0a0', dark: '#4f4f4f' },
     iron: { head: '#dcdcdc', light: '#ffffff', dark: '#8f8f8f' },
+    gold: { head: '#e8b923', light: '#fff27a', dark: '#9a6a00' },
     diamond: { head: '#4dedf4', light: '#b8ffff', dark: '#1f989e' },
   };
 
@@ -1702,6 +1745,7 @@ export function generateAllItemIcons() {
     [ItemType.STONE_PICKAXE, 'stone'],
     [ItemType.IRON_PICKAXE, 'iron'],
     [ItemType.DIAMOND_PICKAXE, 'diamond'],
+    [ItemType.GOLD_PICKAXE, 'gold'],
   ];
   pickaxes.forEach(([id, matKey]) => {
     drawIcon(id, (ctx) => {
@@ -1723,6 +1767,7 @@ export function generateAllItemIcons() {
     [ItemType.STONE_AXE, 'stone'],
     [ItemType.IRON_AXE, 'iron'],
     [ItemType.DIAMOND_AXE, 'diamond'],
+    [ItemType.GOLD_AXE, 'gold'],
   ];
   axes.forEach(([id, matKey]) => {
     drawIcon(id, (ctx) => {
@@ -1742,6 +1787,7 @@ export function generateAllItemIcons() {
     [ItemType.STONE_SHOVEL, 'stone'],
     [ItemType.IRON_SHOVEL, 'iron'],
     [ItemType.DIAMOND_SHOVEL, 'diamond'],
+    [ItemType.GOLD_SHOVEL, 'gold'],
   ];
   shovels.forEach(([id, matKey]) => {
     drawIcon(id, (ctx) => {
@@ -1760,6 +1806,7 @@ export function generateAllItemIcons() {
     [ItemType.STONE_SWORD, 'stone'],
     [ItemType.IRON_SWORD, 'iron'],
     [ItemType.DIAMOND_SWORD, 'diamond'],
+    [ItemType.GOLD_SWORD, 'gold'],
   ];
   swords.forEach(([id, matKey]) => {
     drawIcon(id, (ctx) => {
@@ -1781,46 +1828,79 @@ export function generateAllItemIcons() {
     });
   });
 
-  // Iron Armor
-  drawIcon(ItemType.IRON_HELMET, (ctx) => {
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillRect(8, 8, 16, 14);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(10, 16, 12, 6);
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillRect(15, 14, 2, 8); // nose guard
-  });
-
-  drawIcon(ItemType.IRON_CHESTPLATE, (ctx) => {
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillRect(6, 6, 20, 18);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(12, 6, 8, 4); // neck opening
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(8, 10, 4, 8);
-  });
-
-  drawIcon(ItemType.IRON_LEGGINGS, (ctx) => {
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillRect(8, 6, 16, 6);
-    ctx.fillRect(8, 12, 6, 14);
-    ctx.fillRect(18, 12, 6, 14);
-  });
-
-  drawIcon(ItemType.IRON_BOOTS, (ctx) => {
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillRect(6, 10, 8, 12);
-    ctx.fillRect(18, 10, 8, 12);
-  });
-
-  drawIcon(ItemType.DIAMOND_CHESTPLATE, (ctx) => {
-    ctx.fillStyle = '#4dedf4';
-    ctx.fillRect(6, 6, 20, 18);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(12, 6, 8, 4);
-    ctx.fillStyle = '#b8ffff';
-    ctx.fillRect(8, 10, 4, 8);
-  });
+  // Four complete armor families, using clear pixel-art silhouettes per slot.
+  const drawArmorIcon = (id: ItemType, piece: 'helmet' | 'chest' | 'legs' | 'boots', colors: { main: string; light: string; dark: string }) => {
+    drawIcon(id, (ctx) => {
+      ctx.fillStyle = colors.dark;
+      if (piece === 'helmet') {
+        ctx.fillRect(7, 11, 18, 13);
+        ctx.fillRect(9, 7, 14, 5);
+        ctx.fillStyle = colors.main;
+        ctx.fillRect(9, 9, 14, 12);
+        ctx.fillRect(11, 6, 10, 4);
+        ctx.fillStyle = colors.light;
+        ctx.fillRect(11, 10, 4, 3);
+        ctx.fillRect(9, 18, 14, 3);
+        ctx.fillStyle = '#1d2023';
+        ctx.fillRect(11, 15, 10, 4);
+      } else if (piece === 'chest') {
+        ctx.fillRect(5, 8, 22, 17);
+        ctx.fillRect(7, 5, 7, 7);
+        ctx.fillRect(18, 5, 7, 7);
+        ctx.fillStyle = colors.main;
+        ctx.fillRect(8, 8, 16, 14);
+        ctx.fillRect(6, 10, 5, 10);
+        ctx.fillRect(21, 10, 5, 10);
+        ctx.fillStyle = colors.light;
+        ctx.fillRect(10, 9, 4, 7);
+        ctx.fillRect(14, 20, 4, 3);
+        ctx.fillStyle = '#1d2023';
+        ctx.fillRect(13, 6, 6, 4);
+      } else if (piece === 'legs') {
+        ctx.fillRect(7, 6, 18, 7);
+        ctx.fillRect(8, 12, 7, 15);
+        ctx.fillRect(17, 12, 7, 15);
+        ctx.fillStyle = colors.main;
+        ctx.fillRect(9, 8, 14, 4);
+        ctx.fillRect(10, 13, 4, 11);
+        ctx.fillRect(18, 13, 4, 11);
+        ctx.fillStyle = colors.light;
+        ctx.fillRect(10, 8, 5, 2);
+        ctx.fillRect(10, 14, 2, 7);
+      } else {
+        ctx.fillRect(6, 12, 9, 13);
+        ctx.fillRect(17, 12, 9, 13);
+        ctx.fillRect(5, 22, 11, 5);
+        ctx.fillRect(16, 22, 11, 5);
+        ctx.fillStyle = colors.main;
+        ctx.fillRect(8, 13, 5, 8);
+        ctx.fillRect(19, 13, 5, 8);
+        ctx.fillRect(7, 22, 8, 3);
+        ctx.fillRect(17, 22, 8, 3);
+        ctx.fillStyle = colors.light;
+        ctx.fillRect(8, 14, 2, 5);
+        ctx.fillRect(19, 14, 2, 5);
+      }
+    });
+  };
+  const armorColors = {
+    leather: { main: '#9a6338', light: '#c18a55', dark: '#57361f' },
+    iron: { main: '#c9d0d4', light: '#f4f6f7', dark: '#69747c' },
+    gold: { main: '#edc52e', light: '#fff18a', dark: '#8f6508' },
+    diamond: { main: '#42d9dc', light: '#b9ffff', dark: '#176f7a' },
+  };
+  const armorSets: Array<{ colors: typeof armorColors.leather; ids: [ItemType, ItemType, ItemType, ItemType] }> = [
+    { colors: armorColors.leather, ids: [ItemType.LEATHER_HELMET, ItemType.LEATHER_CHESTPLATE, ItemType.LEATHER_LEGGINGS, ItemType.LEATHER_BOOTS] },
+    { colors: armorColors.iron, ids: [ItemType.IRON_HELMET, ItemType.IRON_CHESTPLATE, ItemType.IRON_LEGGINGS, ItemType.IRON_BOOTS] },
+    { colors: armorColors.gold, ids: [ItemType.GOLD_HELMET, ItemType.GOLD_CHESTPLATE, ItemType.GOLD_LEGGINGS, ItemType.GOLD_BOOTS] },
+    { colors: armorColors.diamond, ids: [ItemType.DIAMOND_HELMET, ItemType.DIAMOND_CHESTPLATE, ItemType.DIAMOND_LEGGINGS, ItemType.DIAMOND_BOOTS] },
+  ];
+  for (const set of armorSets) {
+    drawArmorIcon(set.ids[0], 'helmet', set.colors);
+    drawArmorIcon(set.ids[1], 'chest', set.colors);
+    drawArmorIcon(set.ids[2], 'legs', set.colors);
+    drawArmorIcon(set.ids[3], 'boots', set.colors);
+  }
 }
 
 /**
