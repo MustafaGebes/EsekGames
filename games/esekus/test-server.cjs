@@ -9,9 +9,13 @@ function connect(name) {
   return { ws, messages, name, send(type, body = {}) { ws.send(JSON.stringify({ type, ...body })); }, latestRoom() { return [...messages].reverse().find((item) => item.room)?.room; } };
 }
 async function open(client) {
-  await new Promise((resolve, reject) => { client.ws.once('open', resolve); client.ws.once('error', reject); });
-  client.send('register', { name: client.name });
-  await delay(80);
+  if (client.ws.readyState !== WebSocket.OPEN) await new Promise((resolve, reject) => { client.ws.once('open', resolve); client.ws.once('error', reject); });
+  client.send('register', { token: client.token || '', name: client.name });
+  await until(() => client.messages.some((item) => item.type === 'registered' || item.type === 'error'), 'identity registration');
+  const registration = client.messages.find((item) => item.type === 'registered');
+  if (!registration) throw new Error(client.messages.find((item) => item.type === 'error')?.message || 'identity registration failed');
+  client.name = registration.name;
+  client.identityType = registration.identityType;
 }
 async function until(predicate, message, timeout = 7000) {
   const start = Date.now();
@@ -21,7 +25,9 @@ async function until(predicate, message, timeout = 7000) {
 (async () => {
   const clients = Array.from({ length: 7 }, (_, index) => connect(`Test Eşek ${index + 1}`));
   try {
-    await Promise.all(clients.map(open));
+    for (const client of clients) await open(client);
+    assert.deepEqual(clients.map((client) => client.name), Array.from({ length: 7 }, (_, index) => `Guest-${String(index).padStart(3, '0')}`), 'guests receive the first free sequential server-assigned IDs');
+    assert.ok(clients.every((client) => client.identityType === 'guest'), 'unauthed players enter as guests even when they submit a spoofed name');
     clients[0].send('create_room', { name: 'Ahenk Test Lobisi' });
     await until(() => clients[0].latestRoom()?.players?.length === 1, 'create room');
     const roomId = clients[0].latestRoom().id;
@@ -39,7 +45,7 @@ async function until(predicate, message, timeout = 7000) {
     clients.pop();
     await until(() => clients[0].latestRoom()?.phase === 'lobby' && clients[0].latestRoom()?.chat?.some((item) => item.text.includes('geri sayım iptal edildi')), 'countdown cancellation');
 
-    const replacement = connect('Test Eşek 7'); clients.push(replacement); await open(replacement); replacement.send('join_room', { roomId });
+    const replacement = connect('Spoofed Player Name'); replacement.token = 'expired-token'; clients.push(replacement); await open(replacement); assert.equal(replacement.name, 'Guest-006', 'after Guest-000..006 were present and Guest-006 left, the first free ID is reused'); replacement.send('join_room', { roomId });
     await until(() => replacement.latestRoom()?.players?.length === 7, 'replacement joins');
     clients[0].send('start_game');
     await until(() => clients[0].messages.some((item) => item.type === 'role_reveal'), 'match role reveal', 7500);

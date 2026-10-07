@@ -5,7 +5,7 @@ import './style.css';
 const $ = (id) => document.getElementById(id);
 const screens = ['home-view', 'online-view', 'lobby-view', 'settings-view', 'controls-view', 'game-view'];
 const palette = ['#ea4848', '#38c984', '#4ba5ff', '#f3b744', '#bb65e8'];
-const state = { socket: null, connected: false, id: null, room: null, rooms: [], name: localStorage.getItem('eu-name') || '', color: localStorage.getItem('eu-mobile-color') || '#ea4848', view: 'home-view', position: { x: 0, z: -7 }, keys: new Set(), meetingSignature: '', lobbyChatSignature: '', meetingChatSignature: '', taskBusy: false, lastMoveSend: 0, lastTick: performance.now(), toastTimer: null, lastPhase: null };
+const state = { socket: null, connected: false, registered: false, wantsOnline: false, id: null, room: null, rooms: [], name: '', isAccount: false, color: localStorage.getItem('eu-mobile-color') || '#ea4848', view: 'home-view', position: { x: 0, z: -7 }, keys: new Set(), meetingSignature: '', lobbyChatSignature: '', meetingChatSignature: '', taskBusy: false, lastMoveSend: 0, lastTick: performance.now(), toastTimer: null, lastPhase: null };
 const canvas = $('space-canvas');
 let ship;
 try { ship = new ShipScene(canvas); } catch (error) { console.error(error); notify('3D sahne başlatılamadı. Tarayıcı WebGL desteğini kontrol et.', true); }
@@ -27,21 +27,34 @@ function send(type, details = {}) {
 function setConnection(isOnline) {
   state.connected = isOnline;
   const box = document.querySelector('.status'); box?.classList.toggle('online', isOnline); box?.classList.toggle('offline', !isOnline);
-  $('connection-label').textContent = isOnline ? 'Ahenk-7 ağı çevrimiçi' : 'Sunucu bağlantısı kesildi';
+  $('connection-label').textContent = isOnline ? 'Ahenk-7 ağı çevrimiçi' : (state.wantsOnline ? 'Sunucu bağlantısı kesildi' : 'Çevrimiçi olmak için Oyna');
+}
+function authToken() {
+  try { const account = JSON.parse(localStorage.getItem('esekAuth') || 'null'); if (typeof account?.token === 'string') return account.token; } catch {}
+  return localStorage.getItem('esek_auth_token') || localStorage.getItem('authToken') || '';
 }
 function connect() {
-  if (state.socket && (state.socket.readyState === WebSocket.OPEN || state.socket.readyState === WebSocket.CONNECTING)) return;
+  state.wantsOnline = true;
+  if (state.socket?.readyState === WebSocket.OPEN) { if (state.registered) send('rooms_request'); return; }
+  if (state.socket?.readyState === WebSocket.CONNECTING) return;
   const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const socket = new WebSocket(`${scheme}//${location.host}/games/esekus/ws`); state.socket = socket;
-  socket.addEventListener('open', () => { setConnection(true); send('register', { name: state.name || 'Gezgin Eşek' }); });
+  socket.addEventListener('open', () => { setConnection(true); send('register', { token: authToken() }); });
   socket.addEventListener('message', (event) => { let data; try { data = JSON.parse(event.data); } catch { return; } handleServer(data); });
-  socket.addEventListener('close', () => { setConnection(false); if (state.socket === socket) { state.socket = null; if (state.room) notify('Sunucu bağlantısı kesildi. Aktif oda durumu artık güncel değil.', true); setTimeout(connect, 2200); } });
+  socket.addEventListener('close', () => { setConnection(false); if (state.socket === socket) { state.socket = null; state.registered = false; if (state.room) { state.room = null; state.lastPhase = null; if (state.wantsOnline) showView('online-view'); notify('Sunucu bağlantısı kesildi; yeniden bağlanıyorum.', true); } if (state.wantsOnline) setTimeout(() => { if (state.wantsOnline) connect(); }, 2200); } });
   socket.addEventListener('error', () => setConnection(false));
+}
+function stopOnline() {
+  state.wantsOnline = false;
+  if (state.room && state.socket?.readyState === WebSocket.OPEN) send('leave_room');
+  state.room = null; state.registered = false; state.name = '';
+  const socket = state.socket; state.socket = null; if (socket) socket.close();
+  setConnection(false);
 }
 function handleServer(data) {
   switch (data.type) {
     case 'connected': state.id = data.id; break;
-    case 'registered': state.id = data.id; setConnection(true); break;
+    case 'registered': { state.id = data.id; state.registered = true; state.name = data.name || ''; state.isAccount = !!data.isAccount; $('player-name').value = state.name; $('settings-name').value = state.name; $('identity-type').textContent = state.isAccount ? 'ESEKGAMES HESABI' : 'MİSAFİR'; $('identity-type').classList.toggle('identity-account', state.isAccount); $('identity-type').classList.toggle('identity-guest', !state.isAccount); $('identity-note').textContent = state.isAccount ? 'EsekGames hesabın doğrulandı; ortak hesap kullanıcı adın kullanılıyor.' : `Hesap oturumu bulunmadı; sunucu sana ilk boş ${state.name} kimliğini verdi.`; setConnection(true); renderRooms(); break; }
     case 'rooms_list': state.rooms = data.rooms || []; renderRooms(); break;
     case 'room_joined': break;
     case 'room_state':
@@ -52,8 +65,8 @@ function handleServer(data) {
       if (data.room) updateRoom(data.room, data); break;
     case 'role_reveal': showRole(data); break;
     case 'game_over': if (data.room) updateRoom(data.room, data); showGameOver(data); break;
-    case 'room_left': state.room = null; state.lastPhase = null; showView('online-view'); send('rooms_request'); break;
-    case 'error': notify(data.message || 'İşlem gerçekleştirilemedi.', true); break;
+    case 'room_left': state.room = null; state.lastPhase = null; if (state.wantsOnline) { showView('online-view'); send('rooms_request'); } else showView('home-view'); break;
+    case 'error': if (data.code === 'identity_in_use') { state.registered = false; $('identity-type').textContent = 'OTURUM ÇAKIŞMASI'; $('identity-note').textContent = data.message || 'Bu hesap başka bir oturumda açık.'; } notify(data.message || 'İşlem gerçekleştirilemedi.', true); break;
     default: break;
   }
 }
@@ -88,7 +101,7 @@ function renderRooms() {
     const info = document.createElement('div'); info.className = 'room-info';
     const title = document.createElement('b'); title.textContent = room.name;
     const details = document.createElement('small'); details.textContent = `${room.hostName} · ${room.mapName} · ${room.currentPlayers}/${room.maxPlayers}`;
-    info.append(title, details); const join = document.createElement('button'); join.className = 'room-join'; join.textContent = room.isOpen && room.phase === 'lobby' ? 'KATIL' : 'DOLU'; join.disabled = !room.isOpen || room.phase !== 'lobby'; join.addEventListener('click', () => send('join_room', { roomId: room.id }));
+    info.append(title, details); const join = document.createElement('button'); join.className = 'room-join'; join.textContent = room.isOpen && room.phase === 'lobby' ? 'KATIL' : 'DOLU'; join.disabled = !state.registered || !room.isOpen || room.phase !== 'lobby'; join.addEventListener('click', () => send('join_room', { roomId: room.id }));
     card.append(symbol, info, join); return card;
   }));
 }
@@ -207,24 +220,21 @@ function reportOrMeeting() {
   notify('Rapor için cesede yaklaş veya köprüde acil toplantı çağır.');
 }
 function applySettings() {
-  const settingsName = $('settings-name').value.trim(); if (settingsName) state.name = settingsName.slice(0, 18);
-  localStorage.setItem('eu-name', state.name); localStorage.setItem('eu-mobile-color', state.color); document.documentElement.style.setProperty('--mobile-action', state.color); $('player-name').value = state.name;
-  if (!state.room) { if (state.socket) { state.socket.close(); state.socket = null; } connect(); }
+  localStorage.setItem('eu-mobile-color', state.color); document.documentElement.style.setProperty('--mobile-action', state.color); $('settings-name').value = state.name || '';
   notify('Ayarlar kaydedildi.');
 }
-function savePlayerName() { state.name = $('player-name').value.trim().slice(0, 18) || 'Gezgin Eşek'; $('player-name').value = state.name; $('settings-name').value = state.name; localStorage.setItem('eu-name', state.name); if (!state.room) { if (state.socket) { state.socket.close(); state.socket = null; } connect(); } notify('Mürettebat adı kaydedildi.'); }
 function toggleMobileControls() { $('mobile-pad').classList.toggle('is-hidden'); }
 
-$('play-button').addEventListener('click', () => { connect(); showView('online-view'); $('player-name').value = state.name; send('rooms_request'); });
-$('settings-button').addEventListener('click', () => { $('settings-name').value = state.name; document.querySelectorAll('#button-colors button').forEach((button) => button.classList.toggle('selected', button.dataset.color === state.color)); showView('settings-view'); });
+$('play-button').addEventListener('click', () => { showView('online-view'); connect(); });
+$('settings-button').addEventListener('click', () => { $('settings-name').value = state.name || ''; document.querySelectorAll('#button-colors button').forEach((button) => button.classList.toggle('selected', button.dataset.color === state.color)); showView('settings-view'); });
 $('settings-save').addEventListener('click', applySettings);
 $('button-colors').addEventListener('click', (event) => { const button = event.target.closest('button[data-color]'); if (!button) return; state.color = button.dataset.color; document.documentElement.style.setProperty('--mobile-action', state.color); document.querySelectorAll('#button-colors button').forEach((item) => item.classList.toggle('selected', item === button)); });
 $('pc-controls-button').addEventListener('click', () => { $('controls-title').textContent = 'PC kontrolleri'; $('controls-body').innerHTML = '<div class="control-row"><span>Hareket</span><b>W A S D / Oklar</b></div><div class="control-row"><span>Görev / Etkileşim</span><b>E</b></div><div class="control-row"><span>Rapor / toplantı</span><b>Q</b></div><div class="control-row"><span>Menüden ayrıl</span><b>ESC</b></div>'; showView('controls-view'); });
 $('mobile-controls-button').addEventListener('click', () => { $('controls-title').textContent = 'Mobil kontrolleri'; $('controls-body').innerHTML = '<div class="control-row"><span>Hareket</span><b>Sol sanal joystick</b></div><div class="control-row"><span>Görev / etkileşim</span><b>Sağdaki renkli düğme</b></div><div class="control-row"><span>Rapor / gizli eylem</span><b>! düğmesi</b></div><div class="control-row"><span>Düğme rengini değiştir</span><b>Ayarlar</b></div>'; showView('controls-view'); });
 $('exit-button').addEventListener('click', () => { if (state.room) send('leave_room'); location.href = '/'; });
-document.querySelectorAll('[data-home]').forEach((button) => button.addEventListener('click', () => showView('home-view')));
-$('save-name').addEventListener('click', savePlayerName); $('refresh-rooms').addEventListener('click', () => send('rooms_request'));
-$('create-room').addEventListener('click', () => { if (!state.connected) return notify('Önce sunucu bağlantısı kurulmalı.', true); const name = prompt('Lobi adını yaz:'); if (name === null) return; send('create_room', { name }); });
+document.querySelectorAll('[data-home]').forEach((button) => button.addEventListener('click', () => { if (state.view === 'online-view' && !state.room) stopOnline(); showView('home-view'); }));
+$('refresh-rooms').addEventListener('click', () => send('rooms_request'));
+$('create-room').addEventListener('click', () => { if (!state.registered) return notify('Önce EsekGames kimliğinin doğrulanmasını bekle.', true); const name = prompt('Lobi adını yaz:'); if (name === null) return; send('create_room', { name }); });
 $('start-game').addEventListener('click', () => send('start_game'));
 $('leave-lobby').addEventListener('click', () => send('leave_room'));
 $('chat-form').addEventListener('submit', (event) => { event.preventDefault(); const input = $('chat-input'); const text = input.value.trim(); if (text) send('chat', { text }); input.value = ''; input.focus(); });
@@ -239,9 +249,14 @@ joystick.addEventListener('pointermove', (event) => { if (event.pointerId === jo
 function updateJoy(event) { const rect = joystick.getBoundingClientRect(); const dx = event.clientX - rect.left - rect.width / 2; const dy = event.clientY - rect.top - rect.height / 2; const max = rect.width * .31; const len = Math.hypot(dx, dy) || 1; const x = dx * Math.min(1, max / len), y = dy * Math.min(1, max / len); joystick.firstElementChild.style.transform = `translate(${x}px,${y}px)`; state.joy = { x: x / max, y: y / max }; }
 function endJoy(event) { if (event.pointerId !== joyPointer) return; joyPointer = null; state.joy = { x: 0, y: 0 }; joystick.firstElementChild.style.transform = ''; }
 joystick.addEventListener('pointerup', endJoy); joystick.addEventListener('pointercancel', endJoy); joystick.addEventListener('lostpointercapture', () => { state.joy = { x: 0, y: 0 }; joystick.firstElementChild.style.transform = ''; });
-window.addEventListener('keydown', (event) => { if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return; if (event.key === 'Escape') { if (!state.room) showView('home-view'); else if (state.taskBusy) document.querySelector('.task-overlay')?.remove(); return; } const key = event.key.toLowerCase(); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) { event.preventDefault(); state.keys.add(key); } if (key === 'e') interact(); if (key === 'q') state.room?.myRole === 'impostor' ? killNearest() : reportOrMeeting(); });
+window.addEventListener('keydown', (event) => { if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return; if (event.key === 'Escape') { if (!state.room) { if (state.view === 'online-view') stopOnline(); showView('home-view'); } else if (state.taskBusy) document.querySelector('.task-overlay')?.remove(); return; } const key = event.key.toLowerCase(); if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) { event.preventDefault(); state.keys.add(key); } if (key === 'e') interact(); if (key === 'q') state.room?.myRole === 'impostor' ? killNearest() : reportOrMeeting(); });
 window.addEventListener('keyup', (event) => state.keys.delete(event.key.toLowerCase()));
 window.addEventListener('blur', () => state.keys.clear());
+window.addEventListener('storage', (event) => {
+  if (!['esekAuth', 'esek_auth_token', 'authToken'].includes(event.key) || !state.wantsOnline || state.room) return;
+  state.registered = false; state.name = ''; $('identity-type').textContent = 'OTURUM YENİLENİYOR'; $('identity-note').textContent = 'EsekGames hesap bilgisi değişti; yeniden doğrulanıyor.';
+  const socket = state.socket; state.socket = null; if (socket) socket.close(); setTimeout(() => { if (state.wantsOnline && !state.room) connect(); }, 100);
+});
 function tick(now) {
   requestAnimationFrame(tick); const dt = Math.min(.05, (now - state.lastTick) / 1000); state.lastTick = now;
   if (state.room?.phase === 'playing') {
@@ -258,6 +273,6 @@ function tick(now) {
 const loading = $('loading'); const progress = $('load-progress'); let loadValue = 4;
 const loadTimer = setInterval(() => { loadValue = Math.min(94, loadValue + 9 + Math.random() * 13); progress.style.width = `${loadValue}%`; if (loadValue >= 94) clearInterval(loadTimer); }, 110);
 window.addEventListener('load', () => setTimeout(() => { progress.style.width = '100%'; loading.style.opacity = '0'; setTimeout(() => { loading.remove(); $('app').classList.remove('is-hidden'); }, 650); }, 650));
-state.name = state.name || 'Gezgin Eşek'; $('player-name').value = state.name; $('settings-name').value = state.name; document.documentElement.style.setProperty('--mobile-action', state.color);
+$('player-name').value = ''; $('settings-name').value = ''; $('identity-type').textContent = 'OYNA İLE BAĞLAN'; document.documentElement.style.setProperty('--mobile-action', state.color); $('connection-label').textContent = 'Çevrimiçi olmak için Oyna';
 if (matchMedia('(pointer: coarse)').matches || innerWidth < 680) $('mobile-pad').classList.remove('is-hidden');
-connect(); requestAnimationFrame(tick); showView('home-view');
+requestAnimationFrame(tick); showView('home-view');

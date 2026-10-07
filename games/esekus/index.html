@@ -40,7 +40,7 @@
 
     <section id="online-view" class="view panel-view is-hidden">
       <div class="panel panel-wide"><button class="back-button" data-home>← Menü</button><div class="panel-heading"><p class="eyebrow">AHENK-7 AĞI</p><h2>Online sunucular</h2><p>Bir mürettebata katıl ya da kendi lobini kur.</p></div>
-        <label class="field-label" for="player-name">Mürettebat adı</label><div class="join-name"><input id="player-name" maxlength="18" placeholder="Adını yaz" /><button id="save-name" class="button button-small">Kaydet</button></div>
+        <label class="field-label" for="player-name">EsekGames hesabı / misafir kimliği</label><div class="join-name"><input id="player-name" maxlength="20" placeholder="Oyna'ya basınca atanacak" readonly /><span id="identity-type" class="identity-badge">BAĞLANIYOR</span></div><small id="identity-note" class="identity-note">EsekGames hesabın varsa o ad kullanılır; hesabın yoksa sunucu otomatik olarak Guest-### atar.</small><a class="account-link" href="/" target="_blank" rel="noopener noreferrer">EsekGames ana sayfasında giriş / hesap oluştur</a>
         <div class="server-toolbar"><div><b>Açık lobiler</b><small id="room-count">Sunucu listesi bekleniyor</small></div><button id="refresh-rooms" class="icon-button" title="Yenile">↻</button></div>
         <div id="room-list" class="room-list"><div class="empty-state"><span>◌</span><b>Lobi aranıyor...</b><small>Bağlantı kurulduğunda açık odalar burada görünür.</small></div></div>
         <div class="create-row"><span><b>Kendi ekibini topla</b><small>Tek harita · 4–10 oyuncu</small></span><button id="create-room" class="button button-primary button-small">Lobi oluştur <b>＋</b></button></div>
@@ -56,7 +56,7 @@
 
     <section id="settings-view" class="view panel-view is-hidden">
       <div class="panel panel-narrow"><button class="back-button" data-home>← Menü</button><div class="panel-heading"><p class="eyebrow">KİŞİSEL AYARLAR</p><h2>Oyun ayarları</h2><p>Tercihler bu cihazda saklanır.</p></div>
-        <label class="field-label" for="settings-name">Oyuncu adı</label><input id="settings-name" class="text-field" maxlength="18" placeholder="Gezgin Eşek" />
+        <label class="field-label" for="settings-name">Bu oturumdaki kimlik</label><input id="settings-name" class="text-field" maxlength="20" placeholder="Çevrimiçi olunca atanır" readonly />
         <label class="field-label">Mobil etkileşim düğmesi rengi</label><div class="color-choices" id="button-colors"><button data-color="#ea4848" style="--swatch:#ea4848" aria-label="Kırmızı"></button><button data-color="#38c984" style="--swatch:#38c984" aria-label="Yeşil"></button><button data-color="#4ba5ff" style="--swatch:#4ba5ff" aria-label="Mavi"></button><button data-color="#f3b744" style="--swatch:#f3b744" aria-label="Altın"></button><button data-color="#bb65e8" style="--swatch:#bb65e8" aria-label="Mor"></button></div>
         <button id="settings-save" class="button button-primary full-button">Ayarları kaydet</button>
         <div class="settings-tip"><b>Oyun akışı</b><span>Mürettebat görevleri tamamlar; gizli ekip birbirini tanır ve mürettebatı durdurmaya çalışır. Toplantılarda yazılı sohbet ve oylama açılır.</span></div>

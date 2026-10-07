@@ -5,7 +5,8 @@
   "scripts": {
     "prestart": "npm run build:esekus",
     "start": "node server.js",
-    "build:esekus": "vite build --config games/esekus/vite.config.js"
+    "build:esekus": "vite build --config games/esekus/vite.config.js",
+    "test:esekus:identity": "node games/esekus/test-identity.cjs"
   },
   "dependencies": {
     "express": "^4.19.2",

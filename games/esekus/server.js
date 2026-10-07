@@ -21,7 +21,7 @@ const TASK_BY_ID = new Map(TASKS.map((task) => [task.id, task]));
 const now = () => Date.now();
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-const safeName = (value) => String(value || "Gezgin Eşek").replace(/[<>\u0000-\u001f]/g, "").trim().replace(/\s+/g, " ").slice(0, 18) || "Gezgin Eşek";
+const safeName = (value) => String(value || "Gezgin Eşek").replace(/[<>\u0000-\u001f]/g, "").trim().replace(/\s+/g, " ").slice(0, 20) || "Gezgin Eşek";
 const send = (client, payload) => {
   if (client && client.socket && client.socket.readyState === 1) client.socket.send(JSON.stringify(payload));
 };
@@ -214,10 +214,37 @@ function resolveMeeting(room) {
 }
 function handleMessage(client, data) {
   const room = rooms.get(client.roomId);
+  if (data.type !== "register" && !client.registered) return send(client, { type: "error", code: "identity_required", message: "Önce EsekGames kimliğin doğrulanmalı." });
   switch (data.type) {
     case "register": {
-      client.name = safeName(data.name);
-      send(client, { type: "registered", id: client.id, name: client.name, mapId: MAP_ID, mapName: MAP_NAME, minPlayers: MIN_PLAYERS });
+      if (client.registered) {
+        send(client, { type: "registered", id: client.id, name: client.name, isAccount: client.isAccount, identityType: client.identityType, mapId: MAP_ID, mapName: MAP_NAME, minPlayers: MIN_PLAYERS });
+        return;
+      }
+      const auth = client.authServices;
+      if (!auth || typeof auth.resolveAccountToken !== "function" || typeof auth.allocateGuestName !== "function") {
+        send(client, { type: "error", code: "identity_unavailable", message: "EsekGames kimlik servisine şu anda ulaşılamıyor." });
+        return;
+      }
+      const token = String(data.token || "").trim().slice(0, 128);
+      const account = auth.resolveAccountToken(token);
+      const accountName = account?.username ? safeName(account.username) : "";
+      const localNameInUse = (name) => [...clients.values()].some((other) => other.id !== client.id && other.registered && other.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+      if (accountName) {
+        if (localNameInUse(accountName) || auth.isSharedNameUsed?.(accountName)) {
+          send(client, { type: "error", code: "identity_in_use", message: "Bu EsekGames hesabı başka bir çevrimiçi oturumda kullanılıyor. Diğer oyundan çıkıp tekrar dene." });
+          return;
+        }
+        client.name = accountName;
+        client.isAccount = true;
+        client.identityType = "account";
+      } else {
+        client.name = auth.allocateGuestName((candidate) => localNameInUse(candidate));
+        client.isAccount = false;
+        client.identityType = "guest";
+      }
+      client.registered = true;
+      send(client, { type: "registered", id: client.id, name: client.name, isAccount: client.isAccount, identityType: client.identityType, mapId: MAP_ID, mapName: MAP_NAME, minPlayers: MIN_PLAYERS });
       send(client, { type: "rooms_list", rooms: publicRooms(), mapId: MAP_ID, mapName: MAP_NAME });
       return;
     }
@@ -290,8 +317,8 @@ function handleMessage(client, data) {
   }
 }
 
-function attachEsekusSocket(socket) {
-  const client = { id: randomId("P"), socket, name: "Gezgin Eşek", color: COLORS[clients.size % COLORS.length], roomId: null, role: null, alive: true, tasks: [], x: 0, z: -7, lastMoveAt: now(), lastChatAt: 0, lastKillAt: 0 };
+function attachEsekusSocket(socket, authServices = null) {
+  const client = { id: randomId("P"), socket, name: null, registered: false, isAccount: false, identityType: null, authServices, color: COLORS[clients.size % COLORS.length], roomId: null, role: null, alive: true, tasks: [], x: 0, z: -7, lastMoveAt: now(), lastChatAt: 0, lastKillAt: 0 };
   clients.set(client.id, client);
   socket.on("message", (raw) => {
     if (raw.length > 2048) return socket.close(1009, "Mesaj boyutu sınırı aşıldı");

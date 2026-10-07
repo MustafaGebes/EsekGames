@@ -1887,9 +1887,9 @@ function isNameUsed(name, exceptId = null) {
     return false;
 }
 
-function allocateGuestName() {
+function allocateGuestName(extraNameIsUsed = null) {
     let number = 0;
-    while (isNameUsed(guestName(number))) number++;
+    while (isNameUsed(guestName(number)) || (typeof extraNameIsUsed === "function" && extraNameIsUsed(guestName(number)))) number++;
     return guestName(number);
 }
 
@@ -2676,7 +2676,14 @@ function handleRespawn(player) {
 
 wss.on("connection", (ws, req) => {
     if (String(req.url || "").split("?")[0] === "/games/esekus/ws") {
-        attachEsekusSocket(ws);
+        attachEsekusSocket(ws, {
+            resolveAccountToken: (token) => {
+                const found = findAccountByToken(token);
+                return found ? { username: found.account.username } : null;
+            },
+            isSharedNameUsed: (name) => isNameUsed(name),
+            allocateGuestName: (extraNameIsUsed) => allocateGuestName(extraNameIsUsed)
+        });
         return;
     }
     const player = createPlayer(ws);
