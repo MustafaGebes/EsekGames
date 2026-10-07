@@ -6,3 +6,62 @@
 .task-overlay{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:16px;background:#03080ddc;backdrop-filter:blur(8px)}.task-modal{position:relative;width:min(100%,390px);padding:24px;border:1px solid #b7e9d13a;border-radius:12px;background:linear-gradient(145deg,#17272c,#0b151b);box-shadow:0 25px 90px #000c;text-align:center}.task-modal h2{margin:2px 0 8px;color:#eef1e6;font:800 30px 'Barlow Condensed',sans-serif}.task-modal p{margin:0 auto 18px;max-width:300px;color:#a8bbb2;font-size:11px;line-height:1.65}.task-close{position:absolute;right:12px;top:9px;border:0;background:transparent;color:#b0c0b8;font-size:23px}.task-progress{margin:12px auto 14px;color:#9fe0b7;font-size:9px;font-weight:900;letter-spacing:.18em}.task-nodes{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:8px 0 15px}.task-nodes button{height:55px;border:1px solid #6aa98a55;border-radius:9px;background:#132720;color:#c5f0d3;font-size:18px;font-weight:900;box-shadow:inset 0 0 18px #7cdaa00b}.task-nodes button:hover{border-color:#91e6b3;background:#1d4032;transform:translateY(-2px)}.task-nodes button.active{background:#63c996;color:#092017;border-color:#c2f2d2}.task-modal>small{color:#879c93;font-size:9px}.meeting-chat{margin-top:12px;border-top:1px solid var(--line);padding-top:9px}.meeting-chat-log{max-height:73px;overflow:auto;display:flex;flex-direction:column;gap:4px;font-size:9px}.meeting-chat-form{display:flex;gap:5px;margin-top:7px}.meeting-chat-form input{flex:1;min-width:0;padding:7px 8px;border:1px solid var(--line);border-radius:5px;background:#081116;color:#e8f1ec;font-size:9px}.meeting-chat-form button{width:27px;border:0;border-radius:5px;background:#294b40;color:#c1e9d1}.room-card .room-join:disabled{opacity:.4}
 
 .identity-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:39px;padding:0 10px;border:1px solid #51645c;border-radius:6px;background:#14221d;color:#c3d5cc;font-size:9px;font-weight:800;letter-spacing:.07em;white-space:nowrap}.identity-badge.identity-account{border-color:#428b6c;background:#123025;color:#95e4b7}.identity-badge.identity-guest{border-color:#816d3c;background:#2a2414;color:#f1d48a}.identity-note{display:block;margin:8px 0;color:#9eb0a7;font-size:10px;line-height:1.65}.account-link{display:inline-flex;margin-top:2px;color:#93d8b5;font-size:10px;text-decoration:none}.account-link:hover{text-decoration:underline;color:#c0f2d4}
+
+
+/* Eşek Us erişilebilir kontrol seçimi, çevrimdışı deneme konsolu ve küçük ekran metin sarmalama */
+.control-select.selected{border-color:#55a8ff!important;box-shadow:0 0 0 1px #55a8ff,0 0 18px #328cff55;background:rgba(20,45,67,.92);color:#f2f8ff}
+.control-select.selected span{color:#a9d4ff}
+.control-select:focus-visible{outline:2px solid #76baff;outline-offset:2px}
+.scene-fallback-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:0;filter:saturate(.76) brightness(.48);pointer-events:none;z-index:0}
+.scene-fallback #scene-fallback-image{opacity:.42}
+.scene-fallback #space-canvas{display:none}
+.practice-console-button{min-height:34px;padding:0 10px;white-space:normal;line-height:1.2;justify-content:center}
+.practice-overlay{position:absolute;inset:0;z-index:35;display:grid;place-items:center;padding:16px;background:rgba(3,8,13,.82);backdrop-filter:blur(7px)}
+.practice-modal{position:relative;width:min(100%,520px);max-height:calc(100vh - 32px);overflow:auto;padding:22px;border:1px solid #80d8b24d;border-radius:13px;background:linear-gradient(145deg,#17272c,#0a141a);box-shadow:0 25px 90px #000c}
+.practice-modal h2{margin:0 32px 6px 0;color:#f0eee2;font:800 32px/1 'Barlow Condensed',sans-serif}
+.practice-modal>p{margin:0 0 16px;color:#a8bbb2;font-size:11px;line-height:1.55;overflow-wrap:anywhere}
+.practice-role-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 18px}
+.practice-role-button,.practice-task-button,.practice-reset-button{min-width:0;border:1px solid var(--line);border-radius:7px;background:#0c171d;color:#d5e1dc;padding:9px 11px;font:700 11px Manrope,Arial;overflow-wrap:anywhere}
+.practice-role-button.selected{border-color:#55a8ff;box-shadow:0 0 0 1px #55a8ff;color:#fff;background:#12263a}
+.practice-task-list{display:grid;gap:7px}
+.practice-task-row{display:flex;align-items:center;gap:8px;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#0c171d}
+.practice-task-copy{flex:1;min-width:0}
+.practice-task-copy b,.practice-task-copy small{display:block;overflow-wrap:anywhere;white-space:normal}
+.practice-task-copy b{font-size:10px;color:#e7eee8}
+.practice-task-copy small{margin-top:3px;font-size:9px;color:#93aaa0}
+.practice-task-button{flex:0 0 auto;padding:7px 8px;font-size:9px}
+.practice-reset-button{width:100%;margin-top:12px;border-color:#68ca9b;color:#c0edcf}
+.practice-modal .task-close{z-index:1}
+.panel-heading h2,.panel-heading p:not(.eyebrow),.field-label,.settings-tip span,.minimum-note,.empty-state small,.identity-note{overflow-wrap:anywhere;white-space:normal}
+.room-info b,.room-info small{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+.player-chip span:nth-child(2){min-width:0;white-space:normal;overflow-wrap:anywhere}
+.control-row{align-items:flex-start;flex-wrap:wrap;min-width:0}
+.control-row>span,.control-row>b{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.control-row>b{text-align:right;margin-left:auto}
+.menu-actions .button{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.chat-line,.task-row span,.nearby-prompt,.game-over-card>p:not(.eyebrow){overflow-wrap:anywhere}
+@media(max-width:520px){
+  .home-view{padding-left:18px;padding-right:18px}
+  .home-copy{width:100%;min-width:0}
+  .menu-actions{width:min(100%,340px)}
+  .menu-actions .button{gap:8px;padding:0 12px;line-height:1.25}
+  .game-top{left:10px;right:10px;gap:6px;flex-wrap:wrap;align-items:center}
+  .ship-badge{min-width:0;max-width:54vw;white-space:normal;overflow-wrap:anywhere}
+  .task-meter{min-width:0;gap:5px}
+  .task-meter>span{font-size:7px}
+  .task-meter>div{width:min(20vw,90px)}
+  .practice-console-button{font-size:8px;max-width:118px}
+  .panel-view{padding-left:10px;padding-right:10px}
+  .panel-heading p:not(.eyebrow){line-height:1.5}
+  .create-row{flex-wrap:wrap;gap:10px;align-items:flex-start}
+  .create-row>span{flex:1 1 140px;min-width:0}
+  .create-row>.button{width:100%;justify-content:center}
+  .control-row{gap:7px}
+  .practice-modal{padding:17px}
+  .practice-task-row{align-items:flex-start;flex-wrap:wrap}
+  .practice-task-button{margin-left:auto}
+}
+
+
+.nearby-prompt{max-width:calc(100vw - 24px);white-space:normal;line-height:1.45}
+.player-chip span:nth-child(2){overflow:visible;text-overflow:clip}

@@ -21,6 +21,7 @@
 
   <main id="app" class="app-shell is-hidden">
     <canvas id="space-canvas" aria-label="Ahenk-7 gemisinin üç boyutlu görünümü"></canvas>
+    <img id="scene-fallback-image" class="scene-fallback-image" src="/assets/loading-screen.jpg" alt="" aria-hidden="true" />
     <div class="grain"></div>
     <header class="topline"><a class="brand" href="/" aria-label="EsekGames'e dön"><span class="brand-mark">EU</span><span>EŞEK <b>US</b></span></a><div class="status"><i></i><span id="connection-label">Sunucuya bağlanıyor</span></div></header>
 
@@ -28,9 +29,10 @@
       <div class="home-copy"><p class="eyebrow"><span>●</span> AHENK-7 / DERİN UZAY GÖREVİ</p><h1>EŞEK<br /><em>US</em></h1><p class="home-intro">Gemi sessiz. Radyoda bir fısıltı var.<br />Görevini yap — ama herkese güvenme.</p>
         <div class="menu-actions">
           <button id="play-button" class="button button-primary"><span>Oyna</span><b>↗</b></button>
+          <button id="practice-button" class="button button-glass practice-launch"><span>Tek başına dene</span><b>✦</b></button>
           <button id="settings-button" class="button button-glass">Ayarlar <span>⌘</span></button>
-          <button id="pc-controls-button" class="button button-glass">PC kontrolleri <span>⌨</span></button>
-          <button id="mobile-controls-button" class="button button-glass">Mobil kontrolleri <span>◉</span></button>
+          <button id="pc-controls-button" class="button button-glass control-select" aria-pressed="false" title="Hareket: WASD / oklar · Etkileşim: E · Rapor/eylem: Q">PC kontrolleri <span>⌨</span></button>
+          <button id="mobile-controls-button" class="button button-glass control-select" aria-pressed="false" title="Hareket: joystick · Etkileşim ve eylem: ekrandaki düğmeler">Mobil kontrolleri <span>◉</span></button>
           <button id="exit-button" class="button button-quiet">Oyundan çık <span>×</span></button>
         </div>
       </div>
@@ -68,7 +70,8 @@
     </section>
 
     <section id="game-view" class="view game-view is-hidden">
-      <div class="game-top"><div class="ship-badge"><i></i><span id="game-phase-label">AHENK-7 / GÖREV AKTİF</span></div><div class="task-meter"><span>GÖREVLER</span><div><i id="task-meter-fill"></i></div><b id="task-meter-text">0%</b></div><button id="leave-game" class="icon-button danger-icon" title="Maçtan ayrıl">×</button></div>
+      <div class="game-top"><div class="ship-badge"><i></i><span id="game-phase-label">AHENK-7 / GÖREV AKTİF</span></div><div class="task-meter"><span>GÖREVLER</span><div><i id="task-meter-fill"></i></div><b id="task-meter-text">0%</b></div><button id="practice-console" class="button button-glass button-small practice-console-button is-hidden" type="button">Deneme konsolu</button><button id="leave-game" class="icon-button danger-icon" title="Maçtan ayrıl">×</button></div>
+      <div id="practice-overlay" class="practice-overlay is-hidden"></div>
       <div class="objective-card" id="objective-card"><small>GÖREV LİSTESİ</small><div id="task-list"></div></div>
       <div class="nearby-prompt" id="nearby-prompt"></div>
       <div class="mobile-pad is-hidden" id="mobile-pad"><div class="joystick" id="joystick"><i></i></div><div class="mobile-actions"><button id="mobile-interact" class="action-button">E<br /><small>ETKİLEŞ</small></button><button id="mobile-danger" class="action-button danger-action">!</button></div></div>

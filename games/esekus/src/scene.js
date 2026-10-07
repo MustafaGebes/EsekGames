@@ -17,9 +17,19 @@ const STATIONS = [
 ];
 const colorMaterial = (color, roughness = 0.62, metalness = 0.22) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') { ctx.roundRect(x, y, width, height, radius); return; }
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.moveTo(x + r, y); ctx.lineTo(x + width - r, y); ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r); ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+
 function labelSprite(text, color = '#d9e9e9', background = 'rgba(8,18,25,.78)') {
   const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
-  const ctx = canvas.getContext('2d'); ctx.fillStyle = background; ctx.roundRect(4, 4, 504, 88, 28); ctx.fill();
+  const ctx = canvas.getContext('2d'); ctx.fillStyle = background; drawRoundedRect(ctx, 4, 4, 504, 88, 28); ctx.fill();
   ctx.font = '800 34px Manrope, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color; ctx.fillText(text, 256, 50, 480);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
@@ -32,7 +42,7 @@ function makeDonkey(color, ghost = false) {
   const dark = new THREE.MeshStandardMaterial({ color: 0x34272a, roughness: 0.8, transparent: ghost, opacity: ghost ? 0.52 : 1 });
   const muzzle = new THREE.MeshStandardMaterial({ color: 0xe7c5ad, roughness: 0.84, transparent: ghost, opacity: ghost ? 0.6 : 1 });
   const eye = new THREE.MeshStandardMaterial({ color: 0x15151a, roughness: 0.4 });
-  const add = (geometry, material, position, scale, parent = group) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.set(...position); mesh.scale.set(...scale); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh; };
+  const add = (geometry, material, position, scale = [1, 1, 1], parent = group) => { const mesh = new THREE.Mesh(geometry, material); mesh.position.set(...position); mesh.scale.set(...scale); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh; };
   add(new THREE.SphereGeometry(0.49, 22, 16), coat, [0, 0.78, 0], [1, 0.82, 1.42]);
   add(new THREE.SphereGeometry(0.34, 18, 14), coat, [0, 1.38, -0.64], [0.92, 1.05, 0.88]);
   add(new THREE.SphereGeometry(0.25, 18, 14), muzzle, [0, 1.12, -1.16], [0.86, 0.54, 0.55]);
