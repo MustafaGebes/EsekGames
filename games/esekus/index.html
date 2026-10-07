@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#091116" />
+  <meta name="description" content="Eşek Us — Ahenk-7 uzay gemisinde kim dost, kim gizli sabotajcı?" />
+  <title>Eşek Us — Ahenk-7</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="loading" class="loading-screen">
+    <img src="/assets/loading-screen.jpg" alt="Eşek Us uzay ekibi" />
+    <div class="loading-shade"></div>
+    <div class="loading-caption"><span class="loading-mark">EU</span><div><b>AHENK-7'E BAĞLANIYOR</b><small>Uzay ahırı hazırlanıyor...</small></div></div>
+    <div class="loading-track"><i id="load-progress"></i></div>
+  </div>
+
+  <main id="app" class="app-shell is-hidden">
+    <canvas id="space-canvas" aria-label="Ahenk-7 gemisinin üç boyutlu görünümü"></canvas>
+    <div class="grain"></div>
+    <header class="topline"><a class="brand" href="/" aria-label="EsekGames'e dön"><span class="brand-mark">EU</span><span>EŞEK <b>US</b></span></a><div class="status"><i></i><span id="connection-label">Sunucuya bağlanıyor</span></div></header>
+
+    <section id="home-view" class="view home-view">
+      <div class="home-copy"><p class="eyebrow"><span>●</span> AHENK-7 / DERİN UZAY GÖREVİ</p><h1>EŞEK<br /><em>US</em></h1><p class="home-intro">Gemi sessiz. Radyoda bir fısıltı var.<br />Görevini yap — ama herkese güvenme.</p>
+        <div class="menu-actions">
+          <button id="play-button" class="button button-primary"><span>Oyna</span><b>↗</b></button>
+          <button id="settings-button" class="button button-glass">Ayarlar <span>⌘</span></button>
+          <button id="pc-controls-button" class="button button-glass">PC kontrolleri <span>⌨</span></button>
+          <button id="mobile-controls-button" class="button button-glass">Mobil kontrolleri <span>◉</span></button>
+          <button id="exit-button" class="button button-quiet">Oyundan çık <span>×</span></button>
+        </div>
+      </div>
+      <div class="home-stamp"><span>ONLINE<br />SOSYAL ÇIKARIM</span><b>01</b><small>TEK HARİTA · 4–10 OYUNCU</small></div>
+      <div class="floating-label label-a">AHIR-04 <i>●</i></div><div class="floating-label label-b">YONCA SERASI <i>●</i></div>
+    </section>
+
+    <section id="online-view" class="view panel-view is-hidden">
+      <div class="panel panel-wide"><button class="back-button" data-home>← Menü</button><div class="panel-heading"><p class="eyebrow">AHENK-7 AĞI</p><h2>Online sunucular</h2><p>Bir mürettebata katıl ya da kendi lobini kur.</p></div>
+        <label class="field-label" for="player-name">Mürettebat adı</label><div class="join-name"><input id="player-name" maxlength="18" placeholder="Adını yaz" /><button id="save-name" class="button button-small">Kaydet</button></div>
+        <div class="server-toolbar"><div><b>Açık lobiler</b><small id="room-count">Sunucu listesi bekleniyor</small></div><button id="refresh-rooms" class="icon-button" title="Yenile">↻</button></div>
+        <div id="room-list" class="room-list"><div class="empty-state"><span>◌</span><b>Lobi aranıyor...</b><small>Bağlantı kurulduğunda açık odalar burada görünür.</small></div></div>
+        <div class="create-row"><span><b>Kendi ekibini topla</b><small>Tek harita · 4–10 oyuncu</small></span><button id="create-room" class="button button-primary button-small">Lobi oluştur <b>＋</b></button></div>
+      </div>
+    </section>
+
+    <section id="lobby-view" class="view panel-view is-hidden">
+      <div class="panel lobby-panel"><button id="leave-lobby" class="back-button">← Sunucular</button><div class="panel-heading"><p class="eyebrow">LOBİ / <span id="lobby-code">----</span></p><h2 id="lobby-title">Ahenk ekibi</h2><p><span id="lobby-map">Yıldız Ahırı: Ahenk-7</span> <span class="map-pill">TEK HARİTA</span></p></div>
+        <div class="lobby-columns"><div><div class="server-toolbar"><div><b>Mürettebat</b><small id="player-count">0 / 10 oyuncu</small></div><span id="host-mark" class="host-chip">LOBİ SAHİBİ</span></div><div id="lobby-players" class="player-list"></div><div class="lobby-countdown" id="lobby-countdown"></div><button id="start-game" class="button button-primary start-button" disabled>Başla <b>5</b></button><div class="minimum-note" id="minimum-note">Başlamak için en az 4 oyuncu gerekir.</div></div>
+          <div class="chat-box"><div class="chat-head"><b>Gemi sohbeti</b><small>Yazılı · canlı</small></div><div id="lobby-chat" class="chat-log"></div><form id="chat-form" class="chat-form"><input id="chat-input" maxlength="180" placeholder="Mesaj yaz..." autocomplete="off" /><button aria-label="Gönder">↑</button></form></div></div>
+      </div>
+    </section>
+
+    <section id="settings-view" class="view panel-view is-hidden">
+      <div class="panel panel-narrow"><button class="back-button" data-home>← Menü</button><div class="panel-heading"><p class="eyebrow">KİŞİSEL AYARLAR</p><h2>Oyun ayarları</h2><p>Tercihler bu cihazda saklanır.</p></div>
+        <label class="field-label" for="settings-name">Oyuncu adı</label><input id="settings-name" class="text-field" maxlength="18" placeholder="Gezgin Eşek" />
+        <label class="field-label">Mobil etkileşim düğmesi rengi</label><div class="color-choices" id="button-colors"><button data-color="#ea4848" style="--swatch:#ea4848" aria-label="Kırmızı"></button><button data-color="#38c984" style="--swatch:#38c984" aria-label="Yeşil"></button><button data-color="#4ba5ff" style="--swatch:#4ba5ff" aria-label="Mavi"></button><button data-color="#f3b744" style="--swatch:#f3b744" aria-label="Altın"></button><button data-color="#bb65e8" style="--swatch:#bb65e8" aria-label="Mor"></button></div>
+        <button id="settings-save" class="button button-primary full-button">Ayarları kaydet</button>
+        <div class="settings-tip"><b>Oyun akışı</b><span>Mürettebat görevleri tamamlar; gizli ekip birbirini tanır ve mürettebatı durdurmaya çalışır. Toplantılarda yazılı sohbet ve oylama açılır.</span></div>
+      </div>
+    </section>
+
+    <section id="controls-view" class="view panel-view is-hidden">
+      <div class="panel panel-narrow"><button class="back-button" data-home>← Menü</button><div class="panel-heading"><p class="eyebrow">KONTROLLER</p><h2 id="controls-title">PC kontrolleri</h2></div><div id="controls-body" class="control-list"></div></div>
+    </section>
+
+    <section id="game-view" class="view game-view is-hidden">
+      <div class="game-top"><div class="ship-badge"><i></i><span id="game-phase-label">AHENK-7 / GÖREV AKTİF</span></div><div class="task-meter"><span>GÖREVLER</span><div><i id="task-meter-fill"></i></div><b id="task-meter-text">0%</b></div><button id="leave-game" class="icon-button danger-icon" title="Maçtan ayrıl">×</button></div>
+      <div class="objective-card" id="objective-card"><small>GÖREV LİSTESİ</small><div id="task-list"></div></div>
+      <div class="nearby-prompt" id="nearby-prompt"></div>
+      <div class="mobile-pad is-hidden" id="mobile-pad"><div class="joystick" id="joystick"><i></i></div><div class="mobile-actions"><button id="mobile-interact" class="action-button">E<br /><small>ETKİLEŞ</small></button><button id="mobile-danger" class="action-button danger-action">!</button></div></div>
+      <div class="alive-status" id="alive-status"></div>
+      <div class="meeting-overlay is-hidden" id="meeting-overlay"><div class="meeting-card"><p class="eyebrow">GEMİ TOPLANTISI</p><h2 id="meeting-title">Herkes köprüye!</h2><p id="meeting-description">Gördüğünü anlat, birlikte karar ver.</p><div id="vote-list" class="vote-list"></div><div id="meeting-timer" class="meeting-timer"></div></div></div>
+      <div class="role-overlay is-hidden" id="role-overlay"><div class="role-card"><p class="eyebrow">GÖREVİN</p><div id="role-icon" class="role-icon">✦</div><h2 id="role-title">MÜRETTEBAT</h2><p id="role-description"></p><div id="role-allies" class="role-allies"></div><button id="role-continue" class="button button-primary">Gemiye gir <b>→</b></button></div></div>
+      <div class="game-over is-hidden" id="game-over"><div class="game-over-card"><p class="eyebrow">AHENK-7 GÖREV RAPORU</p><h2 id="winner-title">MÜRETTEBAT KAZANDI</h2><p id="winner-reason"></p><div id="final-roles" class="final-roles"></div><button id="replay-button" class="button button-primary">Yeniden oyna</button><button id="return-servers" class="button button-glass">Sunuculara dön</button></div></div>
+    </section>
+    <div id="toast" class="toast is-hidden"></div>
+  </main>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
