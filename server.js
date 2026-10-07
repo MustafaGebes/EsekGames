@@ -16,7 +16,18 @@ const crypto = require("crypto");
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on("upgrade", (req, socket, head) => {
+    const requestPath = String(req.url || "").split("?")[0];
+    if (requestPath === "/games/esekus" || requestPath.startsWith("/games/esekus/")) {
+        socket.end("HTTP/1.1 410 Gone\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit("connection", ws, req);
+    });
+});
 
 const PORT = process.env.PORT || 10000;
 const SERVER_VERSION = "1.0.0";
@@ -2673,12 +2684,6 @@ function handleRespawn(player) {
 // ============================================================
 
 wss.on("connection", (ws, req) => {
-    if (String(req.url || "").split("?")[0] === "/games/esekus/ws") {
-        ws.close(1000, "Eşek Us kaldırıldı");
-        const closeFallback = setTimeout(() => ws.terminate(), 1000);
-        closeFallback.unref();
-        return;
-    }
     const player = createPlayer(ws);
 
     console.log(`[WS] Bağlandı: ${player.id} ${req.socket.remoteAddress || ""}`);
