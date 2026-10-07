@@ -3,15 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prestart": "npm run build:esekus",
-    "start": "node server.js",
-    "build:esekus": "vite build --config games/esekus/vite.config.js",
-    "test:esekus:identity": "node games/esekus/test-identity.cjs"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "ws": "^8.18.0",
-    "three": "^0.180.0",
-    "vite": "^6.4.1"
+    "ws": "^8.18.0"
   }
 }

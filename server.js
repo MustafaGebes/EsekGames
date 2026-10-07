@@ -13,7 +13,6 @@ const WebSocket = require("ws");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { attachEsekusSocket } = require("./games/esekus/server");
 
 const app = express();
 const server = http.createServer(app);
@@ -672,7 +671,6 @@ const PLAYER_PETS_FILE = path.join(DATA_DIR, "player-pets.json");
 const MAIN_INDEX = path.join(ROOT, "index.html");
 const SIMULATOR_INDEX = path.join(ROOT, "games", "eseksimulator", "index.html");
 const ESEKCRAFT_DIST = path.join(ROOT, "games", "esekcraft", "dist");
-const ESEKUS_DIST = path.join(ROOT, "games", "esekus", "dist");
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -709,7 +707,7 @@ function persistPlayerPetsStore() {
 app.use(express.json({ limit: "1mb" }));
 app.use("/games/esekcraft/source", (_req, res) => res.sendStatus(404));
 app.use("/games/esekcraft", express.static(ESEKCRAFT_DIST));
-app.use("/games/esekus", express.static(ESEKUS_DIST));
+app.use("/games/esekus", (_req, res) => res.sendStatus(404));
 app.use(express.static(ROOT));
 
 app.get("/", (req, res) => {
@@ -2676,14 +2674,7 @@ function handleRespawn(player) {
 
 wss.on("connection", (ws, req) => {
     if (String(req.url || "").split("?")[0] === "/games/esekus/ws") {
-        attachEsekusSocket(ws, {
-            resolveAccountToken: (token) => {
-                const found = findAccountByToken(token);
-                return found ? { username: found.account.username } : null;
-            },
-            isSharedNameUsed: (name) => isNameUsed(name),
-            allocateGuestName: (extraNameIsUsed) => allocateGuestName(extraNameIsUsed)
-        });
+        ws.close(1000, "Eşek Us kaldırıldı");
         return;
     }
     const player = createPlayer(ws);
