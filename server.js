@@ -2675,6 +2675,8 @@ function handleRespawn(player) {
 wss.on("connection", (ws, req) => {
     if (String(req.url || "").split("?")[0] === "/games/esekus/ws") {
         ws.close(1000, "Eşek Us kaldırıldı");
+        const closeFallback = setTimeout(() => ws.terminate(), 1000);
+        closeFallback.unref();
         return;
     }
     const player = createPlayer(ws);
