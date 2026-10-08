@@ -1639,7 +1639,8 @@ export function generateAllItemIcons() {
 
   drawVoxelIcon(BlockType.GRASS, { top: '#70a84d', left: '#70502f', right: '#563c24', fleck: '#3d632d', accent: '#82603a' });
   drawVoxelIcon(BlockType.DIRT, { top: '#805a35', left: '#684526', right: '#4f351f', fleck: '#452d1b', accent: '#967044' });
-  drawVoxelIcon(BlockType.STONE, { top: '#7d7d7d', left: '#696969', right: '#535353', fleck: '#484848', accent: '#929292' });
+  // STONE and BEDROCK intentionally keep their atlas crops above so inventory
+  // icons use the exact same pixel texture as the corresponding world blocks.
   drawVoxelIcon(BlockType.COAL_ORE, { top: '#777777', left: '#626262', right: '#505050', fleck: '#181818', accent: '#292929' });
   drawVoxelIcon(BlockType.IRON_ORE, { top: '#7c7a78', left: '#666360', right: '#514e4b', fleck: '#b9784f', accent: '#d39a69' });
   drawVoxelIcon(BlockType.GOLD_ORE, { top: '#7c7972', left: '#65615b', right: '#514d47', fleck: '#e0b52b', accent: '#9d7519' });
@@ -1655,7 +1656,6 @@ export function generateAllItemIcons() {
   drawVoxelIcon(BlockType.SAND, { top: '#e1d19a', left: '#c1ad70', right: '#9b8754', fleck: '#887444', accent: '#eadca9' });
   drawVoxelIcon(BlockType.GLASS, { top: '#a6dfe0', left: '#7bb6bd', right: '#5e9099', fleck: '#e5ffff', accent: '#87cbd0' });
   drawVoxelIcon(BlockType.BRICKS, { top: '#aa5140', left: '#914032', right: '#713126', fleck: '#6b3026', accent: '#c4664d' });
-  drawVoxelIcon(BlockType.BEDROCK, { top: '#333333', left: '#222222', right: '#111111', fleck: '#050505', accent: '#4b4b4b' });
   drawVoxelIcon(BlockType.OBSIDIAN, { top: '#30233f', left: '#23172f', right: '#171020', fleck: '#624b81', accent: '#3e2b5b' });
   drawVoxelIcon(BlockType.WHITE_WOOL_BLOCK, { top: '#ffffff', left: '#f4f1e6', right: '#ddd9cd', fleck: '#bcb8ad', accent: '#ffffff' });
 
