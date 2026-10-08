@@ -297,13 +297,13 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     scene.add(root);
     building.root = root;
 
-    const plaster = new THREE.MeshStandardMaterial({ color: building.color, roughness: 0.9 });
+    const plaster = new THREE.MeshStandardMaterial({ color: building.color, roughness: 0.9, side: THREE.DoubleSide });
     const innerWall = new THREE.MeshStandardMaterial({ color: 0xd8d0bf, roughness: 0.96 });
     const arch = building.architecture || building.architecturalStyle || building.kind;
     const floor = new THREE.MeshStandardMaterial({ color: ['home','rowhouse','townhouse','apartment','courtyard-house'].includes(building.kind) ? 0x8e775e : (['hospital','police-station','fire-station','prison'].includes(building.kind) ? 0xd5d1c5 : 0x8f8b7b), roughness: 0.96 });
     const trim = new THREE.MeshStandardMaterial({ color: building.trim || 0x544a3d, roughness: 0.8 });
     const awning = new THREE.MeshStandardMaterial({ color: building.awning, roughness: 0.82 });
-    const glass = new THREE.MeshStandardMaterial({ color: ['hospital','clinic','veterinary-clinic'].includes(building.kind) ? 0x82b7c5 : 0x6b9da2, emissive: 0x12292a, metalness: 0.12, roughness: 0.24, transparent: true, opacity: 0.54, depthWrite: false });
+    const glass = new THREE.MeshStandardMaterial({ color: ['hospital','clinic','veterinary-clinic'].includes(building.kind) ? 0x82b7c5 : 0x6b9da2, emissive: 0x12292a, metalness: 0.12, roughness: 0.24, transparent: true, opacity: 0.54, depthWrite: false, side: THREE.DoubleSide });
     const wood = new THREE.MeshStandardMaterial({ color: 0x704d35, roughness: 0.84 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x566064, metalness: 0.48, roughness: 0.44 });
     const rack = new THREE.MeshStandardMaterial({ color: 0x433c34, roughness: 0.86 });
@@ -401,9 +401,10 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     for (const x of [-building.width / 2 + 0.16, building.width / 2 - 0.16]) box(root, 0.12, wallHeight, 0.32, trim, x, wallHeight / 2, front - 0.02);
     building.roof = box(root, building.width + 0.28, 0.20, building.depth + 0.28, trim, 0, wallHeight + 0.02, 0);
 
-    const upperHeight = Math.max(0, building.h - wallHeight - 0.20);
+    const upperStart = wallHeight - 0.035;
+    const upperHeight = Math.max(0, building.h - upperStart);
     if (upperHeight > 0.5) {
-      const y = wallHeight + 0.20 + upperHeight / 2;
+      const y = upperStart + upperHeight / 2;
       const upperDepth = 0.24;
       box(root, building.width + 0.06, upperHeight, upperDepth, plaster, 0, y, -front + upperDepth / 2);
       box(root, building.width + 0.06, upperHeight, upperDepth, plaster, 0, y, front - upperDepth / 2);
@@ -412,7 +413,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       for (const winY of [wallHeight + 1.0, wallHeight + 3.9, wallHeight + 6.8]) {
         if (winY + 1.3 >= building.h) continue;
         for (const winX of [-2.25, 0, 2.25]) {
-          const windowMat = new THREE.MeshStandardMaterial({ color: ['hospital','clinic'].includes(building.kind) ? 0x83b5c0 : 0x45616b, emissive: 0x1b2c2b, roughness: 0.35, metalness: 0.1 });
+          const windowMat = new THREE.MeshStandardMaterial({ color: ['hospital','clinic'].includes(building.kind) ? 0x83b5c0 : 0x45616b, emissive: 0x1b2c2b, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide });
           box(root, 1.12, 1.35, 0.045, windowMat, winX, winY, front + 0.025);
         }
       }
@@ -445,7 +446,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         && local.z > -building.depth / 2 + wallThickness + 0.38
         && local.z < front - wallThickness - 0.38;
     };
-    building.insidePoint = () => worldPoint(building, 0, front - 1.22);
+    building.insidePoint = () => worldPoint(building, 0, 0);
     building.outsidePoint = () => worldPoint(building, 0, front + 1.12);
     building.doorDistance = (position) => {
       const doorPoint = worldPoint(building, 0, front + 0.10);
@@ -489,15 +490,16 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         const targetRoof = inside ? 0 : 1;
         building.roof.material.transparent = inside || building.progress > 0.02;
         building.roof.material.opacity = inside ? 0.12 : 1;
-        building.roof.position.y = building.h + 0.02 + (inside ? 3.2 : 0);
+        building.roof.position.y = wallHeight + 0.02 + (inside ? 3.25 : 0);
       }
     }
   }
   function clampCamera(building, desired) {
     const local = localPoint(building, desired.x, desired.z);
-    const x = clamp(local.x, -building.width / 2 + 0.35, building.width / 2 - 0.35);
-    const z = clamp(local.z, -building.depth / 2 + 0.35, building.depth / 2 - 0.35);
-    return worldPoint(building, x, z);
+    const padding = Math.min(0.75, Math.max(0.35, Math.min(building.width, building.depth) * 0.08));
+    const x = clamp(local.x, -building.width / 2 + padding, building.width / 2 - padding);
+    const z = clamp(local.z, -building.depth / 2 + padding, building.depth / 2 - padding);
+    return { ...worldPoint(building, x, z), y: clamp(desired.y, 0.82, wallHeight - 0.38) };
   }
 
   return { buildings, setDoorOpen, getInside, getNearbyDoor, clampCamera, update, byId };

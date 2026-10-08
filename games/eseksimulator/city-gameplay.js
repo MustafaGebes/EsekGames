@@ -1,7 +1,7 @@
 const DATA = window.EsekCityData;
 const byId = (id) => document.getElementById(id);
 
-export function createCityGameplay({ state, player, citySimulation, enterableWorld, send, showToast, toggleNearbyDoor, passNearbyDoor, onPlayerHit = () => {} }) {
+export function createCityGameplay({ state, player, citySimulation, enterableWorld, send, showToast, toggleNearbyDoor, passNearbyDoor, getNearbyHideSpot = () => null, onPlayerHit = () => {} }) {
   if (!DATA) throw new Error('EsekCityData yüklenmedi.');
 
   const style = document.createElement('style');
@@ -234,14 +234,18 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     closeAllOverlays(); renderBag(); openOverlay('cityBagOverlay'); return true;
   }
   function updateInteractionUi() {
-    context = state.screen === 'game' && state.playing && !state.paused ? currentContext() : null;
-    const nearbyDoor = context ? null : (state.screen === 'game' && state.playing && !state.paused ? enterableWorld.getNearbyDoor(player.position) : null);
     const active = state.screen === 'game' && state.playing && !state.paused;
+    context = active ? currentContext() : null;
+    const nearbyDoor = context ? null : (active ? enterableWorld.getNearbyDoor(player.position) : null);
+    const nearbyHideSpot = active ? getNearbyHideSpot() : null;
     const showAction = active && !!context;
     interactButton.hidden = !showAction;
     interactButton.textContent = context?.kind === 'shop' ? 'ALIŞVERİŞ' : (context?.kind === 'citizen' ? 'KONUŞ' : (context?.kind === 'hospital' ? 'HASTANE' : 'ETKİLEŞ'));
     doorControls.classList.toggle('show', active && state.mode === 'mobile' && (!!nearbyDoor || showAction));
-    return { context, nearbyDoor };
+    const hideButton = byId('hideTouch');
+    hideButton.textContent = state.hidden ? 'ÇIK' : 'SAKLAN';
+    hideButton.setAttribute('aria-label', state.hidden ? 'Saklanma yerinden çık (H)' : (nearbyHideSpot ? 'Çöp kutusuna saklan (H)' : 'Saklan (H)'));
+    return { context, nearbyDoor, nearbyHideSpot };
   }
 
   function handleEscape() {
