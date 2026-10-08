@@ -2,9 +2,9 @@
  * Minecraft Web - Types and Constants
  */
 
-export const SX = 80;
+export const SX = 128;
 export const SY = 64;
-export const SZ = 80;
+export const SZ = 128;
 export const MAX_STACK = 64;
 
 // Block Types
@@ -77,6 +77,7 @@ export enum BlockType {
   OAK_DOOR_TOP_OPEN_WEST_RIGHT_HINGE = 65,
   OAK_DOOR_TOP_OPEN_SOUTH_RIGHT_HINGE = 66,
   OAK_DOOR_TOP_OPEN_EAST_RIGHT_HINGE = 67,
+  OAK_SAPLING = 68,
 }
 
 export type DoorFacing = 0 | 1 | 2 | 3; // north, west, south, east
@@ -245,7 +246,7 @@ export function getBlockOffsetY(id: BlockType): number {
 }
 
 export function getBlockHeight(id: BlockType): number {
-  if (id === BlockType.AIR || id === BlockType.TORCH) return 0;
+  if (id === BlockType.AIR || id === BlockType.TORCH || id === BlockType.OAK_SAPLING) return 0;
   if (isBedBlock(id)) return 0.5625;
   return isSlabBlock(id) ? 0.5 : 1;
 }
@@ -449,6 +450,8 @@ export interface WorldMeta {
   gameMode: 'survival' | 'creative';
   created: number;
   saved: number;
+  /** 2 = 128x128 world layout; absent/1 means legacy 80x80 indexed mods. */
+  worldFormatVersion?: number;
   mods?: Record<number, number>;
   furnaces?: Record<number, FurnaceData>;
   chests?: Record<number, ChestData>;

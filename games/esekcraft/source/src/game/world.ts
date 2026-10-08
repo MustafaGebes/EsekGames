@@ -9,6 +9,33 @@ export const IDX = (x: number, y: number, z: number) => (y * SZ + z) * SX + x;
 export const inBounds = (x: number, y: number, z: number) =>
   x >= 0 && x < SX && y >= 0 && y < SY && z >= 0 && z < SZ;
 
+export function migrateSavedWorldMods(mods: Record<number, number>, formatVersion?: number): Record<number, number> {
+  if (formatVersion && formatVersion >= 2) return { ...mods };
+  const migrated: Record<number, number> = {};
+  const oldWidth = 80, oldDepth = 80, oldLayerSize = oldWidth * oldDepth;
+  for (const [rawIndex, block] of Object.entries(mods || {})) {
+    const oldIndex = Number(rawIndex);
+    if (!Number.isSafeInteger(oldIndex) || oldIndex < 0 || oldIndex >= oldLayerSize * SY) continue;
+    const y = Math.floor(oldIndex / oldLayerSize);
+    const withinLayer = oldIndex - y * oldLayerSize;
+    const z = Math.floor(withinLayer / oldWidth);
+    const x = withinLayer - z * oldWidth;
+    if (inBounds(x, y, z)) migrated[IDX(x, y, z)] = block;
+  }
+  return migrated;
+}
+
+export function migrateSavedWorldIndex(index: number, formatVersion?: number): number | null {
+  if (formatVersion && formatVersion >= 2) return Number.isSafeInteger(index) && index >= 0 && index < SX * SY * SZ ? index : null;
+  const oldWidth = 80, oldDepth = 80, oldLayerSize = oldWidth * oldDepth;
+  if (!Number.isSafeInteger(index) || index < 0 || index >= oldLayerSize * SY) return null;
+  const y = Math.floor(index / oldLayerSize);
+  const withinLayer = index - y * oldLayerSize;
+  const z = Math.floor(withinLayer / oldWidth);
+  const x = withinLayer - z * oldWidth;
+  return inBounds(x, y, z) ? IDX(x, y, z) : null;
+}
+
 // Box faces: dir + corners [x, y, z, u, v]
 const FACES = [
   { dir: [-1, 0, 0], corners: [[0, 1, 0, 0, 1], [0, 0, 0, 0, 0], [0, 1, 1, 1, 1], [0, 0, 1, 1, 0]] }, // -X
@@ -230,7 +257,7 @@ export class VoxelWorld {
   public getTopSolid(x: number, z: number): number {
     for (let y = SY - 1; y >= 0; y--) {
       const b = this.getBlock(x, y, z);
-      if (b !== BlockType.AIR && b !== BlockType.OAK_LEAVES && b !== BlockType.TORCH && !isDoorBlock(b)) {
+      if (b !== BlockType.AIR && b !== BlockType.OAK_LEAVES && b !== BlockType.OAK_SAPLING && b !== BlockType.TORCH && !isDoorBlock(b)) {
         return y;
       }
     }
@@ -240,11 +267,27 @@ export class VoxelWorld {
   public getTopSurface(x: number, z: number): number {
     for (let y = SY - 1; y >= 0; y--) {
       const block = this.getBlock(x, y, z);
-      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES && block !== BlockType.TORCH && !isDoorBlock(block)) {
+      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES && block !== BlockType.OAK_SAPLING && block !== BlockType.TORCH && !isDoorBlock(block)) {
         return y + getBlockOffsetY(block) + getBlockHeight(block);
       }
     }
     return 0;
+  }
+
+  public findSafeGrassSpawn(preferredX = SX / 2, preferredZ = SZ / 2): { x: number; y: number; z: number } | null {
+    let best: { x: number; y: number; z: number; score: number } | null = null;
+    for (let z = 2; z < SZ - 2; z++) for (let x = 2; x < SX - 2; x++) {
+      const top = this.getTopSolid(x, z);
+      if (this.getBlock(x, top, z) !== BlockType.GRASS || top + 2 >= SY) continue;
+      if (this.getBlock(x, top + 1, z) !== BlockType.AIR || this.getBlock(x, top + 2, z) !== BlockType.AIR) continue;
+      let slope = 0;
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        slope = Math.max(slope, Math.abs(this.getTopSolid(x + dx, z + dz) - top));
+      }
+      const score = Math.hypot(x + 0.5 - preferredX, z + 0.5 - preferredZ) + slope * 8;
+      if (!best || score < best.score) best = { x: x + 0.5, y: top + 1.02, z: z + 0.5, score };
+    }
+    return best ? { x: best.x, y: best.y, z: best.z } : null;
   }
 
   /**
@@ -286,7 +329,8 @@ export class VoxelWorld {
     await processRows(0, SZ, (z) => {
       for (let x = 0; x < SX; x++) {
         const heightNoise = (n1(x * 0.04, z * 0.04) * 1.0 + n2(x * 0.1, z * 0.1) * 0.4 + n3(x * 0.25, z * 0.25) * 0.15) / 1.55;
-        const groundHeight = Math.max(10, Math.min(SY - 10, Math.floor(18 + heightNoise * 25)));
+        // Broad, gently rolling plains replace the old 25-block mountain swings.
+        const groundHeight = Math.max(18, Math.min(SY - 10, Math.floor(24 + (heightNoise - 0.5) * 7.5)));
 
         // Desert beach biome patch
         const isSandBiome = n2(x * 0.05, z * 0.05) > 0.65;
@@ -478,7 +522,8 @@ export class VoxelWorld {
   }
 
   private spawnTree(x: number, y: number, z: number) {
-    const height = 4 + Math.floor(Math.random() * 3);
+    const treeSeed = Math.abs(Math.sin(x * 91.1 + y * 17.3 + z * 47.7 + this.seed * 0.0001) * 43758.5453);
+    const height = 4 + Math.floor((treeSeed % 1) * 3);
     // Trunk
     for (let ty = 0; ty < height; ty++) {
       this.data[IDX(x, y + ty, z)] = BlockType.OAK_LOG;
@@ -489,7 +534,8 @@ export class VoxelWorld {
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
           if (dx === 0 && dz === 0 && ly < height) continue;
-          if (Math.abs(dx) === radius && Math.abs(dz) === radius && Math.random() < 0.4) continue;
+          const cornerSeed = Math.abs(Math.sin((x + dx) * 91.1 + (y + ly) * 17.3 + (z + dz) * 47.7 + this.seed * 0.0001) * 43758.5453);
+          if (Math.abs(dx) === radius && Math.abs(dz) === radius && cornerSeed % 1 < 0.4) continue;
           const px = x + dx,
             py = y + ly,
             pz = z + dz;
@@ -499,6 +545,30 @@ export class VoxelWorld {
         }
       }
     }
+  }
+
+  public growSapling(x: number, y: number, z: number): Array<{ x: number; y: number; z: number; blockId: BlockType }> | null {
+    if (this.getBlock(x, y, z) !== BlockType.OAK_SAPLING || y + 9 >= SY) return null;
+    for (let dy = 0; dy <= 8; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      const block = this.getBlock(x + dx, y + dy, z + dz);
+      if (dy === 0 && dx === 0 && dz === 0) continue;
+      if (block !== BlockType.AIR && block !== BlockType.OAK_LEAVES) return null;
+    }
+    const before = new Map<number, BlockType>();
+    for (let dy = 0; dy <= 8; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      const px = x + dx, py = y + dy, pz = z + dz;
+      if (inBounds(px, py, pz)) before.set(IDX(px, py, pz), this.getBlock(px, py, pz));
+    }
+    this.data[IDX(x, y, z)] = BlockType.AIR;
+    this.spawnTree(x, y, z);
+    const changes: Array<{ x: number; y: number; z: number; blockId: BlockType }> = [];
+    for (const [index, oldBlock] of before) {
+      const blockId = this.data[index] as BlockType;
+      if (blockId === oldBlock) continue;
+      this.mods[index] = blockId;
+      changes.push({ x: index % SX, y: Math.floor(index / (SX * SZ)), z: Math.floor(index / SX) % SZ, blockId });
+    }
+    return changes;
   }
 
   private *createMeshBuffers(renderDistance: number, centerX: number, centerZ: number): Generator<number, {
@@ -551,6 +621,27 @@ export class VoxelWorld {
       }
     };
 
+    const emitSapling = (x: number, y: number, z: number) => {
+      const tileIdx = TILE.SAPLING;
+      const tx = tileIdx % TILES_PER_ROW, ty = Math.floor(tileIdx / TILES_PER_ROW);
+      const u0 = tx * tileUvSize, u1 = u0 + tileUvSize;
+      const v0 = 1 - (ty + 1) * tileUvSize, v1 = 1 - ty * tileUvSize;
+      const planes = [
+        [[x + 0.2, y, z + 0.2], [x + 0.8, y, z + 0.8], [x + 0.8, y + 0.92, z + 0.8], [x + 0.2, y + 0.92, z + 0.2]],
+        [[x + 0.8, y, z + 0.2], [x + 0.2, y, z + 0.8], [x + 0.2, y + 0.92, z + 0.8], [x + 0.8, y + 0.92, z + 0.2]],
+      ];
+      for (const points of planes) {
+        const start = vc;
+        const texCoords = [[u0, v1], [u1, v1], [u1, v0], [u0, v0]];
+        for (let i = 0; i < 4; i++) {
+          pos.push(...points[i]); norm.push(0, 0, 1); uv.push(...texCoords[i]); col.push(1, 1, 1);
+        }
+        idx.push(start, start + 1, start + 2, start, start + 2, start + 3,
+          start + 2, start + 1, start, start + 3, start + 2, start + 1);
+        vc += 4;
+      }
+    };
+
     for (let y = 0; y < SY; y++) {
       for (let z = 0; z < SZ; z++) {
         for (let x = 0; x < SX; x++) {
@@ -561,6 +652,11 @@ export class VoxelWorld {
 
           const def = BLOCK_DEFS[block];
           if (!def) continue;
+
+          if (block === BlockType.OAK_SAPLING) {
+            emitSapling(x, y, z);
+            continue;
+          }
 
           const doorState = getDoorState(block);
           if (doorState) {

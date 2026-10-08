@@ -88,6 +88,7 @@ export const TILE = {
   BED_FRAME: 60,
   BED_SIDE: 61,
   BED_END: 62,
+  SAPLING: 63,
 };
 
 export const BLOCK_DEFS: Record<number, BlockDef> = {
@@ -218,6 +219,10 @@ export const BLOCK_DEFS: Record<number, BlockDef> = {
   [BlockType.WHITE_WOOL_BLOCK]: {
     name: 'Beyaz Yün Bloğu', top: TILE.ITEM_WHITE_WOOL, bottom: TILE.ITEM_WHITE_WOOL, side: TILE.ITEM_WHITE_WOOL,
     hardness: 0.8, requiredTool: 'none', minHarvestLevel: 0, drop: ItemType.WHITE_WOOL,
+  },
+  [BlockType.OAK_SAPLING]: {
+    name: 'Meşe Fidanı', top: TILE.SAPLING, bottom: TILE.SAPLING, side: TILE.SAPLING,
+    hardness: 0, requiredTool: 'none', minHarvestLevel: 0, drop: ItemType.OAK_SAPLING, transparent: true,
   },
   [BlockType.CRAFTING_TABLE]: {
     name: 'Çalışma Masası',
@@ -1219,10 +1224,10 @@ export function initTextures() {
 
   // 48 White Wool block face - opaque square textile pattern (not the round item icon).
   tile(TILE.ITEM_WHITE_WOOL, (x, y) => {
-    if (x === 0 || x === 15 || y === 0 || y === 15) return '#d1d1ca';
-    if ((x + y) % 7 === 0) return '#e3e3dc';
-    if ((x * 3 + y * 5) % 11 === 0) return '#fafaf4';
-    return pick(rnd, ['#eeeee7', '#f4f4ed', '#e9e9e2', '#f0f0e9']);
+    if (x === 0 || x === 15 || y === 0 || y === 15) return '#d8d8d8';
+    if ((x + y) % 7 === 0) return '#f0f0f0';
+    if ((x * 3 + y * 5) % 11 === 0) return '#ffffff';
+    return pick(rnd, ['#ffffff', '#ffffff', '#fafafa', '#f5f5f5']);
   });
 
   // 49 Raw Iron - speckled iron ore chunk
@@ -1318,6 +1323,15 @@ export function initTextures() {
     if (x === 0 || x === 15 || y === 0 || y === 15) return '#56351e';
     if (y === 4 || y === 11) return '#704a29';
     return pick(rnd, ['#8c6035', '#95683a', '#80552f', '#a0703c']);
+  });
+  tile(TILE.SAPLING, (x, y) => {
+    if ((x >= 7 && x <= 9 && y >= 8 && y <= 14) || (x >= 5 && x <= 10 && y >= 12 && y <= 13)) return '#74451f';
+    if ((x >= 5 && x <= 10 && y >= 4 && y <= 8) || (x >= 3 && x <= 6 && y >= 7 && y <= 10) || (x >= 10 && x <= 13 && y >= 7 && y <= 10)) {
+      if ((x + y) % 4 === 0) return '#72c54b';
+      if ((x * 3 + y) % 5 === 0) return '#1f6424';
+      return '#34892e';
+    }
+    return null;
   });
 
   // Create Three.js Texture
@@ -1529,6 +1543,70 @@ export function generateAllItemIcons() {
     cacheItemIcon(id, c);
   };
 
+  const drawVoxelIcon = (id: AnyItemId, colors: { top: string; left: string; right: string; fleck: string; accent?: string }) => {
+    drawIcon(id, (ctx) => {
+      const faces = [
+        { points: [[16, 2], [30, 10], [16, 18], [2, 10]], color: colors.top },
+        { points: [[2, 10], [16, 18], [16, 31], [2, 23]], color: colors.left },
+        { points: [[16, 18], [30, 10], [30, 23], [16, 31]], color: colors.right },
+      ];
+      faces.forEach((face, faceIndex) => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(face.points[0][0], face.points[0][1]);
+        for (let i = 1; i < face.points.length; i++) ctx.lineTo(face.points[i][0], face.points[i][1]);
+        ctx.closePath();
+        ctx.clip();
+        ctx.fillStyle = face.color;
+        ctx.fillRect(0, 0, 32, 32);
+        for (let y = 7; y < 29; y += 4) for (let x = 4; x < 29; x += 5) {
+          const pick = (x * 13 + y * 7 + faceIndex * 17) % 5;
+          if (pick < 2) {
+            ctx.fillStyle = pick === 0 ? colors.fleck : (colors.accent || face.color);
+            ctx.fillRect(x, y, 2 + (pick === 0 ? 1 : 0), 2);
+          }
+        }
+        ctx.restore();
+      });
+      ctx.strokeStyle = '#252525';
+      ctx.lineWidth = 1;
+      for (const face of faces) {
+        ctx.beginPath();
+        ctx.moveTo(face.points[0][0], face.points[0][1]);
+        for (let i = 1; i < face.points.length; i++) ctx.lineTo(face.points[i][0], face.points[i][1]);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      if (id === BlockType.FURNACE) {
+        ctx.fillStyle = '#22282a';
+        ctx.fillRect(20, 12, 6, 7);
+        ctx.fillStyle = '#ff8c21';
+        ctx.fillRect(22, 15, 2, 3);
+      }
+      if (id === BlockType.COAL_ORE) {
+        ctx.fillStyle = '#111111';
+        [[7, 9], [20, 7], [12, 17], [22, 21], [7, 20]].forEach(([x, y]) => ctx.fillRect(x, y, 3, 3));
+      }
+      if (id === BlockType.IRON_ORE) {
+        ctx.fillStyle = '#bb8058';
+        [[7, 9], [20, 7], [12, 17], [22, 21]].forEach(([x, y]) => ctx.fillRect(x, y, 3, 3));
+      }
+      if (id === BlockType.WHITE_WOOL_BLOCK) {
+        ctx.strokeStyle = '#bdbdbd';
+        ctx.beginPath(); ctx.moveTo(8, 13); ctx.lineTo(13, 16); ctx.moveTo(20, 21); ctx.lineTo(25, 18); ctx.stroke();
+      }
+    });
+  };
+
+  drawVoxelIcon(BlockType.FURNACE, { top: '#777d80', left: '#62686a', right: '#484e50', fleck: '#a4aaab' });
+  drawVoxelIcon(BlockType.COAL_ORE, { top: '#777777', left: '#686868', right: '#555555', fleck: '#313131', accent: '#2a2a2a' });
+  drawVoxelIcon(BlockType.IRON_ORE, { top: '#83807d', left: '#6c6966', right: '#595653', fleck: '#c58d68', accent: '#d8ac86' });
+  drawVoxelIcon(BlockType.STONE, { top: '#898989', left: '#737373', right: '#5c5c5c', fleck: '#4a4a4a', accent: '#a0a0a0' });
+  drawVoxelIcon(BlockType.BEDROCK, { top: '#333333', left: '#222222', right: '#111111', fleck: '#050505', accent: '#4b4b4b' });
+  drawVoxelIcon(BlockType.OBSIDIAN, { top: '#332548', left: '#241833', right: '#171020', fleck: '#624b81', accent: '#3e2b5b' });
+  drawVoxelIcon(BlockType.COBBLESTONE, { top: '#858585', left: '#6d6d6d', right: '#555555', fleck: '#3e3e3e', accent: '#999999' });
+  drawVoxelIcon(BlockType.WHITE_WOOL_BLOCK, { top: '#ffffff', left: '#f3f3f3', right: '#dedede', fleck: '#d5d5d5', accent: '#ffffff' });
+
   // Stick
   drawIcon(ItemType.STICK, (ctx) => {
     ctx.fillStyle = '#6e5124';
@@ -1538,6 +1616,21 @@ export function generateAllItemIcons() {
   });
 
   drawIcon(ItemType.OAK_SAPLING, (ctx) => {
+    ctx.fillStyle = '#71461f';
+    ctx.fillRect(15, 14, 3, 13);
+    ctx.fillRect(11, 19, 5, 2);
+    ctx.fillRect(17, 22, 5, 2);
+    ctx.fillStyle = '#2c842e';
+    ctx.fillRect(12, 7, 9, 8);
+    ctx.fillRect(7, 11, 8, 7);
+    ctx.fillRect(18, 11, 8, 7);
+    ctx.fillStyle = '#62b83d';
+    ctx.fillRect(12, 8, 5, 4);
+    ctx.fillRect(19, 12, 4, 3);
+    ctx.fillStyle = '#1e6427';
+    ctx.fillRect(9, 16, 6, 3);
+  });
+  drawIcon(BlockType.OAK_SAPLING, (ctx) => {
     ctx.fillStyle = '#71461f';
     ctx.fillRect(15, 14, 3, 13);
     ctx.fillRect(11, 19, 5, 2);
@@ -1753,11 +1846,11 @@ export function generateAllItemIcons() {
 
   // White Wool
   drawIcon(ItemType.WHITE_WOOL, (ctx) => {
-    ctx.fillStyle = '#d8d8d8';
-    ctx.fillRect(6, 6, 20, 20);
     ctx.fillStyle = '#ffffff';
+    ctx.fillRect(6, 6, 20, 20);
+    ctx.fillStyle = '#f1f1f1';
     ctx.fillRect(8, 8, 16, 16);
-    ctx.fillStyle = '#bfbfbf';
+    ctx.fillStyle = '#d6d6d6';
     ctx.fillRect(10, 14, 6, 4);
   });
 

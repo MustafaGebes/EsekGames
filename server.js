@@ -212,6 +212,7 @@ function joinEsekCraftGame(player, data = {}) {
     player.alive = true;
     player.health = 20;
     player.armor = 0;
+    player.esekcraftArmor = [null, null, null, null];
     player.hunger = MAX_NEED;
     player.mapId = "overworld";
     player.x = 40.5;
@@ -245,7 +246,7 @@ function handleEsekCraftAttack(player, data = {}) {
     if (now - (player.esekcraftLastAttackAt || 0) < ESEKCRAFT_ATTACK_COOLDOWN_MS) return;
     player.esekcraftLastAttackAt = now;
     const weaponType = String(data.weaponType || "fist").toLowerCase();
-    const damage = ESEKCRAFT_DAMAGE_BY_WEAPON[weaponType] || ESEKCRAFT_DAMAGE_BY_WEAPON.fist;
+    const baseDamage = ESEKCRAFT_DAMAGE_BY_WEAPON[weaponType] || ESEKCRAFT_DAMAGE_BY_WEAPON.fist;
     const facingX = -Math.sin(Number(player.yaw) || 0);
     const facingZ = -Math.cos(Number(player.yaw) || 0);
     let target = null;
@@ -266,6 +267,9 @@ function handleEsekCraftAttack(player, data = {}) {
     }
     broadcastToRoom(room.id, { type: "esekcraft_attack", attackerId: player.id });
     if (!target) return;
+    const defenseById = { 160: 2, 161: 6, 162: 5, 163: 2, 164: 8, 175: 1, 176: 3, 177: 2, 178: 1, 179: 2, 180: 5, 181: 3, 182: 1, 183: 3, 184: 6, 185: 3 };
+    const defensePoints = (Array.isArray(target.esekcraftArmor) ? target.esekcraftArmor : []).reduce((sum, id) => sum + (defenseById[Number(id)] || 0), 0);
+    const damage = Math.max(1, Math.round(baseDamage * Math.max(0.2, 1 - defensePoints * 0.04)));
     damagePlayer(target, damage, player.id, player.name, `${player.name || "Oyuncu"} sana vurdu.`);
     broadcastToRoom(room.id, {
         type: "esekcraft_hit_confirmed", attackerId: player.id, targetId: target.id,
@@ -1864,6 +1868,9 @@ function getPublicPlayer(p) {
         isSprinting: p.isSprinting,
         health: p.health,
         armor: p.armor,
+        esekcraftHp: p.health,
+        esekcraftMaxHp: 20,
+        esekcraftArmor: Array.isArray(p.esekcraftArmor) ? p.esekcraftArmor : [],
         stamina: p.progress ? p.progress.stamina : 100,
         maxStamina: getMaxStamina(p),
         petId: p.progress ? p.progress.petId : null,
@@ -2189,6 +2196,33 @@ function handleMove(player, data) {
     player.isJumping = !!data.isJumping;
     player.isCrouching = !!data.isCrouching;
     player.isSprinting = sprintRequested && player.progress.stamina > 0;
+
+    const room = getPlayerRoom(player);
+    if (room && roomGameId(room) === "esekcraft") {
+        if (Array.isArray(data.esekcraftArmor)) {
+            const validArmorBySlot = [
+                new Set([160, 175, 179, 183]), new Set([161, 164, 176, 180]),
+                new Set([162, 177, 181, 184]), new Set([163, 178, 182, 185])
+            ];
+            player.esekcraftArmor = data.esekcraftArmor.slice(0, 4).map((raw, index) => {
+                const id = Number(raw);
+                return Number.isInteger(id) && validArmorBySlot[index]?.has(id) ? id : null;
+            });
+            while (player.esekcraftArmor.length < 4) player.esekcraftArmor.push(null);
+        }
+        const requestedHp = Number(data.esekcraftHp);
+        if (Number.isFinite(requestedHp)) {
+            const nextHp = Math.max(0, Math.min(20, requestedHp));
+            if (nextHp < player.health || (nextHp > player.health && Date.now() - (player.lastDamageAt || 0) >= 250)) {
+                player.health = nextHp;
+                if (player.health <= 0 && player.alive) {
+                    player.alive = false;
+                    broadcastToRoom(room.id, { type: "player_death", id: player.id, reason: "Canın tükendi.", killerName: null });
+                    broadcastPlayers();
+                }
+            }
+        }
+    }
 
     if (data.platform === "mobile" || data.platform === "pc") player.platform = data.platform;
     if (Number.isFinite(Number(data.pingMs))) player.pingMs = Number(data.pingMs);
