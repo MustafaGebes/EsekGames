@@ -7,7 +7,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
   const style = document.createElement('style');
   style.textContent = `
     #cityHud{position:fixed;right:18px;top:16px;z-index:6;display:none;min-width:178px;padding:11px 13px;border:1px solid #ffffff35;border-radius:14px;background:rgba(15,20,18,.88);box-shadow:0 10px 32px #0007;backdrop-filter:blur(12px);font-size:12px}
-    #cityHud.show{display:grid;gap:6px}.city-wallet{display:flex;justify-content:space-between;align-items:center;color:#e6c47e;font-weight:900}.city-wallet strong{font-size:17px;color:#fff1d0}.city-vitals{display:flex;justify-content:space-between;align-items:center;gap:9px}.city-hearts{display:flex;gap:2px;font-size:14px;line-height:1}.city-heart{color:#673735}.city-heart.full{color:#ff7469;text-shadow:0 0 8px #ef433f77}.city-stars{color:#635d53;letter-spacing:1px}.city-stars .wanted{color:#ffc64f;text-shadow:0 0 8px #ffb83277}
+    #cityHud.show{display:grid;gap:6px}.city-wallet{display:flex;justify-content:space-between;align-items:center;color:#e6c47e;font-weight:900}.city-wallet strong{font-size:17px;color:#fff1d0}.city-vitals{display:flex;justify-content:space-between;align-items:center;gap:9px}.city-hearts{display:flex;gap:2px;font-size:14px;line-height:1}.city-heart{color:#673735}.city-heart.full{color:#ff7469;text-shadow:0 0 8px #ef433f77}.city-stars{color:#635d53;letter-spacing:1px}.city-stars .wanted{color:#ffc64f;text-shadow:0 0 8px #ffb83277}.city-police-timer{color:#ffc881;font-size:10px;font-weight:850;letter-spacing:.4px}
     .city-overlay{position:fixed;inset:0;z-index:14;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(4,7,5,.78);backdrop-filter:blur(10px)}.city-overlay.open{display:flex}.city-panel{width:min(720px,100%);max-height:min(88dvh,780px);overflow:auto;padding:clamp(20px,4vw,32px);border:1px solid #f1d08e48;border-radius:22px;background:linear-gradient(150deg,#20251fef,#111512f5);box-shadow:0 30px 100px #000b;color:#f3ead7}.city-panel.narrow{width:min(510px,100%)}.city-panel h2{margin:0;color:#f2d08c;font-size:clamp(24px,4vw,34px);letter-spacing:-.04em}.city-subtitle{margin:8px 0 20px;color:#bdb9ac;line-height:1.5;font-size:13px}.city-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.city-close{width:38px;height:38px;border:1px solid #ffffff2c;border-radius:11px;background:#ffffff0b;color:#f4ead7;font-size:20px}.city-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:10px}.city-item{display:grid;grid-template-columns:42px 1fr;gap:3px 10px;padding:13px;border:1px solid #ffffff1b;border-radius:14px;background:#ffffff08}.city-item-icon{grid-row:span 3;display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:#e3b85b15;font-size:22px}.city-item-title{font-size:13px;font-weight:900}.city-item-description{min-height:30px;color:#aaa99d;font-size:11px;line-height:1.4}.city-item-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:5px}.city-price{color:#f1d08c;font-size:12px;font-weight:900}.city-action{min-height:34px;padding:0 12px;border:1px solid #e8bd6b77;border-radius:9px;background:#dca94920;color:#f7d99b;font-size:11px;font-weight:900}.city-action:disabled{opacity:.42;cursor:not-allowed}.city-empty{padding:22px;text-align:center;border:1px dashed #ffffff30;border-radius:13px;color:#aaa99d;line-height:1.55}.city-bag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}.city-bag-slot{min-height:102px;padding:12px;border:1px solid #ffffff20;border-radius:13px;background:#ffffff08}.city-bag-slot strong{display:block;margin:4px 0;font-size:12px}.city-bag-slot small{display:block;color:#aaa99d;font-size:11px}.city-bag-actions{display:flex;gap:6px;margin-top:9px}.city-bag-actions .city-action{flex:1;padding:0 7px}.city-talk-line{padding:18px;border-left:3px solid #e7b95f;background:#ffffff08;border-radius:0 12px 12px 0;color:#e8e0d1;line-height:1.6}.city-status{min-height:20px;margin-top:12px;color:#e6c47e;font-size:12px}.city-panel-foot{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}.city-panel-foot .city-action{min-width:104px;min-height:42px}.city-death-count{margin:14px 0;color:#ffb2a5;font-weight:850}.city-death-note{color:#bbb7aa;font-size:13px;line-height:1.55}
     #cityBagTouch{position:fixed;left:12px;top:68px;z-index:8;display:none;min-width:56px;height:42px;padding:0 11px;border:1px solid #ffffff55;border-radius:12px;background:#111613df;color:#f2d08c;font-size:10px;font-weight:950;backdrop-filter:blur(10px);touch-action:manipulation}#cityBagTouch.show{display:block}
     #cityInteractTouch{min-height:42px;padding:0 8px;border:1px solid #edc67599;border-radius:12px;background:#dca94924;color:#f6d99e;font-size:10px;font-weight:950;touch-action:manipulation}#cityInteractTouch[hidden]{display:none!important}
@@ -19,7 +19,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
   document.body.insertAdjacentHTML('beforeend', `
     <aside id="cityHud" aria-live="polite">
       <div class="city-wallet"><span>ŞEHİR CÜZDANI</span><strong>₺ <b id="cityCashValue">0</b></strong></div>
-      <div class="city-vitals"><div id="cityHearts" class="city-hearts" aria-label="Can"></div><div id="cityStars" class="city-stars" aria-label="Aranma seviyesi"></div></div>
+      <div class="city-vitals"><div id="cityHearts" class="city-hearts" aria-label="Can"></div><div id="cityStars" class="city-stars" aria-label="Aranma seviyesi"></div></div><div id="cityPoliceTimer" class="city-police-timer" hidden></div>
     </aside>
     <button id="cityBagTouch" type="button" aria-label="Çantayı aç">ÇANTA</button>
     <section id="cityShopOverlay" class="city-overlay" aria-hidden="true"><div class="city-panel">
@@ -59,7 +59,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
   interactButton.id = 'cityInteractTouch'; interactButton.type = 'button'; interactButton.hidden = true; interactButton.textContent = 'ETKİLEŞ';
   doorControls.insertBefore(interactButton, doorControls.firstChild);
 
-  const profile = { cash: 0, inventory: [], capacity: DATA.bagCapacity, health: 9, maxHealth: 9, wantedLevel: 0, equippedWeapon: null, equippedArmor: null };
+  const profile = { cash: 0, inventory: [], capacity: DATA.bagCapacity, health: 9, maxHealth: 9, wantedLevel: 0, policeActive: false, policeSearchEndsAt: 0, equippedWeapon: null, equippedArmor: null };
   let activeShopId = null;
   let activeCitizenId = null;
   let cityDeathTimer = null;
@@ -82,6 +82,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     heartNodes.forEach((node, index) => node.classList.toggle('full', index < filledHearts));
     const wanted = Math.max(0, Math.min(5, Number(profile.wantedLevel) || 0));
     byId('cityStars').innerHTML = Array.from({ length: 5 }, (_, i) => `<span class="${i < wanted ? 'wanted' : ''}">★</span>`).join('');
+    updatePoliceTimer();
     byId('cityBagCapacity').textContent = String(profile.capacity || DATA.bagCapacity);
   }
 
@@ -136,6 +137,15 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     }
   }
 
+  function updatePoliceTimer() {
+    const timer = byId('cityPoliceTimer');
+    if (!timer) return;
+    if (!profile.policeActive || !profile.policeSearchEndsAt) { timer.hidden=true;timer.textContent='';return; }
+    const remaining=Math.max(0,Math.ceil((profile.policeSearchEndsAt-Date.now())/1000));
+    const minutes=Math.floor(remaining/60),seconds=remaining%60;timer.hidden=remaining<=0;timer.textContent=remaining>0?`POLİS ARAMASI · ${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`:'';
+  }
+  window.setInterval(updatePoliceTimer,250);
+
   function setProfile(snapshot = {}) {
     profile.cash = Math.max(0, Number(snapshot.cash ?? profile.cash) || 0);
     profile.inventory = Array.isArray(snapshot.inventory) ? snapshot.inventory.map((entry) => ({ id: String(entry.id), quantity: Math.max(1, Number(entry.quantity) || 1) })) : profile.inventory;
@@ -143,9 +153,11 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     profile.health = Math.max(0, Number(snapshot.health ?? profile.health) || 0);
     profile.maxHealth = Math.max(1, Number(snapshot.maxHealth) || 9);
     profile.wantedLevel = Math.max(0, Math.min(5, Number(snapshot.wantedLevel ?? profile.wantedLevel) || 0));
+    profile.policeActive = snapshot.policeActive === undefined ? (profile.wantedLevel > 0 && profile.policeActive) : !!snapshot.policeActive;
+    profile.policeSearchEndsAt = Number(snapshot.policeSearchEndsAt ?? profile.policeSearchEndsAt) || 0;
     profile.equippedWeapon = snapshot.equippedWeapon ?? profile.equippedWeapon;
     profile.equippedArmor = snapshot.equippedArmor ?? profile.equippedArmor;
-    citySimulation.setPoliceWantedLevel(profile.wantedLevel);
+    citySimulation.setPoliceWantedLevel(profile.wantedLevel, profile.policeActive);
     renderHud();
     if (byId('cityBagOverlay').classList.contains('open')) renderBag();
     if (byId('cityShopOverlay').classList.contains('open')) renderShop();
@@ -229,6 +241,12 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
       setProfile(message.state || {});
       return;
     }
+    if (message.type === 'city_police_timer') {
+      profile.policeActive = true;
+      profile.policeSearchEndsAt = Number(message.searchEndsAt) || 0;
+      updatePoliceTimer();
+      return;
+    }
     if (message.type === 'city_citizens') {
       citySimulation.setCitizenStates(message.citizens || []);
       return;
@@ -288,7 +306,8 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
       const spawn = message.spawn || DATA.hospitalSpawn;
       player.position.set(Number(spawn.x) || 0, Number(spawn.y) || 0, Number(spawn.z) || 0);
       player.visible = true; state.playing = true; state.paused = false; state.jumpY = 0; state.jumpVelocity = 0;
-      citySimulation.setPoliceWantedLevel(0);
+      profile.policeActive = false; profile.policeSearchEndsAt = 0;
+      citySimulation.setPoliceWantedLevel(0, false);
       closeOverlay('cityDeathOverlay');
       if (message.state) setProfile({ health: message.state.health, maxHealth: message.state.maxHealth, wantedLevel: 0 });
       showToast('Şehir Hastanesinde yeniden doğdun.');
@@ -329,7 +348,7 @@ export function createCityGameplay({ state, player, citySimulation, enterableWor
     byId('cityBagTouch').classList.toggle('show', screen === 'game' && mode === 'mobile');
     if (screen !== 'game') closeAllOverlays();
   }
-  function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestHuman(player.position, 5.0, forward); }
+  function attackTarget() { const forward = { x: Math.sin(state.yaw), z: Math.cos(state.yaw) }; return citySimulation.getNearestHuman(player.position, 2.85, forward); }
 
   renderHud();
   return { handleKeydown, handleEscape, handleMessage, interact, toggleBag, updateInteractionUi, onScreenChange, setProfile, attackTarget, addLocalCash, get profile() { return profile; } };

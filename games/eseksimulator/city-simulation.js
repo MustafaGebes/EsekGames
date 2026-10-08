@@ -15,6 +15,10 @@ export function createCitySimulation(THREE, scene, options = {}) {
     isHidden = () => false,
     onPoliceBulletHit = () => {},
     onPoliceVisionChange = () => {},
+    policeStationPosition = { x: 8, z: -126 },
+    policeVisionRange = 16,
+    policeFireRange = 5.5,
+    meleeRange = 2.85,
   } = options;
 
   const signalRoads = roadLines.filter((line) => Math.abs(line) <= 42);
@@ -290,6 +294,13 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   const nodeKeys = [...nodes.keys()];
+  function pathIsClear(ax, az, bx, bz, radius = .38) {
+    if (!isBlocked) return true;
+    const distance = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(1, Math.ceil(distance / .22));
+    for (let i = 1; i <= steps; i += 1) { const t = i / steps; if (isBlocked(ax + (bx - ax) * t, az + (bz - az) * t, radius)) return false; }
+    return true;
+  }
   function newRoute(fromKey) {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const targetKey = nodeKeys[Math.floor(random() * nodeKeys.length)];
@@ -327,7 +338,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
       health: 2,
       alive: true,
       cashDrop: 10 + (i % 4) * 5,
-      behavior: i % 4 === 0 ? 'attack' : 'flee',
+      behavior: i % 3 === 0 ? 'attack' : 'flee',
       panicUntil: 0,
       attackUntil: 0,
     });
@@ -337,7 +348,8 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const model = makePerson(pedestrianCount + index);
     model.root.position.set(definition.x, 0.02, definition.z);
     model.root.rotation.y = definition.yaw || 0;
-    return { ...model, ...definition, serverTargetId: definition.id, behavior: definition.disposition === 'aggressive' || index % 3 === 0 ? 'attack' : 'flee', health: 2, alive: true, hostileUntil: 0, panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
+    const behavior = definition.behavior || (definition.disposition === 'aggressive' ? 'attack' : 'flee');
+    return { ...model, ...definition, serverTargetId: definition.id, behavior, health: 2, alive: true, hostileUntil: 0, panicUntil: 0, attackUntil: 0, gait: random() * Math.PI * 2 };
   });
   const shopkeepers = shopBuildings.map((building, index) => {
     const model = makePerson(pedestrianCount + citizenDefinitions.length + index);
@@ -361,7 +373,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
       const point = humanPosition(human);
       const distance = Math.hypot(point.x - position.x, point.z - position.z);
       const hitRadius = human.hitbox?.radius || .62;
-      if (distance <= maxDistance + hitRadius && distance < bestDistance) { bestDistance = distance; nearest = human; }
+      if (distance - hitRadius <= maxDistance && distance < bestDistance && (!forward || ((point.x-position.x)*forward.x+(point.z-position.z)*forward.z)/Math.max(distance,.001) >= -.15) && pathIsClear(position.x,position.z,point.x,point.z,.12)) { bestDistance = distance; nearest = human; }
     }
     return nearest;
   }
@@ -371,11 +383,16 @@ export function createCitySimulation(THREE, scene, options = {}) {
     return humans.filter(human => {
       if (human.alive === false || !human.root?.visible) return false;
       const point = humanPosition(human);
-      return Math.hypot(point.x - position.x, point.z - position.z) <= maxDistance + (human.hitbox?.radius || .62);
+      const distance=Math.hypot(point.x-position.x,point.z-position.z);
+      return distance-(human.hitbox?.radius||.62)<=maxDistance && pathIsClear(position.x,position.z,point.x,point.z,.12);
     });
   }
-  function hitHumansInRange(position, maxDistance = 5.6) {
-    const targets = getHumansInRange(position, maxDistance);
+  function hitHumansInRange(position, maxDistance = meleeRange, forward = null) {
+    const targets = getHumansInRange(position, maxDistance).filter(human => {
+      if (!forward) return true;
+      const point=humanPosition(human),dx=point.x-position.x,dz=point.z-position.z,distance=Math.hypot(dx,dz)||1;
+      return (dx*forward.x+dz*forward.z)/distance >= -.15;
+    });
     targets.forEach(hitHuman);
     return targets;
   }
@@ -421,13 +438,13 @@ export function createCitySimulation(THREE, scene, options = {}) {
     const length = Math.hypot(dx, dz) || 1;
     const candidates = [
       { x: dx / length, z: dz / length },
-      { x: -dz / length, z: dx / length },
-      { x: dz / length, z: -dx / length },
+      { x: (-dz / length) * .82 + (dx / length) * .58, z: (dx / length) * .82 + (dz / length) * .58 },
+      { x: (dz / length) * .82 + (dx / length) * .58, z: (-dx / length) * .82 + (dz / length) * .58 },
     ];
     for (const direction of candidates) {
       const nx = human.root.position.x + direction.x * distance;
       const nz = human.root.position.z + direction.z * distance;
-      if (!isBlocked(nx, nz, 0.38)) {
+      if (!isBlocked(nx, nz, 0.38) && pathIsClear(human.root.position.x, human.root.position.z, nx, nz, .34)) {
         human.root.position.x = nx;
         human.root.position.z = nz;
         human.root.rotation.y = Math.atan2(direction.x, direction.z);
@@ -436,6 +453,14 @@ export function createCitySimulation(THREE, scene, options = {}) {
     }
     return false;
   }
+  function moveHumanToward(human, target, distance) {
+    const dx=target.x-human.root.position.x,dz=target.z-human.root.position.z,length=Math.hypot(dx,dz)||1;
+    const direct={x:dx/length,z:dz/length};
+    const candidates=[direct,{x:direct.x*.5-direct.z*.866,z:direct.z*.5+direct.x*.866},{x:direct.x*.5+direct.z*.866,z:direct.z*.5-direct.x*.866}];
+    for(const direction of candidates){const nx=human.root.position.x+direction.x*distance,nz=human.root.position.z+direction.z*distance;if(!isBlocked(nx,nz,.38)&&pathIsClear(human.root.position.x,human.root.position.z,nx,nz,.34)){human.root.position.x=nx;human.root.position.z=nz;human.root.rotation.y=Math.atan2(direction.x,direction.z);return true;}}
+    return false;
+  }
+
   function triggerHumanVehicleImpact(human, impact) {
     if (!human || human.ragdoll || human.alive === false) return;
     human.health = Math.max(0, (Number(human.health) || 2) - (impact.vehicle.speed > 6 ? 2 : 1));
@@ -495,7 +520,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
         const step = 4.2 * dt;
         moveHumanAway(person, target, step);
       } else if (target && person.attackUntil > elapsed) { person.aiState = 'attack';
-        person.root.rotation.y = Math.atan2(target.x - person.root.position.x, target.z - person.root.position.z);
+        const dx=target.x-person.root.position.x,dz=target.z-person.root.position.z,distance=Math.hypot(dx,dz)||1;
+        person.root.rotation.y = Math.atan2(dx,dz);
+        if(distance>2.45) moveHumanToward(person,{x:target.x,z:target.z},Math.min(distance-2.35,1.25*dt));
       }
       person.gait += dt * (person.panicUntil > elapsed ? 9.5 : 1.6);
       const threat = person.attackFlash > 0 || person.attackUntil > elapsed;
@@ -511,7 +538,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   const carColors = [0x647b7e, 0x8a4e42, 0x566c4d, 0xa28b68, 0x465d74, 0x8b8276, 0x7a5f7d, 0x445e58, 0xb1a99a, 0x6b7173];
-  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x536970, metalness: 0.1, roughness: 0.32 });
+  const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x79969a, metalness: 0.08, roughness: 0.22, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
   const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x222321, roughness: 0.8 });
   const headlightMaterial = new THREE.MeshStandardMaterial({ color: 0xffe8a8, emissive: 0xffbd55, emissiveIntensity: 0.5 });
   const tailLightMaterial = new THREE.MeshStandardMaterial({ color: 0x92362d, emissive: 0x49100b, emissiveIntensity: 0.28 });
@@ -551,12 +578,9 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   const policeStation = new THREE.Group();
-  policeStation.position.set(8, 0, -126);
-  addBox(policeStation, new THREE.MeshStandardMaterial({ color: 0x4a5359, roughness: .86 }), 9.5, 3.6, 7.5, 0, 1.8, 0);
-  addBox(policeStation, new THREE.MeshStandardMaterial({ color: 0x263b4b, roughness: .62 }), 4.8, 1.1, .16, 0, 3.35, 3.82);
-  addBox(policeStation, new THREE.MeshStandardMaterial({ color: 0xe3c56c, emissive: 0x4c3210, emissiveIntensity: .5 }), 2.4, .42, .1, 0, 3.35, 3.94);
-  scene.add(policeStation);
   const policeCar = makeCar(0xe8e4db);
+  addBox(policeCar, new THREE.MeshStandardMaterial({ color: 0x26302f, roughness: .8 }), 1.46, .24, .38, 0, 1.02, .73);
+  const steeringWheel=new THREE.Mesh(new THREE.TorusGeometry(.19,.035,6,12),new THREE.MeshStandardMaterial({color:0x222624,roughness:.7}));steeringWheel.position.set(-.48,1.22,.66);steeringWheel.rotation.x=.3;policeCar.add(steeringWheel);
   addBox(policeCar, new THREE.MeshStandardMaterial({ color: 0x172431, roughness: 0.48 }), 2.06, 0.22, 0.48, 0, 0.75, -0.5);
   addBox(policeCar, new THREE.MeshStandardMaterial({ color: 0x172431, roughness: 0.52 }), 1.82, 0.08, 1.52, 0, 1.78, -0.22);
   const policeRed = new THREE.MeshStandardMaterial({ color: 0xff3838, emissive: 0x7d0909, emissiveIntensity: 1.5, roughness: 0.25 });
@@ -582,114 +606,119 @@ export function createCitySimulation(THREE, scene, options = {}) {
     return { ...model, gait: 0 };
   }
   const policeOfficers = [makeOfficer(0), makeOfficer(5)];
-  const policeResponse = { level: 0, roadX: 0, direction: -1, spawned: false, exited: false, phase: 0, targetRoadX: 0, targetZ: 0, lastShotAt: 0, lastImpactAt: -Infinity, lastVision: null, lastVisionAt: -Infinity };
+  const policeResponse = { level: 0, active: false, returning: false, roadX: 0, direction: -1, spawned: false, exited: false, phase: 0, targetRoadX: 0, targetZ: 0, lastShotAt: 0, lastImpactAt: -Infinity, lastVision: null, lastVisionAt: -Infinity };
+  let policeHome = { x: 1.35, z: -126 };
 
   function nearestRoadLine(value) {
     return roadLines.reduce((best, line) => Math.abs(line - value) < Math.abs(best - value) ? line : best, roadLines[0]);
+  }
+  policeHome={x:nearestRoadLine(Number(policeStationPosition.x)||8)+1.35,z:nearestRoadLine(Number(policeStationPosition.z)||-126)};
+  policeStation.position.set(Number(policeStationPosition.x)||8,0,Number(policeStationPosition.z)||-126);
+  function seatOfficers() {
+    policeOfficers.forEach((officer,index)=>{
+      if(officer.root.parent)officer.root.parent.remove(officer.root);
+      policeCar.add(officer.root);officer.seated=true;officer.root.scale.setScalar(.60);
+      officer.root.position.set(index?.43:-.43,.38,.05);officer.root.rotation.set(0,0,0);officer.root.visible=officer.alive!==false;
+    });
+  }
+  function deployOfficers() {
+    policeOfficers.forEach((officer,index)=>{
+      if(officer.root.parent)officer.root.parent.remove(officer.root);
+      scene.add(officer.root);officer.seated=false;officer.root.scale.setScalar(1);
+      const side=index?1:-1;officer.root.position.set(policeCar.position.x+side*1.45,.02,policeCar.position.z-1.25);
+      officer.root.rotation.y=Math.atan2((getPlayerPosition?.()?.x||0)-officer.root.position.x,(getPlayerPosition?.()?.z||0)-officer.root.position.z);officer.root.visible=officer.alive!==false;
+    });
   }
   function positionPolice(position) {
     if (!position) return;
     policeResponse.targetRoadX = nearestRoadLine(position.x) + 1.35;
     policeResponse.targetZ = position.z - (position.z >= 0 ? -1 : 1) * 6.0;
     policeResponse.roadX = policeResponse.targetRoadX;
-    policeResponse.direction = position.z >= 0 ? -1 : 1;
-    policeCar.position.set(1.35, 0, -126);
+    policeResponse.direction = position.z >= policeHome.z ? 1 : -1;
+    policeCar.position.set(policeHome.x, 0, policeHome.z);
     policeCar.rotation.y = Math.PI;
     policeResponse.phase = 0;
     policeResponse.spawned = true;
     policeResponse.exited = false;
+    policeResponse.returning = false;
     policeResponse.lastShotAt = 0;
     policeResponse.lastImpactAt = -Infinity;
     policeResponse.lastVision = null;
     policeResponse.lastVisionAt = -Infinity;
-    policeOfficers.forEach((officer, index) => { officer.root.position.set(policeCar.position.x + (index ? 2.0 : -2.0), 0.02, policeCar.position.z - 1.5); officer.root.rotation.y = Math.PI; officer.root.visible = false; officer.alive = true; officer.health = 2; });
+    policeOfficers.forEach(officer=>{officer.alive=true;officer.health=2;officer.root.visible=true;});
+    seatOfficers();
   }
   function canSeeOfficer(officer, target) {
     const dx = target.x - officer.root.position.x;
     const dz = target.z - officer.root.position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance > 18) return false;
+    if (distance > policeVisionRange) return false;
     const facing = (dx * Math.sin(officer.root.rotation.y) + dz * Math.cos(officer.root.rotation.y)) / Math.max(distance, .001);
-    if (facing < .28) return false;
+    if (facing < .12) return false;
     return hasLineOfSight ? hasLineOfSight({ x: officer.root.position.x, z: officer.root.position.z }, { x: target.x, z: target.z }) : true;
   }
-  function setPoliceWantedLevel(level) {
+  function setPoliceWantedLevel(level, active = Number(level) > 0) {
     policeResponse.level = Math.max(0, Math.min(5, Math.floor(Number(level) || 0)));
-    if (!policeResponse.level) {
-      policeCar.visible = false;
-      policeOfficers.forEach((officer) => { officer.root.visible = false; });
-      policeResponse.spawned = false;
-      return;
+    const shouldRespond = policeResponse.level > 0 && !!active;
+    if (shouldRespond && !policeResponse.active) {
+      policeResponse.active=true;policeResponse.returning=false;policeResponse.spawned=false;
+      const target=getPlayerPosition?.();if(target)positionPolice(target);
+      policeCar.visible=true;
+    } else if (!shouldRespond && policeResponse.active) {
+      policeResponse.active=false;policeResponse.returning=true;policeResponse.phase=3;policeResponse.lastVision=null;
+      policeResponse.lastShotAt=elapsed+.25;seatOfficers();
+      policeBullets.forEach(bullet=>scene.remove(bullet.mesh));policeBullets.length=0;
+      if(policeResponse.spawned)policeCar.visible=true;else{policeResponse.returning=false;policeCar.visible=false;}
     }
-    const target = getPlayerPosition?.();
-    if (!policeResponse.spawned) { positionPolice(target); policeCar.visible = true; }
-    policeCar.visible = true;
+    if (!shouldRespond && !policeResponse.returning) { policeCar.visible=false;policeOfficers.forEach(officer=>{officer.root.visible=false;}); }
+    if (shouldRespond) { const target=getPlayerPosition?.();if(!policeResponse.spawned&&target)positionPolice(target);policeCar.visible=true; }
+  }
+  function advanceCarAxis(axis,target,dt) {
+    const current=axis==='x'?policeCar.position.x:policeCar.position.z,delta=target-current;
+    const step=Math.sign(delta)*Math.min(Math.abs(delta),11.5*dt);
+    if(axis==='x'){policeCar.position.x+=step;if(Math.abs(delta)>.01)policeCar.rotation.y=step>=0?Math.PI/2:-Math.PI/2;}
+    else{policeCar.position.z+=step;if(Math.abs(delta)>.01)policeCar.rotation.y=step>=0?0:Math.PI;}
+    policeCar.userData.wheels?.forEach(wheel=>{wheel.rotation.x+=step*2;});
+    return Math.abs(delta)<.24;
   }
   function updatePolice(dt) {
-    if (!policeResponse.level) return;
-    if (isHidden()) { policeCar.visible = false; policeOfficers.forEach(officer => { officer.root.visible = false; }); policeResponse.spawned = false; policeResponse.exited = false; return; }
+    if (!policeResponse.active && !policeResponse.returning) return;
     const target = getPlayerPosition?.();
     if (!target) return;
-    if (!policeResponse.spawned) { positionPolice(target); policeCar.visible = true; }
-    policeResponse.targetRoadX = nearestRoadLine(target.x) + 1.35;
-    policeResponse.targetZ = target.z - policeResponse.direction * 6.0;
-    let move = 0;
-    const approachSpeed = 7.5;
-    if (policeResponse.phase === 0) {
-      const dx = policeResponse.targetRoadX - policeCar.position.x;
-      move = Math.sign(dx) * Math.min(Math.abs(dx), approachSpeed * dt);
-      policeCar.position.x += move; policeCar.rotation.y = move >= 0 ? Math.PI / 2 : -Math.PI / 2;
-      if (Math.abs(dx) < .2) { policeCar.position.x = policeResponse.targetRoadX; policeResponse.phase = 1; }
-    } else if (policeResponse.phase === 1) {
-      const dz = policeResponse.targetZ - policeCar.position.z;
-      move = Math.sign(dz) * Math.min(Math.abs(dz), approachSpeed * dt);
-      policeCar.position.z += move; policeCar.rotation.y = move >= 0 ? 0 : Math.PI;
-      if (Math.abs(dz) < .35) { policeCar.position.z = policeResponse.targetZ; policeResponse.phase = 2; }
+    if(policeResponse.active){
+      if(!policeResponse.spawned){positionPolice(target);policeCar.visible=true;}
+      policeResponse.targetRoadX=nearestRoadLine(target.x)+1.35;
+      policeResponse.targetZ=target.z-policeResponse.direction*6.0;
+      if(policeResponse.phase===0&&advanceCarAxis('x',policeResponse.targetRoadX,dt))policeResponse.phase=1;
+      else if(policeResponse.phase===1&&advanceCarAxis('z',policeResponse.targetZ,dt))policeResponse.phase=2;
+    }else if(policeResponse.returning){
+      if(policeResponse.phase===3){seatOfficers();if(advanceCarAxis('x',policeHome.x,dt))policeResponse.phase=4;}
+      else if(policeResponse.phase===4&&advanceCarAxis('z',policeHome.z,dt)){policeResponse.phase=5;policeResponse.returning=false;policeResponse.spawned=false;policeCar.visible=false;policeOfficers.forEach(officer=>{officer.root.visible=false;});return;}
     }
-    const arrived = policeResponse.phase === 2;
-    if (!arrived) { policeOfficers.forEach(officer => { officer.root.visible = false; }); }
-
-    const blink = Math.sin(elapsed * 10) > 0;
-    policeRed.emissiveIntensity = blink ? 2.2 : 0.15;
-    policeBlue.emissiveIntensity = blink ? 0.15 : 2.2;
-    policeCar.userData.wheels?.forEach((wheel) => { wheel.rotation.x += move * 2; });
-    if (arrived) policeResponse.exited = true;
-    for (let index = 0; index < policeOfficers.length; index += 1) {
-      const officer = policeOfficers[index];
+    const arrived=policeResponse.active&&policeResponse.phase===2;
+    if(arrived&&!policeResponse.exited){deployOfficers();policeResponse.exited=true;}
+    const blink=Math.sin(elapsed*10)>0;
+    policeRed.emissiveIntensity=blink?2.2:.15;policeBlue.emissiveIntensity=blink?.15:2.2;
+    for(let index=0;index<policeOfficers.length;index++){
+      const officer=policeOfficers[index];
+      if(officer.seated||officer.alive===false||!arrived){if(officer.seated)officer.root.visible=true;continue;}
       updateHumanTint(officer);
-      if (officer.alive === false) { officer.root.visible = false; continue; }
-      const side = index ? 1 : -1;
-      if (arrived && !officer.root.visible) {
-        officer.root.position.set(policeCar.position.x + side * 1.55, 0.02, policeCar.position.z - 1.5);
-        officer.root.rotation.y = Math.atan2(target.x - officer.root.position.x, target.z - officer.root.position.z);
-        officer.root.visible = true;
+      const side=index?1:-1,targetX=target.x+side*.8,targetZ=target.z+2.1+index*.55;
+      const dx=targetX-officer.root.position.x,dz=targetZ-officer.root.position.z,distance=Math.hypot(dx,dz);
+      const canSee=!isHidden()&&canSeeOfficer(officer,target);
+      if(canSee)officer.root.rotation.y=Math.atan2(dx,dz);
+      if(distance>2.55&&canSee)moveHumanToward(officer,{x:targetX,z:targetZ},Math.min(distance-2.4,2.2*dt));
+      officer.gait+=dt*(distance>2.55?8:1.5);
+      const aiming=policeResponse.active&&!isHidden()&&canSee&&distance<=policeFireRange;
+      if(aiming&&elapsed-policeResponse.lastShotAt>Math.max(1.05,1.7-policeResponse.level*.08)&&!isBlocked(officer.root.position.x,officer.root.position.z,.18)){
+        policeResponse.lastShotAt=elapsed;spawnPoliceBullet(new THREE.Vector3(officer.root.position.x,1.35,officer.root.position.z),new THREE.Vector3(target.x,.85,target.z));
       }
-      const targetX = target.x + side * 1.0;
-      const targetZ = target.z + 2.7 + index * 0.7;
-      const dx = targetX - officer.root.position.x;
-      const dz = targetZ - officer.root.position.z;
-      const distance = Math.hypot(dx, dz);
-      if (arrived && distance > 3.25) {
-        const step = Math.min(distance - 3.0, 3.2 * dt);
-        officer.root.position.x += dx / distance * step;
-        officer.root.position.z += dz / distance * step;
-      }
-      const canSee = arrived && canSeeOfficer(officer, target);
-      if (canSee && distance > 0.05) officer.root.rotation.y = Math.atan2(dx, dz);
-      officer.gait += dt * (arrived && distance > 3.25 ? 10 : 1.5);
-      const aiming = policeResponse.exited && canSee && distance <= 8.5;
-      if (aiming && elapsed - policeResponse.lastShotAt > Math.max(.72, 1.45 - policeResponse.level * .08) && !isBlocked(officer.root.position.x, officer.root.position.z, .18)) {
-        policeResponse.lastShotAt = elapsed;
-        spawnPoliceBullet(new THREE.Vector3(officer.root.position.x, 1.35, officer.root.position.z), new THREE.Vector3(target.x, .85, target.z));
-      }
-      officer.arms[0].rotation.x = aiming ? -0.9 : Math.sin(officer.gait) * 0.32;
-      officer.arms[1].rotation.x = aiming ? -0.75 : -Math.sin(officer.gait) * 0.32;
-      officer.legs[0].rotation.x = arrived && distance > 3.25 ? Math.sin(officer.gait) * 0.45 : 0;
-      officer.legs[1].rotation.x = arrived && distance > 3.25 ? -Math.sin(officer.gait) * 0.45 : 0;
+      officer.arms[0].rotation.x=aiming?-.9:Math.sin(officer.gait)*.24;officer.arms[1].rotation.x=aiming?-.75:-Math.sin(officer.gait)*.24;
+      officer.legs[0].rotation.x=distance>2.55?Math.sin(officer.gait)*.4:0;officer.legs[1].rotation.x=distance>2.55?-Math.sin(officer.gait)*.4:0;
     }
-    if (arrived && elapsed - policeResponse.lastVisionAt > .45) {
-      const visible = policeOfficers.some(officer => officer.root.visible && officer.alive !== false && canSeeOfficer(officer, target));
-      if (visible !== policeResponse.lastVision) { policeResponse.lastVision = visible; policeResponse.lastVisionAt = elapsed; onPoliceVisionChange(visible); }
+    if(arrived&&elapsed-policeResponse.lastVisionAt>.65){
+      const visible=!isHidden()&&policeOfficers.some(officer=>officer.root.visible&&officer.alive!==false&&!officer.seated&&canSeeOfficer(officer,target));
+      policeResponse.lastVision=visible;policeResponse.lastVisionAt=elapsed;onPoliceVisionChange(visible);
     }
   }
 
@@ -702,6 +731,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     policeBullets.push({ mesh: bullet, from: from.clone(), to: to.clone(), progress: 0, speed: 32 });
   }
   function updatePoliceBullets(dt) {
+    if(!policeResponse.active){for(const bullet of policeBullets)scene.remove(bullet.mesh);policeBullets.length=0;return;}
     for (let i = policeBullets.length - 1; i >= 0; i -= 1) {
       const bullet = policeBullets[i];
       const distance = bullet.from.distanceTo(bullet.to);
@@ -840,11 +870,12 @@ export function createCitySimulation(THREE, scene, options = {}) {
       moveHumanAway(pedestrian, player, step);
       pedestrian.walking = true;
     } else if (player && pedestrian.attackUntil > elapsed) {
-      pedestrian.root.rotation.y = Math.atan2(player.x - pedestrian.root.position.x, player.z - pedestrian.root.position.z);
-      pedestrian.walking = false;
+      const dx=player.x-pedestrian.root.position.x,dz=player.z-pedestrian.root.position.z,distance=Math.hypot(dx,dz)||1;
+      pedestrian.root.rotation.y = Math.atan2(dx,dz);
+      if(distance>2.45){moveHumanToward(pedestrian,{x:player.x,z:player.z},Math.min(distance-2.35,1.5*dt));pedestrian.walking=true;}
     }
     let budget = pedestrian.panicUntil > elapsed || pedestrian.attackUntil > elapsed ? 0 : pedestrian.speed * dt;
-    pedestrian.walking = false;
+    pedestrian.walking = pedestrian.panicUntil > elapsed || pedestrian.attackUntil > elapsed;
     for (let guard = 0; budget > 0.001 && guard < 8; guard += 1) {
       let edge = pedestrian.path[pedestrian.edgeIndex];
       if (!edge) {
@@ -953,6 +984,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     for (const pedestrian of pedestrians) updatePedestrian(pedestrian, dt);
     updateStationaryPeople(dt);
     updatePolice(dt);
+    updatePoliceBullets(dt);
     updateTrees(dt);
     updateHud(dt);
   }

@@ -5,28 +5,47 @@
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
   const roadLines = Object.freeze([-126, -84, -42, 0, 42, 84, 126]);
   const roadWidth = (value) => Math.abs(value) < 0.01 ? 14 : (Math.abs(value) < 50 ? 10 : 8.5);
+  const parks = new Set(['0:0', '0:4', '1:5', '4:0', '5:4']);
+  const civicUses = Object.freeze({
+    '5:0': 'police-station',
+    '1:0': 'school',
+    '4:1': 'fire-station',
+    '0:2': 'library',
+    '5:3': 'clinic',
+    '1:4': 'community-center',
+  });
+  const facadePalette = Object.freeze([0xb8aa94, 0xa59c8d, 0x8f8579, 0xb5b3a7, 0x9da7a5, 0x9e8575, 0xc0b08f, 0x777875, 0xa99d8a]);
+  const trimPalette = Object.freeze([0x665b4e, 0x514d47, 0x756954, 0x686b66, 0x594b42]);
 
-  function getBuildingSlot(slot) {
-    const [ix, iz, index] = String(slot).split(':').map(Number);
-    if (![ix, iz, index].every(Number.isInteger) || ix < 0 || ix >= 6 || iz < 0 || iz >= 6) return null;
+  function getBlockBounds(ix, iz) {
+    if (!Number.isInteger(ix) || !Number.isInteger(iz) || ix < 0 || ix >= 6 || iz < 0 || iz >= 6) return null;
     const left = roadLines[ix] + roadWidth(roadLines[ix]) / 2 + 4.15;
     const right = roadLines[ix + 1] - roadWidth(roadLines[ix + 1]) / 2 - 4.15;
     const front = roadLines[iz] + roadWidth(roadLines[iz]) / 2 + 4.15;
     const back = roadLines[iz + 1] - roadWidth(roadLines[iz + 1]) / 2 - 4.15;
-    const smallWidth = Math.min(8.6, (right - left - 4.5) / 2);
-    const smallDepth = Math.min(8.4, (back - front - 4.5) / 2);
+    return { left, right, front, back, width: right - left, depth: back - front, centerX: (left + right) / 2, centerZ: (front + back) / 2 };
+  }
+
+  function getBuildingSlot(slot) {
+    const [ix, iz, index] = String(slot).split(':').map(Number);
+    const bounds = getBlockBounds(ix, iz);
+    if (!bounds || !Number.isInteger(index) || index < 0 || index > 3) return null;
     const outerBlock = ix === 0 || iz === 0 || ix === 5 || iz === 5;
     const centers = outerBlock ? [[-1, -1], [1, 1]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
     const signs = centers[index];
     if (!signs) return null;
     const [sx, sz] = signs;
-    return {
-      x: (left + right) / 2 + sx * (smallWidth / 2 + 1.65),
-      z: (front + back) / 2 + sz * (smallDepth / 2 + 1.65),
-      width: smallWidth,
-      depth: smallDepth,
-      face: (ix + iz + index) % 4 === 0 ? Math.PI / 2 : ((ix + iz + index) % 4 === 1 ? -Math.PI / 2 : ((ix + iz + index) % 4 === 2 ? 0 : Math.PI)),
-    };
+    const width = Math.min(8.6, (bounds.width - 4.5) / 2);
+    const depth = Math.min(8.4, (bounds.depth - 4.5) / 2);
+    const x = bounds.centerX + sx * (width / 2 + 1.65);
+    const z = bounds.centerZ + sz * (depth / 2 + 1.65);
+    const distanceLeft = Math.abs(x - bounds.left);
+    const distanceRight = Math.abs(bounds.right - x);
+    const distanceFront = Math.abs(z - bounds.front);
+    const distanceBack = Math.abs(bounds.back - z);
+    const closest = Math.min(distanceLeft, distanceRight, distanceFront, distanceBack);
+    const face = closest === distanceLeft ? -Math.PI / 2 : closest === distanceRight ? Math.PI / 2 : closest === distanceFront ? Math.PI : 0;
+    return { x, z, width, depth, face, ix, iz, index };
   }
 
   const items = Object.freeze([
@@ -62,16 +81,110 @@
     { id: 'home-two', slot: '4:4:0', title: 'Ev', kind: 'home' },
     { id: 'city-hospital', slot: '2:2:0', title: 'Şehir Hastanesi', kind: 'hospital' },
   ]);
+  const enterableBySlot = new Map(buildings.map((building) => [building.slot, building]));
+
+  function footprint(kind, x, z, width, depth, height, face, seed, slot = null) {
+    return {
+      kind, x, z, width, depth, height, face, slot,
+      color: facadePalette[seed % facadePalette.length],
+      trim: trimPalette[(seed * 3 + 1) % trimPalette.length],
+      seed,
+    };
+  }
+
+  function getBlockPlan(ix, iz) {
+    const bounds = getBlockBounds(ix, iz);
+    if (!bounds) return null;
+    if (ix === 3 && iz === 3) {
+      const alleyWidth=4.0,facadeLength=18,buildingDepth=8.1,offset=(alleyWidth+buildingDepth)/2;
+      return { ix, iz, landUse: 'spawn-alley', alleyWidth, buildings: [
+        footprint('apartment',bounds.centerX-offset,bounds.centerZ,facadeLength,buildingDepth,21,Math.PI/2,31),
+        footprint('apartment',bounds.centerX+offset,bounds.centerZ,facadeLength,buildingDepth,18,-Math.PI/2,32),
+      ] };
+    }
+    const blockKey = `${ix}:${iz}`;
+    const required = buildings.filter((building) => building.slot.startsWith(`${blockKey}:`));
+    if (required.length) {
+      const planned = [];
+      for (let index = 0; index < 4; index += 1) {
+        const slotName = `${blockKey}:${index}`;
+        const slot = getBuildingSlot(slotName);
+        if (!slot) continue;
+        const known = enterableBySlot.get(slotName);
+        const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, known?.kind === 'hospital' ? 14 : 9 + ((ix * 3 + iz + index) % 4) * 2, slot.face, ix * 19 + iz * 11 + index, slotName));
+      }
+      return { ix, iz, landUse: 'mixed-use', buildings: planned };
+    }
+    if (parks.has(blockKey)) return { ix, iz, landUse: 'pocket-park', buildings: [] };
+
+    const h = (ix * 73 + iz * 151 + ix * iz * 29 + 47) % 997;
+    const innerW = Math.max(15, bounds.width - 2.6);
+    const innerD = Math.max(15, bounds.depth - 2.6);
+    const cx = bounds.centerX, cz = bounds.centerZ;
+    const streetFace = ((ix + iz) % 2 === 0) ? Math.PI : 0;
+    const serviceKind = civicUses[blockKey];
+    if (serviceKind) {
+      const dimensions = serviceKind === 'school' ? [innerW * .79, innerD * .73, 11] : [innerW * .78, innerD * .72, serviceKind === 'police-station' ? 10 : 9];
+      return { ix, iz, landUse: serviceKind, buildings: [footprint(serviceKind, cx, cz, dimensions[0], dimensions[1], dimensions[2], streetFace, h)] };
+    }
+
+    const plans = [];
+    const push = (kind, x, z, w, d, height, face = streetFace, offset = 0) => plans.push(footprint(kind, x, z, w, d, height, face, h + offset));
+    switch (h % 6) {
+      case 0: { // Narrow attached homes along a walkable mid-block lane.
+        const w = Math.min(6.0, (innerW - 3.2) / 3), d = innerD * .68;
+        for (let i = 0; i < 3; i += 1) push(i === 1 ? 'townhouse' : 'rowhouse', cx + (i - 1) * (w + .95), cz, w, d, 7 + ((h + i) % 3) * 2, streetFace, i);
+        break;
+      }
+      case 1: { // A deep courtyard pair with distinct footprints and heights.
+        push('apartment', cx - innerW * .25, cz, innerW * .39, innerD * .76, 17 + (h % 5), 0, 1);
+        push('courtyard-house', cx + innerW * .25, cz + innerD * .06, innerW * .34, innerD * .64, 8 + (h % 4), Math.PI, 2);
+        break;
+      }
+      case 2: { // A corner shop, small rear house, and a taller mixed-use block.
+        push('corner-shop', cx - innerW * .23, cz - innerD * .23, innerW * .40, innerD * .36, 9, Math.PI, 3);
+        push('apartment', cx + innerW * .22, cz - innerD * .18, innerW * .40, innerD * .44, 18 + (h % 6), 0, 4);
+        push('townhouse', cx, cz + innerD * .28, innerW * .47, innerD * .28, 8, 0, 5);
+        break;
+      }
+      case 3: { // A single distinctive civic-scale workshop or community hall.
+        push(h % 12 === 3 ? 'community-hall' : 'workshop', cx, cz, innerW * .78, innerD * .70, 9 + (h % 6), streetFace, 6);
+        break;
+      }
+      case 4: { // Four varied houses around a shared, open courtyard.
+        const w = innerW * .39, d = innerD * .36;
+        const positions = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+        positions.forEach(([sx, sz], i) => push(i === 2 ? 'courtyard-house' : 'townhouse', cx + sx * innerW * .255, cz + sz * innerD * .25, w * (i === 1 ? .9 : 1), d * (i === 0 ? .88 : 1), 7 + ((h + i) % 4) * 2, i % 2 ? Math.PI / 2 : streetFace, 7 + i));
+        break;
+      }
+      default: { // Apartments with a lower wing, keeping the block permeable.
+        push('apartment', cx - innerW * .17, cz, innerW * .47, innerD * .68, 19 + (h % 7), 0, 12);
+        push('townhouse', cx + innerW * .31, cz + innerD * .19, innerW * .24, innerD * .34, 8, Math.PI, 13);
+        break;
+      }
+    }
+    return { ix, iz, landUse: 'residential-mixed', buildings: plans };
+  }
+
+  function getAllBuildingFootprints() {
+    const output = [];
+    for (let ix = 0; ix < 6; ix += 1) for (let iz = 0; iz < 6; iz += 1) {
+      const plan = getBlockPlan(ix, iz);
+      if (plan) output.push(...plan.buildings);
+    }
+    return output;
+  }
 
   const citizens = Object.freeze([
-    { id: 'citizen-elif', name: 'Elif', disposition: 'friendly', x: -34.75, z: -21, yaw: Math.PI, cashDrop: 18, dialogue: 'Merhaba! Dondurmacı köşedeki sokakta, iyi günler.' },
-    { id: 'citizen-ali', name: 'Ali', disposition: 'neutral', x: -49.25, z: 21, yaw: 0, cashDrop: 24, dialogue: 'Şehir bugün epey hareketli.' },
-    { id: 'citizen-deniz', name: 'Deniz', disposition: 'friendly', x: -7.25, z: -21, yaw: Math.PI / 2, cashDrop: 32, dialogue: 'Kaldırımlardan gitmek daha rahat.' },
-    { id: 'citizen-mert', name: 'Mert', disposition: 'neutral', x: 7.25, z: 21, yaw: -Math.PI / 2, cashDrop: 26, dialogue: 'Ben sadece yoluma bakıyorum.' },
-    { id: 'citizen-kabadayi-1', name: 'Sokak kabadayısı', disposition: 'aggressive', x: 34.75, z: -21, yaw: Math.PI, cashDrop: 48, dialogue: 'Burada ne işin var? Uzak dur.' },
-    { id: 'citizen-kabadayi-2', name: 'Huysuz mahalleli', disposition: 'aggressive', x: 49.25, z: 21, yaw: 0, cashDrop: 55, dialogue: 'Bana bulaşma, kendi işine bak.' },
-    { id: 'citizen-irem', name: 'İrem', disposition: 'friendly', x: -21, z: 7.25, yaw: 0, cashDrop: 22, dialogue: 'Hastane yakındaki ara sokakta. Kendine dikkat et.' },
-    { id: 'citizen-kaan', name: 'Kaan', disposition: 'neutral', x: 21, z: -7.25, yaw: Math.PI, cashDrop: 29, dialogue: 'Yeni açılan dükkânları gördün mü?' },
+    { id: 'citizen-elif', name: 'Elif', disposition: 'friendly', behavior: 'flee', x: -34.75, z: -21, yaw: Math.PI, cashDrop: 18, dialogue: 'Merhaba! Dondurmacı köşedeki sokakta, iyi günler.' },
+    { id: 'citizen-ali', name: 'Ali', disposition: 'neutral', behavior: 'attack', x: -49.25, z: 21, yaw: 0, cashDrop: 24, dialogue: 'Şehir bugün epey hareketli.' },
+    { id: 'citizen-deniz', name: 'Deniz', disposition: 'friendly', behavior: 'flee', x: -7.25, z: -21, yaw: Math.PI / 2, cashDrop: 32, dialogue: 'Kaldırımlardan gitmek daha rahat.' },
+    { id: 'citizen-mert', name: 'Mert', disposition: 'neutral', behavior: 'flee', x: 7.25, z: 21, yaw: -Math.PI / 2, cashDrop: 26, dialogue: 'Ben sadece yoluma bakıyorum.' },
+    { id: 'citizen-kabadayi-1', name: 'Sokak kabadayısı', disposition: 'aggressive', behavior: 'attack', x: 34.75, z: -21, yaw: Math.PI, cashDrop: 48, dialogue: 'Burada ne işin var? Uzak dur.' },
+    { id: 'citizen-kabadayi-2', name: 'Huysuz mahalleli', disposition: 'aggressive', behavior: 'attack', x: 49.25, z: 21, yaw: 0, cashDrop: 55, dialogue: 'Bana bulaşma, kendi işine bak.' },
+    { id: 'citizen-irem', name: 'İrem', disposition: 'friendly', behavior: 'flee', x: -21, z: 7.25, yaw: 0, cashDrop: 22, dialogue: 'Hastane yakındaki ara sokakta. Kendine dikkat et.' },
+    { id: 'citizen-kaan', name: 'Kaan', disposition: 'neutral', behavior: 'attack', x: 21, z: -7.25, yaw: Math.PI, cashDrop: 29, dialogue: 'Yeni açılan dükkânları gördün mü?' },
   ]);
 
   const hospitalSlot = getBuildingSlot('2:2:0');
@@ -84,7 +197,10 @@
   return Object.freeze({
     roadLines,
     roadWidth,
+    getBlockBounds,
     getBuildingSlot,
+    getBlockPlan,
+    getAllBuildingFootprints,
     items,
     shops,
     buildings,
@@ -93,6 +209,10 @@
     bagCapacity: 12,
     npcHealth: 2,
     npcRespawnMs: 90_000,
+    policeSearchMs: 60_000,
+    meleeRange: 2.85,
+    policeVisionRange: 16,
+    policeFireRange: 5.5,
     cashMin: 0,
     cashMax: 999_999,
   });

@@ -646,15 +646,12 @@ const CITY_DATA = require(path.join(ROOT, "games", "eseksimulator", "city-data.j
 const CITY_ITEMS = new Map(CITY_DATA.items.map(item => [item.id, item]));
 const CITY_SHOPS = new Map(CITY_DATA.shops.map(shop => [shop.id, shop]));
 const CITY_CITIZENS = new Map(CITY_DATA.citizens.map(citizen => [citizen.id, citizen]));
-const CITY_WALL_COLLIDERS = [];
-for (let ix = 0; ix < 6; ix += 1) {
-    for (let iz = 0; iz < 6; iz += 1) {
-        for (let index = 0; index < 4; index += 1) {
-            const slot = CITY_DATA.getBuildingSlot(`${ix}:${iz}:${index}`);
-            if (slot) CITY_WALL_COLLIDERS.push({ minX: slot.x - slot.width / 2 - 0.18, maxX: slot.x + slot.width / 2 + 0.18, minZ: slot.z - slot.depth / 2 - 0.18, maxZ: slot.z + slot.depth / 2 + 0.18 });
-        }
-    }
-}
+const CITY_WALL_COLLIDERS = CITY_DATA.getAllBuildingFootprints().map(building => {
+    const c = Math.cos(Number(building.face) || 0), sn = Math.sin(Number(building.face) || 0);
+    const halfX = (Math.abs(c) * building.width + Math.abs(sn) * building.depth) / 2 + 0.18;
+    const halfZ = (Math.abs(sn) * building.width + Math.abs(c) * building.depth) / 2 + 0.18;
+    return { minX: building.x - halfX, maxX: building.x + halfX, minZ: building.z - halfZ, maxZ: building.z + halfZ };
+});
 function cityLineClear(from, to) {
     const distance = Math.hypot(to.x - from.x, to.z - from.z);
     const samples = Math.max(8, Math.ceil(distance / 0.75));
@@ -666,13 +663,19 @@ function cityLineClear(from, to) {
     }
     return true;
 }
-function nearestCityRoad(value) {
-    return CITY_DATA.roadLines.reduce((best, line) => Math.abs(line - value) < Math.abs(best - value) ? line : best, CITY_DATA.roadLines[0]);
-}
 function policeHasLineOfSight(player) {
-    const direction = player.z >= 0 ? -1 : 1;
-    const policeOrigin = { x: nearestCityRoad(player.x) + 1.35, z: player.z - direction * 4.8 };
-    return cityLineClear(policeOrigin, { x: player.x, z: player.z });
+    const candidates = [];
+    for (const line of CITY_DATA.roadLines) {
+        const width = CITY_DATA.roadWidth(line), offset = width / 2 + 2.25;
+        for (const side of [-1, 1]) {
+            candidates.push({ x: line + side * offset, z: player.z });
+            candidates.push({ x: player.x, z: line + side * offset });
+        }
+    }
+    return candidates.some(origin => {
+        if (Math.hypot(origin.x - player.x, origin.z - player.z) > CITY_DATA.policeVisionRange) return false;
+        return cityLineClear(origin, { x: player.x, z: player.z });
+    });
 }
 
 const DATA_DIR = path.join(ROOT, "data");
@@ -1148,6 +1151,7 @@ function savePlayerProgress(player) {
 function createCityCitizenStates() {
     return new Map(CITY_DATA.citizens.map(citizen => [citizen.id, {
         id: citizen.id, health: CITY_DATA.npcHealth, alive: true, hostileUntil: 0,
+        behavior: citizen.behavior || (citizen.disposition === "aggressive" ? "attack" : "flee"),
         respawnAt: 0, nextAttackAt: 0,
         nextProvocationAt: Date.now() + 18000 + Math.floor(Math.random() * 22000),
         reportedBy: new Set()
@@ -1159,6 +1163,8 @@ function getCitySnapshot(player) {
         cash: progress.cityCash, inventory: progress.cityInventory.map(entry => ({ ...entry })),
         capacity: CITY_DATA.bagCapacity, health: player.health, maxHealth: getMaxHealth(player),
         wantedLevel: player.cityWantedLevel || 0,
+        policeActive: !!player.cityPoliceActive,
+        policeSearchEndsAt: player.cityPoliceSearchUntil || 0,
         equippedWeapon: progress.cityEquippedWeapon, equippedArmor: progress.cityEquippedArmor
     };
 }
@@ -1199,18 +1205,30 @@ function sendCityCitizenStates(player) {
 function handleCityHide(player, data) {
     if (!isCityGameplayPlayer(player)) return;
     player.cityHidden = !!(data && data.hidden);
-    if (player.cityHidden) { player.cityLostSightAt = Date.now(); player.cityNextWantedDecayAt = Date.now() + 2500; }
     sendCityState(player);
 }
 function handleCityPoliceVision(player, data) {
-    if (!isCityGameplayPlayer(player)) return;
-    const visible = !!(data && data.visible);
-    player.cityLostSightAt = visible ? 0 : Date.now();
-    if (!visible) player.cityNextWantedDecayAt = Date.now() + 2500;
+    if (!isCityGameplayPlayer(player) || !player.cityPoliceActive) return;
+    const now = Date.now();
+    if (now - (player.cityPoliceVisionReceivedAt || 0) < 500) return;
+    player.cityPoliceVisionReceivedAt = now;
+    if (!player.cityPoliceSearchUntil || now >= player.cityPoliceSearchUntil) return;
+    const visible = !!(data && data.visible) && !player.cityHidden && policeHasLineOfSight(player);
+    if (visible) {
+        player.cityLostSightAt = 0;
+        player.cityPoliceLastSeenAt = now;
+        player.cityPoliceSearchUntil = now + CITY_DATA.policeSearchMs;
+        sendTo(player, { type: "city_police_timer", searchEndsAt: player.cityPoliceSearchUntil });
+    } else {
+        player.cityLostSightAt = player.cityLostSightAt || now;
+    }
 }
 function handleCityPoliceBulletHit(player) {
-    if (!isCityGameplayPlayer(player) || player.cityHidden || !player.cityWantedLevel) return;
+    if (!isCityGameplayPlayer(player)) return;
     const now = Date.now();
+    if (!player.cityPoliceActive || !player.cityWantedLevel || player.cityHidden
+        || !player.cityPoliceSearchUntil || now >= player.cityPoliceSearchUntil
+        || now - (player.cityPoliceLastSeenAt || 0) > 2200 || !policeHasLineOfSight(player)) return;
     if (now - (player.cityLastPoliceBulletAt || 0) < 650) return;
     player.cityLastPoliceBulletAt = now;
     damagePlayer(player, 1.1 + player.cityWantedLevel * 0.3, null, "Polis", "Polis kurşunu sana isabet etti.");
@@ -1224,7 +1242,12 @@ function addCityWanted(player, amount = 1) {
     player.cityWantedLevel = Math.max(0, Math.min(5, (player.cityWantedLevel || 0) + amount));
     player.cityLastCrimeAt = now;
     player.cityNextWantedDecayAt = 0;
-    if (!player.cityPoliceArrivalAt || player.cityWantedLevel === amount) player.cityPoliceArrivalAt = now + 5500;
+    if (!player.cityPoliceActive) {
+        player.cityPoliceActive = true;
+        player.cityPoliceSearchStartedAt = now;
+        player.cityPoliceSearchUntil = now + CITY_DATA.policeSearchMs;
+    } else if (!player.cityPoliceSearchUntil) player.cityPoliceSearchUntil = now + CITY_DATA.policeSearchMs;
+    if (!player.cityPoliceArrivalAt) player.cityPoliceArrivalAt = now + 5500;
     sendCityState(player);
     return player.cityWantedLevel;
 }
@@ -1336,8 +1359,8 @@ function handleCityCitizenHit(player, data) {
     const forwardX = Math.sin(Number(player.yaw) || 0);
     const forwardZ = Math.cos(Number(player.yaw) || 0);
     const facing = (dx * forwardX + dz * forwardZ) / Math.max(distance, 0.001);
-    // Torso hitbox: a little forgiving at the edge, but attacks must be in front.
-    if (distance > 5.0 || facing < -0.35) return;
+    // A short melee reach: attacks cannot hit through buildings or from behind.
+    if (distance > CITY_DATA.meleeRange + 0.62 || facing < -0.15 || !cityLineClear(player, npc)) return;
     const now = Date.now();
     if (!data.batch && now - (player.lastCityAttackAt || 0) < 400) return;
     player.lastCityAttackAt = now;
@@ -1384,7 +1407,11 @@ function tickCityGameplay() {
             }
             const isAggressive = npc.disposition === "aggressive" || state.hostileUntil > now;
             if (!isAggressive || now < state.nextAttackAt) continue;
-            const target = roomPlayers.find(player => Math.hypot(player.x - npc.x, player.z - npc.z) <= 4.8);
+            if (state.behavior !== "attack" && state.hostileUntil <= now) continue;
+            const target = roomPlayers.find(player => {
+                const distance = Math.hypot(player.x - npc.x, player.z - npc.z);
+                return distance <= 3.15 && cityLineClear(npc, player);
+            });
             if (!target) continue;
             state.nextAttackAt = now + 1850;
             broadcastToRoom(room.id, { type: "city_citizen_attack", npcId, targetId: target.id });
@@ -1393,17 +1420,18 @@ function tickCityGameplay() {
     }
     for (const player of players.values()) {
         if (!player.inGame || !player.alive || player.mapId !== "city") continue;
-        const policeLostSight = !!player.cityHidden || (player.cityLostSightAt > 0 && now - player.cityLostSightAt < 6000);
-        if (player.cityWantedLevel > 0 && now - (player.cityLastCrimeAt || now) >= (policeLostSight ? 2500 : 25000)) {
-            if (!player.cityNextWantedDecayAt) player.cityNextWantedDecayAt = now + (policeLostSight ? 2500 : 12000);
-            else if (now >= player.cityNextWantedDecayAt) {
-                player.cityWantedLevel = Math.max(0, player.cityWantedLevel - 1);
-                player.cityNextWantedDecayAt = player.cityWantedLevel ? now + (policeLostSight ? 2500 : 12000) : 0;
-                if (!player.cityWantedLevel) player.cityPoliceArrivalAt = 0;
-                sendCityState(player);
-            }
+        if (player.cityPoliceActive && player.cityPoliceSearchUntil && now >= player.cityPoliceSearchUntil) {
+            player.cityPoliceActive = false;
+            player.cityWantedLevel = 0;
+            player.cityPoliceSearchUntil = 0;
+            player.cityPoliceSearchStartedAt = 0;
+            player.cityPoliceLastSeenAt = 0;
+            player.cityLostSightAt = 0;
+            player.cityPoliceArrivalAt = 0;
+            player.cityNextPoliceAttackAt = 0;
+            sendCityState(player);
         }
-        if (!player.cityHidden && !policeLostSight && player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
+        if (!player.cityHidden && player.cityPoliceActive && player.cityWantedLevel > 0 && now >= player.cityPoliceArrivalAt && now >= player.cityNextPoliceAttackAt) {
             player.cityNextPoliceAttackAt = now + Math.max(1300, 2250 - player.cityWantedLevel * 150);
         }
     }
@@ -1635,6 +1663,11 @@ function createPlayer(ws) {
         nextBearBiteAt: 0,
         lastDamageAt: Date.now(),
         cityWantedLevel: 0,
+        cityPoliceActive: false,
+        cityPoliceSearchStartedAt: 0,
+        cityPoliceSearchUntil: 0,
+        cityPoliceLastSeenAt: 0,
+        cityPoliceVisionReceivedAt: 0,
         cityLastCrimeAt: 0,
         cityNextWantedDecayAt: 0,
         cityPoliceArrivalAt: 0,
@@ -2069,6 +2102,10 @@ function damagePlayer(target, amount, attackerId, killerName, reason) {
             const fine = cash > 0 ? Math.min(cash, Math.max(1, Math.ceil(cash * 0.15))) : 0;
             if (target.progress) target.progress.cityCash = Math.max(0, cash - fine);
             target.cityWantedLevel = 0;
+            target.cityPoliceActive = false;
+            target.cityPoliceSearchStartedAt = 0;
+            target.cityPoliceSearchUntil = 0;
+            target.cityPoliceLastSeenAt = 0;
             target.cityPoliceArrivalAt = 0;
             target.cityNextPoliceAttackAt = 0;
             target.cityNextWantedDecayAt = 0;
@@ -2647,6 +2684,10 @@ function handleRespawn(player) {
     player.alive = true;
     player.cityDeathProcessed = false;
     player.cityWantedLevel = 0;
+    player.cityPoliceActive = false;
+    player.cityPoliceSearchStartedAt = 0;
+    player.cityPoliceSearchUntil = 0;
+    player.cityPoliceLastSeenAt = 0;
     player.cityLastCrimeAt = 0;
     player.cityNextWantedDecayAt = 0;
     player.cityPoliceArrivalAt = 0;
