@@ -314,7 +314,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
   }
 
   const pedestrians = [];
-  const pedestrianCount = 18;
+  const pedestrianCount = 26;
   for (let i = 0; i < pedestrianCount; i += 1) {
     const startKey = nodeKeys[Math.floor(random() * nodeKeys.length)];
     const model = makePerson(i);
@@ -752,24 +752,27 @@ export function createCitySimulation(THREE, scene, options = {}) {
   for (const axis of ['NS', 'EW']) {
     for (let i = 0; i < roadLines.length; i += 1) {
       const line = roadLines[i];
+      const lanes = Math.abs(line) <= 84 ? 2 : 1;
       for (const direction of [-1, 1]) {
-        const along = -trafficExtent + ((vehicleIndex * 37 + 9) % trafficSpan);
-        const car = makeCar(carColors[vehicleIndex % carColors.length]);
-        const yaw = axis === 'NS'
-          ? (direction > 0 ? 0 : Math.PI)
-          : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
-        car.rotation.y = yaw;
-        vehicles.push({
-          mesh: car,
-          axis,
-          line,
-          direction,
-          along,
-          speed: 5.0 + (vehicleIndex % 4) * 0.32,
-          wheelRotation: 0,
-          lastImpactAt: -Infinity,
-        });
-        vehicleIndex += 1;
+        for (let lane = 0; lane < lanes; lane += 1) {
+          const along = -trafficExtent + ((vehicleIndex * 37 + 9) % trafficSpan);
+          const car = makeCar(carColors[vehicleIndex % carColors.length]);
+          const yaw = axis === 'NS'
+            ? (direction > 0 ? 0 : Math.PI)
+            : (direction > 0 ? Math.PI / 2 : -Math.PI / 2);
+          car.rotation.y = yaw;
+          vehicles.push({
+            mesh: car,
+            axis,
+            line,
+            direction,
+            along,
+            speed: 5.0 + (vehicleIndex % 4) * 0.32,
+            wheelRotation: 0,
+            lastImpactAt: -Infinity,
+          });
+          vehicleIndex += 1;
+        }
       }
     }
   }
@@ -940,9 +943,28 @@ export function createCitySimulation(THREE, scene, options = {}) {
     pedestrian.root.position.y = 0.02 + (pedestrian.walking ? Math.abs(Math.sin(pedestrian.gait * 2)) * 0.018 : 0);
   }
 
+  let renderDistance = Infinity;
+  let lastVisibilityUpdate = -Infinity;
+  function updateRenderVisibility(force = false) {
+    const position = getPlayerPosition?.();
+    if (!position || (!force && elapsed - lastVisibilityUpdate < 0.25)) return;
+    lastVisibilityUpdate = elapsed;
+    const inRange = (object) => renderDistance === Infinity || Math.hypot(object.root.position.x - position.x, object.root.position.z - position.z) <= renderDistance;
+    for (const human of [...pedestrians, ...citizens, ...shopkeepers]) {
+      human.root.visible = human.alive !== false && !(human.deathAt && elapsed >= human.deathAt) && inRange(human);
+    }
+    for (const vehicle of vehicles) {
+      vehicle.mesh.visible = renderDistance === Infinity || Math.hypot(vehicle.mesh.position.x - position.x, vehicle.mesh.position.z - position.z) <= renderDistance;
+    }
+  }
+  function setRenderDistance(distance) {
+    renderDistance = Number.isFinite(Number(distance)) ? Math.max(70, Number(distance)) : Infinity;
+    updateRenderVisibility(true);
+  }
   function updateTrees(dt) {
     const t = elapsed;
     for (const { tree, phase = 0 } of windTrees) {
+      if (!tree.visible) continue;
       tree.rotation.z = Math.sin(t * 0.73 + phase) * 0.034;
       tree.rotation.x = Math.cos(t * 0.57 + phase * 1.3) * 0.021;
     }
@@ -981,6 +1003,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     elapsed += dt;
     updateSignals();
     updateVehicles(dt);
+    updateRenderVisibility();
     for (const pedestrian of pedestrians) updatePedestrian(pedestrian, dt);
     updateStationaryPeople(dt);
     updatePolice(dt);
@@ -1015,6 +1038,7 @@ export function createCitySimulation(THREE, scene, options = {}) {
     setCitizenStates,
     animateCitizenAttack,
     setPoliceWantedLevel,
+    setRenderDistance,
     getVehicleImpact,
     phaseAt,
     step: update,
