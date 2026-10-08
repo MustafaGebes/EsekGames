@@ -689,10 +689,10 @@ export function getItemFuelValue(id: AnyItemId): number {
     BlockType.OAK_PLANKS,
     BlockType.CRAFTING_TABLE,
     BlockType.CHEST,
-    BlockType.OAK_DOOR,
   ].includes(id as BlockType)) return 15;
+  if (id === BlockType.OAK_DOOR) return 10;
   if ([BlockType.OAK_PLANKS_SLAB, BlockType.OAK_PLANKS_SLAB_TOP].includes(id as BlockType)) return 7.5;
-  if (id === ItemType.STICK || id === ItemType.OAK_SAPLING) return 5;
+  if (id === ItemType.STICK || id === ItemType.OAK_SAPLING || id === BlockType.OAK_SAPLING) return 5;
   if (id === ItemType.COAL || id === ItemType.CHARCOAL) return 80;
   const def = ITEM_DEFS[id];
   return def?.fuelValue ?? 0;
@@ -1595,17 +1595,69 @@ export function generateAllItemIcons() {
         ctx.strokeStyle = '#bdbdbd';
         ctx.beginPath(); ctx.moveTo(8, 13); ctx.lineTo(13, 16); ctx.moveTo(20, 21); ctx.lineTo(25, 18); ctx.stroke();
       }
+      if (id === BlockType.GOLD_ORE) {
+        ctx.fillStyle = '#e0b52b';
+        [[7, 9], [20, 7], [12, 17], [22, 21], [7, 20]].forEach(([x, y]) => ctx.fillRect(x, y, 3, 3));
+        ctx.fillStyle = '#9d7519'; ctx.fillRect(13, 10, 2, 2);
+      }
+      if (id === BlockType.DIAMOND_ORE) {
+        ctx.fillStyle = '#45c9cf';
+        [[7, 9], [20, 7], [12, 17], [22, 21], [7, 20]].forEach(([x, y]) => ctx.fillRect(x, y, 3, 3));
+        ctx.fillStyle = '#187f87'; ctx.fillRect(13, 10, 2, 2);
+      }
+      if (id === BlockType.MOSSY_COBBLE) {
+        ctx.fillStyle = '#53623b';
+        [[7, 8], [18, 10], [11, 18], [23, 22], [5, 21]].forEach(([x, y]) => ctx.fillRect(x, y, 3, 3));
+        ctx.fillStyle = '#839052'; ctx.fillRect(14, 14, 3, 2);
+      }
+      if (id === BlockType.GRASS) {
+        ctx.fillStyle = '#568839';
+        ctx.fillRect(2, 10, 13, 2); ctx.fillRect(16, 10, 13, 2);
+        ctx.fillStyle = '#82b84b'; ctx.fillRect(6, 11, 4, 1);
+      }
+      if (id === BlockType.OAK_LOG) {
+        ctx.fillStyle = '#4e331c';
+        ctx.fillRect(7, 13, 3, 2); ctx.fillRect(21, 17, 3, 2); ctx.fillRect(12, 25, 2, 2);
+        ctx.fillStyle = '#b98b50'; ctx.fillRect(14, 5, 4, 2); ctx.fillRect(15, 8, 2, 2);
+      }
+      if (id === BlockType.OAK_PLANKS || id === BlockType.CRAFTING_TABLE) {
+        ctx.strokeStyle = '#684321'; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(4, 15); ctx.lineTo(14, 21); ctx.moveTo(4, 20); ctx.lineTo(14, 26);
+        ctx.moveTo(18, 20); ctx.lineTo(28, 14); ctx.moveTo(18, 25); ctx.lineTo(28, 19); ctx.stroke();
+      }
+      if (id === BlockType.CHEST) {
+        ctx.fillStyle = '#d5aa35'; ctx.fillRect(20, 14, 3, 5);
+        ctx.fillStyle = '#6b411b'; ctx.fillRect(19, 13, 5, 2);
+      }
+      if (id === BlockType.BRICKS) {
+        ctx.strokeStyle = '#7d3125'; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(3, 16); ctx.lineTo(14, 22); ctx.moveTo(16, 22); ctx.lineTo(29, 15);
+        ctx.moveTo(9, 13); ctx.lineTo(9, 16); ctx.moveTo(23, 20); ctx.lineTo(23, 23); ctx.stroke();
+      }
     });
   };
 
+  drawVoxelIcon(BlockType.GRASS, { top: '#70a84d', left: '#70502f', right: '#563c24', fleck: '#3d632d', accent: '#82603a' });
+  drawVoxelIcon(BlockType.DIRT, { top: '#805a35', left: '#684526', right: '#4f351f', fleck: '#452d1b', accent: '#967044' });
+  drawVoxelIcon(BlockType.STONE, { top: '#7d7d7d', left: '#696969', right: '#535353', fleck: '#484848', accent: '#929292' });
+  drawVoxelIcon(BlockType.COAL_ORE, { top: '#777777', left: '#626262', right: '#505050', fleck: '#181818', accent: '#292929' });
+  drawVoxelIcon(BlockType.IRON_ORE, { top: '#7c7a78', left: '#666360', right: '#514e4b', fleck: '#b9784f', accent: '#d39a69' });
+  drawVoxelIcon(BlockType.GOLD_ORE, { top: '#7c7972', left: '#65615b', right: '#514d47', fleck: '#e0b52b', accent: '#9d7519' });
+  drawVoxelIcon(BlockType.DIAMOND_ORE, { top: '#7c7c78', left: '#666560', right: '#514f4c', fleck: '#45c9cf', accent: '#187f87' });
+  drawVoxelIcon(BlockType.OAK_LOG, { top: '#c69b5c', left: '#80532d', right: '#623f23', fleck: '#4e331c', accent: '#a8763e' });
+  drawVoxelIcon(BlockType.OAK_LEAVES, { top: '#579341', left: '#3f7432', right: '#305b29', fleck: '#244b22', accent: '#72aa4e' });
+  drawVoxelIcon(BlockType.OAK_PLANKS, { top: '#b98b50', left: '#936733', right: '#714c28', fleck: '#684321', accent: '#d0a25e' });
+  drawVoxelIcon(BlockType.CRAFTING_TABLE, { top: '#b68a4c', left: '#8b5d2e', right: '#694321', fleck: '#684321', accent: '#d2a45d' });
+  drawVoxelIcon(BlockType.CHEST, { top: '#bb8438', left: '#8b5526', right: '#693d1b', fleck: '#583518', accent: '#d6a346' });
   drawVoxelIcon(BlockType.FURNACE, { top: '#777d80', left: '#62686a', right: '#484e50', fleck: '#a4aaab' });
-  drawVoxelIcon(BlockType.COAL_ORE, { top: '#777777', left: '#686868', right: '#555555', fleck: '#313131', accent: '#2a2a2a' });
-  drawVoxelIcon(BlockType.IRON_ORE, { top: '#83807d', left: '#6c6966', right: '#595653', fleck: '#c58d68', accent: '#d8ac86' });
-  drawVoxelIcon(BlockType.STONE, { top: '#898989', left: '#737373', right: '#5c5c5c', fleck: '#4a4a4a', accent: '#a0a0a0' });
+  drawVoxelIcon(BlockType.COBBLESTONE, { top: '#808080', left: '#696969', right: '#505050', fleck: '#3c3c3c', accent: '#969696' });
+  drawVoxelIcon(BlockType.MOSSY_COBBLE, { top: '#797b68', left: '#60614f', right: '#494a3d', fleck: '#435532', accent: '#85895b' });
+  drawVoxelIcon(BlockType.SAND, { top: '#e1d19a', left: '#c1ad70', right: '#9b8754', fleck: '#887444', accent: '#eadca9' });
+  drawVoxelIcon(BlockType.GLASS, { top: '#a6dfe0', left: '#7bb6bd', right: '#5e9099', fleck: '#e5ffff', accent: '#87cbd0' });
+  drawVoxelIcon(BlockType.BRICKS, { top: '#aa5140', left: '#914032', right: '#713126', fleck: '#6b3026', accent: '#c4664d' });
   drawVoxelIcon(BlockType.BEDROCK, { top: '#333333', left: '#222222', right: '#111111', fleck: '#050505', accent: '#4b4b4b' });
-  drawVoxelIcon(BlockType.OBSIDIAN, { top: '#332548', left: '#241833', right: '#171020', fleck: '#624b81', accent: '#3e2b5b' });
-  drawVoxelIcon(BlockType.COBBLESTONE, { top: '#858585', left: '#6d6d6d', right: '#555555', fleck: '#3e3e3e', accent: '#999999' });
-  drawVoxelIcon(BlockType.WHITE_WOOL_BLOCK, { top: '#ffffff', left: '#f3f3f3', right: '#dedede', fleck: '#d5d5d5', accent: '#ffffff' });
+  drawVoxelIcon(BlockType.OBSIDIAN, { top: '#30233f', left: '#23172f', right: '#171020', fleck: '#624b81', accent: '#3e2b5b' });
+  drawVoxelIcon(BlockType.WHITE_WOOL_BLOCK, { top: '#ffffff', left: '#f4f1e6', right: '#ddd9cd', fleck: '#bcb8ad', accent: '#ffffff' });
 
   // Stick
   drawIcon(ItemType.STICK, (ctx) => {
@@ -1666,12 +1718,14 @@ export function generateAllItemIcons() {
 
   // Coal
   drawIcon(ItemType.COAL, (ctx) => {
-    ctx.fillStyle = '#222';
+    ctx.fillStyle = '#242424';
     ctx.fillRect(8, 10, 16, 14);
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#0b0b0b';
     ctx.fillRect(10, 8, 12, 18);
-    ctx.fillStyle = '#3a3a3a';
+    ctx.fillStyle = '#444444';
     ctx.fillRect(12, 12, 4, 4);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, 15, 4, 3);
   });
 
   drawIcon(ItemType.FLINT, (ctx) => {
@@ -1703,27 +1757,27 @@ export function generateAllItemIcons() {
 
   // Iron Ingot
   drawIcon(ItemType.IRON_INGOT, (ctx) => {
-    ctx.fillStyle = '#aebbc2';
+    ctx.fillStyle = '#9ba7ae';
     ctx.fillRect(6, 12, 20, 10);
-    ctx.fillStyle = '#dce5e9';
+    ctx.fillStyle = '#c7d1d6';
     ctx.fillRect(8, 10, 16, 4);
-    ctx.fillStyle = '#64727a';
+    ctx.fillStyle = '#505e66';
     ctx.fillRect(6, 20, 20, 3);
   });
 
   // Gold Ingot
   drawIcon(ItemType.GOLD_INGOT, (ctx) => {
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = '#e2b52b';
     ctx.fillRect(6, 12, 20, 10);
-    ctx.fillStyle = '#fff575';
+    ctx.fillStyle = '#f4d259';
     ctx.fillRect(8, 10, 16, 4);
-    ctx.fillStyle = '#c79d00';
+    ctx.fillStyle = '#9a6e12';
     ctx.fillRect(6, 20, 20, 3);
   });
 
   // Diamond
   drawIcon(ItemType.DIAMOND, (ctx) => {
-    ctx.fillStyle = '#4dedf4';
+    ctx.fillStyle = '#3ecbd3';
     ctx.beginPath();
     ctx.moveTo(16, 4);
     ctx.lineTo(26, 12);
@@ -1733,7 +1787,7 @@ export function generateAllItemIcons() {
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(14, 8, 4, 4);
-    ctx.fillStyle = '#1f989e';
+    ctx.fillStyle = '#187d85';
     ctx.fillRect(14, 18, 4, 6);
   });
 
@@ -1863,21 +1917,24 @@ export function generateAllItemIcons() {
 
   // White Wool
   drawIcon(ItemType.WHITE_WOOL, (ctx) => {
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#fffef7';
     ctx.fillRect(6, 6, 20, 20);
-    ctx.fillStyle = '#f1f1f1';
+    ctx.fillStyle = '#f2f0e6';
     ctx.fillRect(8, 8, 16, 16);
-    ctx.fillStyle = '#d6d6d6';
+    ctx.fillStyle = '#c8c5b9';
     ctx.fillRect(10, 14, 6, 4);
+    ctx.strokeStyle = '#918f86';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(6.5, 6.5, 19, 19);
   });
 
   // Tool Drawing Helpers
   const materials: Record<string, { head: string; light: string; dark: string }> = {
     wood: { head: '#9c7f4e', light: '#b89860', dark: '#5e4823' },
-    stone: { head: '#7f7f7f', light: '#a0a0a0', dark: '#4f4f4f' },
-    iron: { head: '#aebbc2', light: '#dce5e9', dark: '#64727a' },
-    gold: { head: '#e8b923', light: '#fff27a', dark: '#9a6a00' },
-    diamond: { head: '#4dedf4', light: '#b8ffff', dark: '#1f989e' },
+    stone: { head: '#737373', light: '#969696', dark: '#393939' },
+    iron: { head: '#9ba7ae', light: '#c7d1d6', dark: '#505e66' },
+    gold: { head: '#d9ae22', light: '#f2d04c', dark: '#8c6410' },
+    diamond: { head: '#3ecbd3', light: '#9ef0f2', dark: '#187d85' },
   };
 
   const drawStick = (ctx: CanvasRenderingContext2D) => {
@@ -2036,9 +2093,9 @@ export function generateAllItemIcons() {
   };
   const armorColors = {
     leather: { main: '#9a6338', light: '#c18a55', dark: '#57361f' },
-    iron: { main: '#aab7bf', light: '#d5e0e5', dark: '#56636c' },
-    gold: { main: '#edc52e', light: '#fff18a', dark: '#8f6508' },
-    diamond: { main: '#42d9dc', light: '#b9ffff', dark: '#176f7a' },
+    iron: { main: '#9ba7ae', light: '#c7d1d6', dark: '#505e66' },
+    gold: { main: '#d9ae22', light: '#f2d04c', dark: '#8c6410' },
+    diamond: { main: '#3ecbd3', light: '#9ef0f2', dark: '#187d85' },
   };
   const armorSets: Array<{ colors: typeof armorColors.leather; ids: [ItemType, ItemType, ItemType, ItemType] }> = [
     { colors: armorColors.leather, ids: [ItemType.LEATHER_HELMET, ItemType.LEATHER_CHESTPLATE, ItemType.LEATHER_LEGGINGS, ItemType.LEATHER_BOOTS] },
