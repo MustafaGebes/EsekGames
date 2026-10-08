@@ -278,7 +278,8 @@ export default function App() {
               yaw: current.yaw, pitch: current.pitch,
               isMoving: Math.hypot(current.vel.x, current.vel.z) > 0.05,
               isCrouching: current.isSneaking, isSprinting: current.isSprinting,
-              isJumping: !current.onGround, platform: controlMode
+              isJumping: !current.onGround, platform: controlMode,
+              esekcraftHp: current.hp, esekcraftArmor: current.armor.map((stack) => stack?.id ?? null)
             });
           }, 50);
         }
@@ -332,6 +333,7 @@ export default function App() {
     if (!meta) return;
     const updatedMeta: WorldMeta = {
       ...meta,
+      worldFormatVersion: 2,
       saved: Date.now(),
       mods: { ...eng.world.mods },
       furnaces: { ...eng.world.furnaces },
@@ -370,7 +372,8 @@ export default function App() {
       seed: options.seed,
       difficulty: options.difficulty,
       gameMode: options.gameMode,
-      created: Date.now(), saved: Date.now(), mods: {}, furnaces: {}, chests: {}
+      created: Date.now(), saved: Date.now(), mods: {}, furnaces: {}, chests: {},
+      worldFormatVersion: 2,
     };
   };
   const connectOnline = () => {
@@ -532,6 +535,7 @@ export default function App() {
 
     if (eng && meta) {
       meta.saved = Date.now();
+      meta.worldFormatVersion = 2;
       meta.gameMode = eng.gameMode;
       meta.mods = { ...eng.world.mods };
       meta.furnaces = { ...eng.world.furnaces };
@@ -587,6 +591,7 @@ export default function App() {
       gameMode: newWorldMode,
       created: Date.now(),
       saved: Date.now(),
+      worldFormatVersion: 2,
       mods: {},
       furnaces: {},
       chests: {},

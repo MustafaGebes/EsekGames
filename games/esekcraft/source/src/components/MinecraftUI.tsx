@@ -234,7 +234,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showControlsModal, setShowControlsModal] = useState(false);
   const [showPlayerList, setShowPlayerList] = useState(false);
-  const [creativePaletteTab, setCreativePaletteTab] = useState<'blocks' | 'items'>('blocks');
+  const [creativePaletteTab, setCreativePaletteTab] = useState('all');
   const [creativeSearch, setCreativeSearch] = useState('');
 
   // 2x2 player crafting grid
@@ -251,19 +251,38 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   const [, setTick] = useState(0);
   const rerender = () => setTick((t) => t + 1);
   const normalizedCreativeSearch = creativeSearch.trim().toLocaleLowerCase('tr');
-  const creativePaletteEntries = creativePaletteTab === 'blocks'
-    ? Object.entries(BLOCK_DEFS)
-      .filter(([id, def]) => {
+  const creativeSources = [
+    ...Object.entries(BLOCK_DEFS)
+      .filter(([id]) => {
         const blockId = Number(id) as BlockType;
         return blockId > 0 && blockId < 100 && blockId !== BlockType.FURNACE_LIT &&
           !isUpperSlabBlock(blockId) && (!isDoorBlock(blockId) || blockId === BlockType.OAK_DOOR) &&
-          (!isBedBlock(blockId) || blockId === BlockType.BED) &&
-          def.name.toLocaleLowerCase('tr').includes(normalizedCreativeSearch);
+          (!isBedBlock(blockId) || blockId === BlockType.BED);
       })
-      .map(([id, def]) => ({ id: Number(id), name: def.name }))
-    : Object.entries(ITEM_DEFS)
-      .filter(([, def]) => def.name.toLocaleLowerCase('tr').includes(normalizedCreativeSearch))
-      .map(([id, def]) => ({ id: Number(id), name: def.name }));
+      .map(([id, def]) => ({ id: Number(id), name: def.name, isBlock: true })),
+    ...Object.entries(ITEM_DEFS).map(([id, def]) => ({ id: Number(id), name: def.name, isBlock: false })),
+  ];
+  const creativeCategory = (id: number, isBlock: boolean) => {
+    if (!isBlock) {
+      if (ITEM_DEFS[id]?.tool) return 'tools';
+      if (ITEM_DEFS[id]?.armor || (id >= ItemType.WOODEN_SWORD && id <= ItemType.GOLD_SWORD)) return 'combat';
+      if (id >= ItemType.APPLE && id <= ItemType.COOKED_CHICKEN) return 'food';
+      return 'ingredients';
+    }
+    if ([BlockType.WHITE_WOOL_BLOCK, BlockType.GLASS].includes(id as BlockType)) return 'colored';
+    if ([BlockType.GRASS, BlockType.DIRT, BlockType.SAND, BlockType.STONE, BlockType.BEDROCK, BlockType.OAK_LOG, BlockType.OAK_LEAVES,
+      BlockType.COAL_ORE, BlockType.IRON_ORE, BlockType.GOLD_ORE, BlockType.DIAMOND_ORE, BlockType.OBSIDIAN, BlockType.MOSSY_COBBLE, BlockType.OAK_SAPLING].includes(id as BlockType)) return 'natural';
+    if ([BlockType.CRAFTING_TABLE, BlockType.FURNACE, BlockType.CHEST, BlockType.TORCH, BlockType.OAK_DOOR, BlockType.BED].includes(id as BlockType)) return 'functional';
+    return 'building';
+  };
+  const creativeTabs = [
+    { id: 'all', label: 'Tümü' }, { id: 'building', label: 'Yapı' }, { id: 'colored', label: 'Renkli' },
+    { id: 'natural', label: 'Doğa' }, { id: 'functional', label: 'İşlevsel' }, { id: 'tools', label: 'Araçlar' },
+    { id: 'combat', label: 'Savaş' }, { id: 'food', label: 'Yiyecek' }, { id: 'ingredients', label: 'Malzemeler' },
+  ];
+  const creativePaletteEntries = creativeSources
+    .filter((entry) => creativePaletteTab === 'all' || creativeCategory(entry.id, entry.isBlock) === creativePaletteTab)
+    .filter((entry) => entry.name.toLocaleLowerCase('tr').includes(normalizedCreativeSearch));
 
   // Mouse move tracker for held cursor item
   useEffect(() => {
@@ -886,10 +905,10 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               <div className="fixed left-1/2 top-3 z-[40] w-[min(96vw,720px)] max-h-[45vh] -translate-x-1/2 overflow-hidden border-2 border-[#777] bg-black/95 p-2 shadow-xl">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs font-bold text-yellow-200">YARATICI KATALOĞU · sınırsız eşya</div>
-                  <div className="flex gap-1">
-                    {(['blocks', 'items'] as const).map((tab) => (
-                      <button key={tab} onClick={() => setCreativePaletteTab(tab)} className={`border border-[#777] px-2 py-1 text-xs ${creativePaletteTab === tab ? 'bg-[#555] text-yellow-100' : 'bg-[#222] text-gray-300'}`}>
-                        {tab === 'blocks' ? 'Bloklar' : 'Eşyalar'}
+                  <div className="flex max-w-[72%] gap-1 overflow-x-auto pb-1">
+                    {creativeTabs.map((tab) => (
+                      <button key={tab.id} onClick={() => setCreativePaletteTab(tab.id)} className={`shrink-0 border border-[#777] px-2 py-1 text-xs ${creativePaletteTab === tab.id ? 'bg-[#555] text-yellow-100' : 'bg-[#222] text-gray-300'}`}>
+                        {tab.label}
                       </button>
                     ))}
                   </div>
@@ -897,7 +916,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
                 <input
                   value={creativeSearch}
                   onChange={(event) => setCreativeSearch(event.target.value)}
-                  placeholder={creativePaletteTab === 'blocks' ? 'Blok ara…' : 'Eşya ara…'}
+                  placeholder="Bu kategoride eşya ara…"
                   aria-label="Yaratıcı kataloğunda ara"
                   className="mb-2 w-full border-2 border-[#555] bg-[#222] px-2 py-1 text-xs text-white outline-none placeholder:text-gray-400"
                 />

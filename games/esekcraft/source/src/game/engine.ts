@@ -45,7 +45,7 @@ import {
   getItemFuelValue,
   getItemTexture,
 } from './textures';
-import { VoxelWorld, inBounds, IDX } from './world';
+import { VoxelWorld, inBounds, IDX, migrateSavedWorldMods, migrateSavedWorldIndex } from './world';
 import { Sound, SoundMaterial } from './audio';
 import { findSmeltRecipe } from './recipes';
 import { rollOakLeafDrops } from './drops';
@@ -78,6 +78,7 @@ export class MinecraftEngine {
   public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
   public world: VoxelWorld;
+  private worldMetaHasPlayer = false;
 
   // Day/Night and Sky
   public sunLight: THREE.DirectionalLight;
@@ -187,7 +188,9 @@ export class MinecraftEngine {
   private dropSequence = 0;
   public particles: ParticleEntity[] = [];
   public mobs: MobEntity[] = [];
-  private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean; isDead: boolean }>();
+  private remotePlayers = new Map<string, { mesh: THREE.Group; target: THREE.Vector3; yaw: number; isMoving: boolean; isCrouching: boolean; isDead: boolean; hp: number; maxHp: number; healthSprite: THREE.Sprite; armorKey: string }>();
+  private mobSpawnTimer = 0;
+  private saplingGrowthTimers = new Map<number, number>();
   public attackCooldown = 0;
 
   // Keys & Input
@@ -407,13 +410,21 @@ export class MinecraftEngine {
     // Create World
     this.world = new VoxelWorld(meta ? meta.seed : 'minecraft');
     if (meta && meta.mods) {
-      this.world.mods = { ...meta.mods };
+      this.world.mods = migrateSavedWorldMods(meta.mods, meta.worldFormatVersion);
     }
     if (meta && meta.furnaces) {
-      this.world.furnaces = { ...meta.furnaces };
+      this.world.furnaces = Object.fromEntries(Object.entries(meta.furnaces).flatMap(([key, value]) => {
+        const nextIndex = migrateSavedWorldIndex(Number(key), meta.worldFormatVersion);
+        return nextIndex === null ? [] : [[nextIndex, value]];
+      }));
     }
     if (meta && meta.chests) {
-      this.world.chests = { ...meta.chests };
+      this.world.chests = Object.fromEntries(Object.entries(meta.chests).flatMap(([key, value]) => {
+        const nextIndex = migrateSavedWorldIndex(Number(key), meta.worldFormatVersion);
+        if (nextIndex === null) return [];
+        const pairedWith = typeof value.pairedWith === 'number' ? migrateSavedWorldIndex(value.pairedWith, meta.worldFormatVersion) : value.pairedWith;
+        return [[nextIndex, { ...value, pairedWith }]];
+      }));
     }
 
     // Player Models (3D Donkey Character & Donkey Hoof Hand)
@@ -453,6 +464,7 @@ export class MinecraftEngine {
   }
 
   private initPlayerState(meta?: WorldMeta) {
+    this.worldMetaHasPlayer = !!meta?.player;
     if (meta) {
       this.gameMode = meta.gameMode || 'survival';
       if (meta.player) {
@@ -506,8 +518,9 @@ export class MinecraftEngine {
       let remote = this.remotePlayers.get(id);
       if (!remote) {
         const mesh = this.createDonkeyModel();
+        const healthSprite = this.createRemoteHealthSprite(mesh);
         this.scene.add(mesh);
-        remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false, isDead: false };
+        remote = { mesh, target: new THREE.Vector3(x, y, z), yaw: 0, isMoving: false, isCrouching: false, isDead: false, hp: 20, maxHp: 20, healthSprite, armorKey: '' };
         this.remotePlayers.set(id, remote);
         mesh.position.set(x, y, z);
       }
@@ -516,6 +529,19 @@ export class MinecraftEngine {
       remote.isMoving = !!data?.isMoving;
       remote.isCrouching = !!data?.isCrouching;
       remote.isDead = data?.alive === false;
+      const hp = Number(data?.esekcraftHp ?? data?.health);
+      const maxHp = Number(data?.esekcraftMaxHp ?? data?.maxHealth) || 20;
+      if (Number.isFinite(hp) && (hp !== remote.hp || maxHp !== remote.maxHp)) {
+        remote.hp = Math.max(0, Math.min(maxHp, hp));
+        remote.maxHp = maxHp;
+        this.updateRemoteHealthSprite(remote.healthSprite, remote.hp, remote.maxHp);
+      }
+      const armor = Array.isArray(data?.esekcraftArmor) ? data.esekcraftArmor : [];
+      const armorKey = JSON.stringify(armor);
+      if (armorKey !== remote.armorKey) {
+        remote.armorKey = armorKey;
+        this.refreshDonkeyArmor(remote.mesh, armor);
+      }
     }
     for (const [id, remote] of this.remotePlayers) {
       if (active.has(id)) continue;
@@ -616,6 +642,9 @@ export class MinecraftEngine {
       const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
       if (!inBounds(bx, by, bz)) continue;
       this.world.setBlock(bx, by, bz, Math.floor(blockId) as BlockType);
+      const saplingIndex = IDX(bx, by, bz);
+      if (Math.floor(blockId) === BlockType.OAK_SAPLING) this.saplingGrowthTimers.set(saplingIndex, performance.now() + 60_000);
+      else this.saplingGrowthTimers.delete(saplingIndex);
       changed = true;
     }
     if (!changed) return;
@@ -680,6 +709,10 @@ export class MinecraftEngine {
         await this.world.generate((pct, stage, fps) => {
           onLoadingProgress?.(pct, stage, fps);
         });
+        if (!this.worldMetaHasPlayer) {
+          const spawn = this.world.findSafeGrassSpawn();
+          if (spawn) this.pos = spawn;
+        }
         this.recoverFromBlockCollision();
 
         const centerX = this.pos.x;
@@ -696,7 +729,8 @@ export class MinecraftEngine {
         this.visibleMeshCenter = { x: centerX, z: centerZ };
         this.rebuildTorchVisuals();
         // A fuller herd, while keeping the first spawn pass bounded.
-        this.spawnMobs(24);
+        this.spawnMobs(120);
+        this.scheduleExistingSaplings();
         this.lastTime = performance.now();
         this.animate(this.lastTime);
 
@@ -790,6 +824,75 @@ export class MinecraftEngine {
     g.userData = { legs, headGroup, bodyPivot, hitMaterials, hitUntil: 0, hitTinted: false, attackUntil: 0, attackSide: 1 };
     return g;
   }
+
+  private refreshDonkeyArmor(donkey: THREE.Group, equipped: Array<number | { id?: number } | null>) {
+    const previous = donkey.userData.armorGroup as THREE.Group | undefined;
+    if (previous) { donkey.remove(previous); this.disposeDropObject(previous); }
+    const overlay = new THREE.Group();
+    const part = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y, z); overlay.add(mesh);
+    };
+    const palettes: Record<string, { main: number; trim: number }> = {
+      leather: { main: 0x9a6338, trim: 0x57361f }, iron: { main: 0xc9d0d4, trim: 0x69747c },
+      gold: { main: 0xedc52e, trim: 0x8f6508 }, diamond: { main: 0x42d9dc, trim: 0x176f7a },
+    };
+    for (const stack of equipped || []) {
+      const id = typeof stack === 'number' ? stack : stack?.id;
+      const armorDef = id === undefined ? null : ITEM_DEFS[id]?.armor;
+      const colors = armorDef ? palettes[armorDef.material] : null;
+      if (!armorDef || !colors) continue;
+      const main = new THREE.MeshLambertMaterial({ color: colors.main });
+      const trim = new THREE.MeshLambertMaterial({ color: colors.trim });
+      if (armorDef.slot === 'helmet') {
+        part(0.46, 0.14, 0.48, main, 0, 2.34, 0.69);
+        part(0.50, 0.055, 0.50, trim, 0, 2.26, 0.69);
+      } else if (armorDef.slot === 'chest') {
+        part(0.97, 0.49, 1.12, main, 0, 1.14, 0);
+        part(1.00, 0.07, 1.14, trim, 0, 1.38, 0);
+      } else if (armorDef.slot === 'legs') {
+        for (const x of [-0.30, 0.30]) for (const z of [-0.53, 0.53]) {
+          part(0.29, 0.34, 0.29, main, x, 0.63, z);
+          part(0.30, 0.055, 0.30, trim, x, 0.47, z);
+        }
+      } else {
+        for (const x of [-0.30, 0.30]) for (const z of [-0.53, 0.53]) {
+          part(0.29, 0.16, 0.29, main, x, 0.36, z);
+          part(0.30, 0.045, 0.30, trim, x, 0.28, z);
+        }
+      }
+    }
+    donkey.add(overlay);
+    donkey.userData.armorGroup = overlay;
+  }
+
+  private createRemoteHealthSprite(donkey: THREE.Group): THREE.Sprite {
+    const canvas = document.createElement('canvas'); canvas.width = 220; canvas.height = 24;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace; texture.magFilter = THREE.NearestFilter;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+    sprite.scale.set(1.8, 0.2, 1); sprite.position.set(0, 3.05, 0); sprite.renderOrder = 5;
+    donkey.add(sprite); this.updateRemoteHealthSprite(sprite, 20, 20);
+    return sprite;
+  }
+
+  private updateRemoteHealthSprite(sprite: THREE.Sprite, hp: number, maxHp: number) {
+    const texture = (sprite.material as THREE.SpriteMaterial).map;
+    const canvas = texture?.image as HTMLCanvasElement | undefined;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < 10; i++) {
+      const amount = Math.max(0, Math.min(2, hp - i * maxHp / 10));
+      const x = 2 + i * 22;
+      ctx.fillStyle = '#3b1414';
+      ctx.beginPath(); ctx.moveTo(x + 7, 21); ctx.bezierCurveTo(x - 2, 14, x, 5, x + 6, 8); ctx.bezierCurveTo(x + 8, 5, x + 12, 6, x + 14, 9); ctx.bezierCurveTo(x + 20, 3, x + 25, 11, x + 18, 18); ctx.lineTo(x + 11, 23); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = amount >= 2 ? '#ed2939' : amount >= 1 ? '#b52b37' : '#777777';
+      ctx.beginPath(); ctx.moveTo(x + 7, 19); ctx.bezierCurveTo(x, 13, x + 2, 8, x + 7, 10); ctx.bezierCurveTo(x + 9, 7, x + 12, 8, x + 14, 11); ctx.bezierCurveTo(x + 18, 6, x + 22, 11, x + 17, 17); ctx.lineTo(x + 11, 21); ctx.closePath(); ctx.fill();
+    }
+    if (texture) texture.needsUpdate = true;
+  }
+
   // First Person Donkey Hoof Hand on the right side - authentically angled upward & inward like Minecraft
   private createFirstPersonHand(): THREE.Group {
     const group = new THREE.Group();
@@ -820,6 +923,7 @@ export class MinecraftEngine {
     }
 
     const currentStack = this.inventory[this.selectedSlot];
+    this.refreshDonkeyArmor(this.donkey3P, this.armor);
     if (!currentStack) {
       if (this.isBuildingOffhandItemModel) this.offhandItemMesh = null;
       else {
@@ -831,8 +935,16 @@ export class MinecraftEngine {
 
     const id = currentStack.id;
 
+    // Saplings need a recognizable stem-and-leaves silhouette in the hand.
+    if (id === ItemType.OAK_SAPLING) {
+      const sapling = this.createHeldSaplingModel();
+      sapling.scale.setScalar(0.92);
+      sapling.position.set(-0.02, 0.16, -0.06);
+      sapling.rotation.set(0.2, -0.45, 0.15);
+      this.heldItemMesh = sapling as unknown as THREE.Mesh;
+      this.handGroup.add(sapling);
     // Torches are items with a stick/flame model, not miniature cubes.
-    if (id === BlockType.TORCH) {
+    } else if (id === BlockType.TORCH) {
       const torch = this.createTorchDrop();
       torch.scale.setScalar(0.85);
       torch.position.set(-0.02, 0.15, -0.06);
@@ -1258,6 +1370,25 @@ export class MinecraftEngine {
     return model;
   }
 
+  private createHeldSaplingModel(): THREE.Group {
+    const group = new THREE.Group();
+    const bark = new THREE.MeshLambertMaterial({ color: 0x79502b });
+    const leaves = new THREE.MeshLambertMaterial({ color: 0x34892e });
+    const brightLeaves = new THREE.MeshLambertMaterial({ color: 0x70bd46 });
+    const darkLeaves = new THREE.MeshLambertMaterial({ color: 0x205f27 });
+    const part = (w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y, z);
+      group.add(mesh);
+    };
+    part(0.055, 0.30, 0.055, bark, 0, -0.04, 0);
+    part(0.24, 0.20, 0.16, leaves, 0, 0.15, 0);
+    part(0.18, 0.15, 0.18, brightLeaves, -0.09, 0.20, 0.005);
+    part(0.18, 0.15, 0.18, leaves, 0.09, 0.12, 0.015);
+    part(0.12, 0.12, 0.14, darkLeaves, -0.015, 0.25, -0.01);
+    return group;
+  }
+
   private setupMeshUVs(geo: THREE.BoxGeometry, blockId: AnyItemId) {
     const def = BLOCK_DEFS[blockId];
     if (!def) return;
@@ -1657,63 +1788,65 @@ export class MinecraftEngine {
   }
 
   // ================= MOB SPAWNING, AI & COMBAT =================
-  public spawnMobs(targetCount = 14) {
+  public spawnMobs(targetCount = 14, maxNew = targetCount) {
     const mobTypes = [MobType.COW, MobType.SHEEP, MobType.PIG, MobType.CHICKEN];
-
-    for (let i = 0; i < targetCount; i++) {
-      const x = Math.floor(8 + Math.random() * (SX - 16));
-      const z = Math.floor(8 + Math.random() * (SZ - 16));
+    const desiredNew = Math.min(maxNew, Math.max(0, targetCount - this.mobs.length));
+    let created = 0;
+    let attempts = 0;
+    while (created < desiredNew && attempts++ < desiredNew * 80) {
+      // Concentrate the herd around the player so it is actually visible and reachable.
+      const x = Math.floor(this.pos.x + (Math.random() - 0.5) * 64);
+      const z = Math.floor(this.pos.z + (Math.random() - 0.5) * 64);
+      if (x < 3 || x >= SX - 3 || z < 3 || z >= SZ - 3) continue;
       const topY = this.world.getTopSolid(x, z);
-
-      if (topY <= 0 || topY >= SY - 2) continue;
-      const b = this.world.getBlock(x, topY, z);
-      if (b !== BlockType.GRASS) continue;
+      if (topY <= 0 || topY >= SY - 3 || this.world.getBlock(x, topY, z) !== BlockType.GRASS) continue;
+      if (this.world.getBlock(x, topY + 1, z) !== BlockType.AIR || this.world.getBlock(x, topY + 2, z) !== BlockType.AIR) continue;
+      if (this.mobs.some((mob) => Math.hypot(mob.pos.x - (x + 0.5), mob.pos.z - (z + 0.5)) < 2.4)) continue;
 
       const type = mobTypes[Math.floor(Math.random() * mobTypes.length)];
-      let mesh: THREE.Group;
-      let hp = 10;
-
-      if (type === MobType.COW) {
-        mesh = this.createCowModel();
-        hp = 10;
-      } else if (type === MobType.SHEEP) {
-        mesh = this.createSheepModel();
-        hp = 8;
-      } else if (type === MobType.PIG) {
-        mesh = this.createPigModel();
-        hp = 10;
-      } else {
-        mesh = this.createChickenModel();
-        hp = 4;
-      }
-
-      const posX = x + 0.5;
-      const posY = topY + 1.0;
-      const posZ = z + 0.5;
+      const mesh = type === MobType.COW ? this.createCowModel()
+        : type === MobType.SHEEP ? this.createSheepModel()
+        : type === MobType.PIG ? this.createPigModel() : this.createChickenModel();
+      const hp = type === MobType.SHEEP ? 8 : type === MobType.CHICKEN ? 4 : 10;
+      const posX = x + 0.5, posY = topY + 1, posZ = z + 0.5;
       mesh.position.set(posX, posY, posZ);
       this.scene.add(mesh);
-
-      const mob: MobEntity = {
-        id: `mob_${Date.now()}_${i}`,
-        type,
-        mesh,
-        pos: { x: posX, y: posY, z: posZ },
-        vel: { x: 0, y: 0, z: 0 },
-        yaw: Math.random() * Math.PI * 2,
-        hp,
-        maxHp: hp,
-        hurtTimer: 0,
-        wanderTimer: 2 + Math.random() * 4,
-        soundTimer: 6 + Math.random() * 16,
-        walkPhase: Math.random() * 10,
-        isPanicking: false,
-        panicTimer: 0,
-        woolAvailable: type === MobType.SHEEP,
-        woolRegrowTimer: 0,
-      };
-
-      this.mobs.push(mob);
+      this.mobs.push({
+        id: `mob_${Date.now()}_${this.mobs.length}_${created}`,
+        type, mesh, pos: { x: posX, y: posY, z: posZ }, vel: { x: 0, y: 0, z: 0 },
+        yaw: Math.random() * Math.PI * 2, hp, maxHp: hp, hurtTimer: 0,
+        wanderTimer: 2 + Math.random() * 4, soundTimer: 6 + Math.random() * 16,
+        walkPhase: Math.random() * 10, isPanicking: false, panicTimer: 0,
+        woolAvailable: type === MobType.SHEEP, woolRegrowTimer: 0,
+      });
+      created++;
     }
+  }
+
+  private scheduleExistingSaplings() {
+    const readyAt = performance.now() + 60_000;
+    for (let i = 0; i < this.world.data.length; i++) {
+      if (this.world.data[i] === BlockType.OAK_SAPLING) this.saplingGrowthTimers.set(i, readyAt);
+    }
+  }
+
+  private updateSaplingGrowth() {
+    const now = performance.now();
+    let meshChanged = false;
+    for (const [index, readyAt] of this.saplingGrowthTimers) {
+      if (now < readyAt) continue;
+      const x = index % SX, z = Math.floor(index / SX) % SZ, y = Math.floor(index / (SX * SZ));
+      const changes = this.world.growSapling(x, y, z);
+      if (!changes) {
+        if (this.world.getBlock(x, y, z) !== BlockType.OAK_SAPLING) this.saplingGrowthTimers.delete(index);
+        else this.saplingGrowthTimers.set(index, now + 10_000);
+        continue;
+      }
+      this.saplingGrowthTimers.delete(index);
+      for (const change of changes) this.onBlockChanged?.(change);
+      meshChanged = meshChanged || changes.length > 0;
+    }
+    if (meshChanged) this.rebuildVisibleWorldAdaptive(true);
   }
 
   private updateMobs(dt: number) {
@@ -1769,7 +1902,7 @@ export class MinecraftEngine {
         }
       }
 
-      let speed = mob.type === MobType.CHICKEN ? 1.4 : 1.6;
+      let speed = mob.type === MobType.CHICKEN ? 1.9 : 2.2;
       if (mob.isPanicking) speed *= 2.6;
 
       const isMoving =
@@ -1803,9 +1936,9 @@ export class MinecraftEngine {
 
       if (inBounds(Math.floor(nextX), curY, Math.floor(mob.pos.z))) {
         const blk = this.world.getBlock(Math.floor(nextX), curY, Math.floor(mob.pos.z));
-        if (blk !== BlockType.AIR && blk !== BlockType.TORCH) {
+        if (blk !== BlockType.AIR && blk !== BlockType.TORCH && blk !== BlockType.OAK_SAPLING) {
           const above = this.world.getBlock(Math.floor(nextX), curY + 1, Math.floor(mob.pos.z));
-          if (above === BlockType.AIR || above === BlockType.TORCH) {
+          if (above === BlockType.AIR || above === BlockType.TORCH || above === BlockType.OAK_SAPLING) {
             mob.vel.y = 5.2; // hop up 1 block!
           } else {
             mob.yaw += Math.PI * 0.75;
@@ -1817,9 +1950,9 @@ export class MinecraftEngine {
 
       if (inBounds(Math.floor(mob.pos.x), curY, Math.floor(nextZ))) {
         const blk = this.world.getBlock(Math.floor(mob.pos.x), curY, Math.floor(nextZ));
-        if (blk !== BlockType.AIR && blk !== BlockType.TORCH) {
+        if (blk !== BlockType.AIR && blk !== BlockType.TORCH && blk !== BlockType.OAK_SAPLING) {
           const above = this.world.getBlock(Math.floor(mob.pos.x), curY + 1, Math.floor(nextZ));
-          if (above === BlockType.AIR || above === BlockType.TORCH) {
+          if (above === BlockType.AIR || above === BlockType.TORCH || above === BlockType.OAK_SAPLING) {
             mob.vel.y = 5.2;
           } else {
             mob.yaw += Math.PI * 0.75;
@@ -3100,7 +3233,8 @@ export class MinecraftEngine {
   private tryPlaceBlock(hit: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: BlockType; distance: number }, held: ItemStack, hand: 'main' | 'offhand'): boolean {
 
     // White wool is an inventory item but places as the real wool block.
-    let placeId: AnyItemId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK : held.id;
+    let placeId: AnyItemId = held.id === ItemType.WHITE_WOOL ? BlockType.WHITE_WOOL_BLOCK
+      : held.id === ItemType.OAK_SAPLING ? BlockType.OAK_SAPLING : held.id;
     // Materials such as leather and feathers are not placeable blocks.
     if (!BLOCK_DEFS[placeId] || Number(placeId) >= 100) return false;
     if (placeId === BlockType.OAK_DOOR) {
@@ -3147,6 +3281,10 @@ export class MinecraftEngine {
     const py = hit.y + hit.ny;
     const pz = hit.z + hit.nz;
 
+    if (placeId === BlockType.OAK_SAPLING) {
+      if (hit.ny !== 1 || (hit.id !== BlockType.GRASS && hit.id !== BlockType.DIRT)) return false;
+    }
+
     if (!inBounds(px, py, pz)) return false;
     if (this.world.getBlock(px, py, pz) !== BlockType.AIR) return false;
     // Check collision with player
@@ -3163,6 +3301,7 @@ export class MinecraftEngine {
     // Place block in world
     if (placeId === BlockType.CHEST) this.world.prepareChestPlacement(px, py, pz);
     this.world.setBlock(px, py, pz, placeId as BlockType);
+    if (placeId === BlockType.OAK_SAPLING) this.saplingGrowthTimers.set(IDX(px, py, pz), performance.now() + 60_000);
     if (placeId === BlockType.CHEST) this.world.registerPlacedChest(px, py, pz);
     this.onBlockChanged?.({ x: px, y: py, z: pz, blockId: placeId as BlockType });
     this.rebuildVisibleWorld();
@@ -3910,6 +4049,12 @@ export class MinecraftEngine {
         this.updatePlayer(dt);
         this.updateInteraction(dt);
         this.updateMobs(dt);
+        this.mobSpawnTimer += dt;
+        if (this.mobSpawnTimer >= 8) {
+          this.mobSpawnTimer = 0;
+          if (this.mobs.length < 120) this.spawnMobs(120, Math.min(6, 120 - this.mobs.length));
+        }
+        this.updateSaplingGrowth();
         this.updateRemotePlayers(dt);
         this.updateDrops(dt);
         this.updateParticles(dt);
