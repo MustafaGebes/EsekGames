@@ -140,8 +140,8 @@
     const push = (kind, x, z, w, d, height, face = streetFace, offset = 0) => plans.push(footprint(kind, x, z, w, d, height, face, h + offset));
     switch (h % 6) {
       case 0: { // Narrow attached homes along a walkable mid-block lane.
-        const w = Math.min(6.0, (innerW - 3.2) / 3), d = innerD * .68;
-        for (let i = 0; i < 3; i += 1) push(i === 1 ? 'townhouse' : 'rowhouse', cx + (i - 1) * (w + .95), cz, w, d, 7 + ((h + i) % 3) * 2, streetFace, i);
+        const laneWidth=1.65,w=Math.min(6.0,(innerW-laneWidth*2)/3),d=innerD*.68;
+        for (let i = 0; i < 3; i += 1) push(i === 1 ? 'townhouse' : 'rowhouse', cx + (i - 1) * (w + laneWidth), cz, w, d, 7 + ((h + i) % 3) * 2, streetFace, i);
         break;
       }
       case 1: { // A deep courtyard pair with distinct footprints and heights.
@@ -150,8 +150,8 @@
         break;
       }
       case 2: { // A corner shop, small rear house, and a taller mixed-use block.
-        push('corner-shop', cx - innerW * .23, cz - innerD * .23, innerW * .40, innerD * .36, 9, Math.PI, 3);
-        push('apartment', cx + innerW * .22, cz - innerD * .18, innerW * .40, innerD * .44, 18 + (h % 6), 0, 4);
+        push('corner-shop', cx - innerW * .265, cz - innerD * .23, innerW * .40, innerD * .36, 9, Math.PI, 3);
+        push('apartment', cx + innerW * .265, cz - innerD * .18, innerW * .40, innerD * .44, 18 + (h % 6), 0, 4);
         push('townhouse', cx, cz + innerD * .28, innerW * .47, innerD * .28, 8, 0, 5);
         break;
       }

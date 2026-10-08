@@ -58,6 +58,27 @@ test('bina ayak izleri birbirine ve kaldırım/parsel sınırlarına taşmıyor'
   }
 });
 
+test('dar parsel içi ara sokaklar oyuncu collider’ının geçebileceği boşluğu koruyor',()=>{
+  let attachedHomeLanes=0,mixedUseLanes=0;
+  for(let ix=0;ix<city.blockCount;ix++)for(let iz=0;iz<city.blockCount;iz++){
+    const buildings=city.getBlockPlan(ix,iz).buildings;
+    const row=buildings.filter(building=>['rowhouse','townhouse'].includes(building.kind));
+    if(row.length===3&&Math.max(...row.map(building=>building.z))-Math.min(...row.map(building=>building.z))<.02){
+      row.sort((a,b)=>a.x-b.x);
+      for(let i=1;i<row.length;i++)assert.ok(row[i].x-row[i-1].x-(row[i].width+row[i-1].width)/2>=1.45,`alley between ${row[i-1].id} and ${row[i].id} is too narrow`);
+      attachedHomeLanes++;
+    }
+    const shop=buildings.find(building=>building.kind==='corner-shop'),apartment=buildings.find(building=>building.kind==='apartment');
+    if(shop&&apartment){
+      const gap=Math.abs(shop.x-apartment.x)-(shop.width+apartment.width)/2;
+      assert.ok(gap>=1.45,`mixed-use alley between ${shop.id} and ${apartment.id} is too narrow`);
+      mixedUseLanes++;
+    }
+  }
+  assert.ok(attachedHomeLanes>0,'expected at least one attached-home alley');
+  assert.ok(mixedUseLanes>0,'expected at least one mixed-use alley');
+});
+
 test('100 kaldırım çöp kutusu düzenli dağılmış; hiçbiri bina içine/üstüne konmuyor',()=>{
   const props=city.getAllStreetProps(),buildings=city.getAllBuildingFootprints();
   assert.equal(props.length,city.blockCount**2);
