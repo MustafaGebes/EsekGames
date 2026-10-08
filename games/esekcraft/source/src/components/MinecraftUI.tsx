@@ -1574,7 +1574,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
             </button>
 
             {/* Online game mode is controlled by the room admin through /gamemode. */}
-            {!engine.onlineMode && (
+            {!engine.onlineMode && !onlineIsAdmin && (
               <button
                 onClick={() => {
                   engine.setGameMode(engine.gameMode === 'survival' ? 'creative' : 'survival');

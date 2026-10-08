@@ -504,17 +504,39 @@ function handleEsekCraftChat(player, data = {}) {
             return;
         }
         if (command === "help" && !argument) {
-            sendEsekCraftPrivateChat(player, 'Yönetici komutları: /gamemode creative|survival · /kick <oyuncu> · Ortak komut: /msg <oyuncu> "mesaj"');
+            sendEsekCraftPrivateChat(player, 'Yönetici komutları: /gamemode <creative|survival> [oyuncu] · /kick <oyuncu> · Ortak komut: /msg <oyuncu> "mesaj"');
             return;
         }
-        if (command === "gamemode" && ["creative", "survival"].includes(argument.toLowerCase())) {
-            const gameMode = argument.toLowerCase();
-            const currentOptions = room.worldOptions || sanitizeEsekCraftWorldOptions({ name: room.name });
-            room.worldOptions = { ...currentOptions, gameMode };
+        if (command === "gamemode") {
+            const modeMatch = argument.match(/^(creative|survival)(?:\s+([\s\S]+))?$/i);
+            if (!modeMatch) {
+                sendEsekCraftPrivateChat(player, 'Kullanım: /gamemode <creative|survival> [oyuncu]');
+                return;
+            }
+            const gameMode = modeMatch[1].toLowerCase();
+            const rawTargetName = String(modeMatch[2] || '').trim();
+            const targetName = rawTargetName.startsWith('"') && rawTargetName.endsWith('"')
+                ? rawTargetName.slice(1, -1).trim()
+                : rawTargetName;
+            const target = targetName
+                ? [...room.members]
+                    .map((id) => players.get(id))
+                    .find((candidate) => candidate && candidate.inGame && candidate.roomId === room.id &&
+                        String(candidate.name || '').trim().toLowerCase() === targetName.toLowerCase())
+                : player;
+            if (!target) {
+                sendEsekCraftPrivateChat(player, `"${targetName}" adlı oyuncu bu odada bulunamadı.`);
+                return;
+            }
             room.lastActivityAt = now;
-            broadcastToRoom(room.id, { type: "esekcraft_gamemode", gameMode });
-            broadcastRoomLists();
-            sendEsekCraftPrivateChat(player, `Oyun modu ${gameMode === "creative" ? "Creative" : "Survival"} olarak değiştirildi.`);
+            sendTo(target, { type: "esekcraft_gamemode", gameMode });
+            const label = gameMode === 'creative' ? 'Creative' : 'Hayatta Kalma';
+            if (target.id === player.id) {
+                sendEsekCraftPrivateChat(player, `Oyun modun ${label} olarak değiştirildi.`);
+            } else {
+                sendEsekCraftPrivateChat(player, `${target.name || 'Oyuncu'} için oyun modu ${label} oldu.`);
+                sendEsekCraftPrivateChat(target, `${sender} oyun modunu senin için ${label} yaptı.`);
+            }
             return;
         }
         if (command === "kick" && argument) {
