@@ -40,7 +40,7 @@ const ROOM_MAPS = Object.freeze({
     city: {
         id: "city", name: "Şehir", icon: "🏙️",
         description: "Geniş mahalleler, ara sokaklar ve dağlık şehir sınırı.",
-        boundary: "Dağlık şehir sınırı", boundaryRadius: 146
+        boundary: "Dağlık şehir sınırı", boundaryRadius: 240
     },
     overworld: {
         id: "overworld", name: "EsekCraft Dünyası", icon: "🌍",
@@ -646,12 +646,16 @@ const CITY_DATA = require(path.join(ROOT, "games", "eseksimulator", "city-data.j
 const CITY_ITEMS = new Map(CITY_DATA.items.map(item => [item.id, item]));
 const CITY_SHOPS = new Map(CITY_DATA.shops.map(shop => [shop.id, shop]));
 const CITY_CITIZENS = new Map(CITY_DATA.citizens.map(citizen => [citizen.id, citizen]));
-const CITY_WALL_COLLIDERS = CITY_DATA.getAllBuildingFootprints().map(building => {
-    const c = Math.cos(Number(building.face) || 0), sn = Math.sin(Number(building.face) || 0);
-    const halfX = (Math.abs(c) * building.width + Math.abs(sn) * building.depth) / 2 + 0.18;
-    const halfZ = (Math.abs(sn) * building.width + Math.abs(c) * building.depth) / 2 + 0.18;
+const CITY_BUILDINGS_BY_ID = new Map(CITY_DATA.getAllBuildingFootprints().map(building => [building.id, building]));
+for (const id of CITY_BUILDINGS_BY_ID.keys()) CITY_DOOR_IDS.add(id);
+const CITY_HIDE_SPOTS = CITY_DATA.getAllStreetProps().filter(prop => prop.hideSpot);
+function cityFootprintCollider(building, padding = 0.18) {
+    const c = Math.cos(Number(building.face ?? building.rotation) || 0), sn = Math.sin(Number(building.face ?? building.rotation) || 0);
+    const halfX = (Math.abs(c) * building.width + Math.abs(sn) * building.depth) / 2 + padding;
+    const halfZ = (Math.abs(sn) * building.width + Math.abs(c) * building.depth) / 2 + padding;
     return { minX: building.x - halfX, maxX: building.x + halfX, minZ: building.z - halfZ, maxZ: building.z + halfZ };
-});
+}
+const CITY_WALL_COLLIDERS = [...CITY_BUILDINGS_BY_ID.values(), ...CITY_HIDE_SPOTS].map(building => cityFootprintCollider(building));
 function cityLineClear(from, to) {
     const distance = Math.hypot(to.x - from.x, to.z - from.z);
     const samples = Math.max(8, Math.ceil(distance / 0.75));
@@ -1172,13 +1176,12 @@ function sendCityState(player) {
     if (player && player.inGame && player.mapId === "city") sendTo(player, { type: "city_state", state: getCitySnapshot(player) });
 }
 function getCityBuildingPosition(id) {
-    const building = CITY_DATA.buildings.find(entry => entry.id === id);
-    const slot = building ? CITY_DATA.getBuildingSlot(building.slot) : null;
-    if (!slot) return null;
-    const clerkOffset = -slot.depth * 0.34;
+    const building = CITY_BUILDINGS_BY_ID.get(id);
+    if (!building) return null;
+    const clerkOffset = -building.depth * 0.34;
     return {
-        x: slot.x + Math.sin(slot.face) * clerkOffset,
-        z: slot.z + Math.cos(slot.face) * clerkOffset
+        x: building.x + Math.sin(building.face) * clerkOffset,
+        z: building.z + Math.cos(building.face) * clerkOffset
     };
 }
 function isCityGameplayPlayer(player) {
@@ -1204,7 +1207,14 @@ function sendCityCitizenStates(player) {
 }
 function handleCityHide(player, data) {
     if (!isCityGameplayPlayer(player)) return;
-    player.cityHidden = !!(data && data.hidden);
+    const requestedHidden = !!(data && data.hidden);
+    if (requestedHidden && !CITY_HIDE_SPOTS.some(spot => Math.hypot(player.x - spot.x, player.z - spot.z) <= 2.9)) {
+        player.cityHidden = false;
+        sendTo(player, { type: "city_hide_state", hidden: false });
+        return;
+    }
+    player.cityHidden = requestedHidden;
+    sendTo(player, { type: "city_hide_state", hidden: player.cityHidden });
     sendCityState(player);
 }
 function handleCityPoliceVision(player, data) {

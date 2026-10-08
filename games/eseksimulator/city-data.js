@@ -3,22 +3,19 @@
   if (typeof module === 'object' && module.exports) module.exports = data;
   else root.EsekCityData = data;
 })(typeof globalThis !== 'undefined' ? globalThis : window, function () {
-  const roadLines = Object.freeze([-126, -84, -42, 0, 42, 84, 126]);
+  const roadLines = Object.freeze([-210, -168, -126, -84, -42, 0, 42, 84, 126, 168, 210]);
+  const blockCount = roadLines.length - 1;
   const roadWidth = (value) => Math.abs(value) < 0.01 ? 14 : (Math.abs(value) < 50 ? 10 : 8.5);
-  const parks = new Set(['0:0', '0:4', '1:5', '4:0', '5:4']);
+  const parks = new Set(['2:2','2:6','3:7','6:2','7:6','0:0','0:8','1:9','4:0','4:9','8:1','9:4','9:8']);
   const civicUses = Object.freeze({
-    '5:0': 'police-station',
-    '1:0': 'school',
-    '4:1': 'fire-station',
-    '0:2': 'library',
-    '5:3': 'clinic',
-    '1:4': 'community-center',
+    '7:2':'police-station','3:2':'school','6:3':'fire-station','2:4':'library','7:5':'clinic','3:6':'community-center',
+    '8:2':'prison','4:1':'train-station','0:5':'veterinary-clinic','1:1':'gas-station','1:7':'market-hall','8:5':'bus-depot','9:2':'parking-garage','5:8':'sports-center'
   });
   const facadePalette = Object.freeze([0xb8aa94, 0xa59c8d, 0x8f8579, 0xb5b3a7, 0x9da7a5, 0x9e8575, 0xc0b08f, 0x777875, 0xa99d8a]);
   const trimPalette = Object.freeze([0x665b4e, 0x514d47, 0x756954, 0x686b66, 0x594b42]);
 
   function getBlockBounds(ix, iz) {
-    if (!Number.isInteger(ix) || !Number.isInteger(iz) || ix < 0 || ix >= 6 || iz < 0 || iz >= 6) return null;
+    if (!Number.isInteger(ix) || !Number.isInteger(iz) || ix < 0 || ix >= blockCount || iz < 0 || iz >= blockCount) return null;
     const left = roadLines[ix] + roadWidth(roadLines[ix]) / 2 + 4.15;
     const right = roadLines[ix + 1] - roadWidth(roadLines[ix + 1]) / 2 - 4.15;
     const front = roadLines[iz] + roadWidth(roadLines[iz]) / 2 + 4.15;
@@ -29,8 +26,9 @@
   function getBuildingSlot(slot) {
     const [ix, iz, index] = String(slot).split(':').map(Number);
     const bounds = getBlockBounds(ix, iz);
-    if (!bounds || !Number.isInteger(index) || index < 0 || index > 3) return null;
-    const outerBlock = ix === 0 || iz === 0 || ix === 5 || iz === 5;
+    if (!bounds || !Number.isInteger(index) || index < 0 || index > 4) return null;
+    if(index===4){const width=Math.max(8,Math.min(bounds.width-3.4,16.5)),depth=Math.max(8,Math.min(bounds.depth-3.4,16.5));return{x:bounds.centerX,z:bounds.centerZ,width,depth,face:Math.PI,ix,iz,index};}
+    const outerBlock = ix === 0 || iz === 0 || ix === blockCount - 1 || iz === blockCount - 1;
     const centers = outerBlock ? [[-1, -1], [1, 1]] : [[-1, -1], [1, -1], [-1, 1], [1, 1]];
     const signs = centers[index];
     if (!signs) return null;
@@ -65,6 +63,7 @@
     { id: 'safety_vest', name: 'Koruyucu yelek', icon: '🦺', category: 'Kıyafet', kind: 'armor', price: 135, damageReduction: 0.25, description: 'Daha dayanıklı bir oyun içi koruyucu yelek.' },
   ]);
 
+  const shiftSlot=(value)=>{const [ix,iz,index]=value.split(':').map(Number);return `${ix+2}:${iz+2}:${index}`;};
   const shops = Object.freeze([
     { id: 'icecream-shop', slot: '2:3:0', title: 'Dondurmacı', items: ['icecream', 'bottled_water'] },
     { id: 'weapons-shop', slot: '2:3:1', title: 'Silahçı', items: ['wooden_baton', 'street_baton'] },
@@ -73,20 +72,26 @@
     { id: 'grocery', slot: '3:2:0', title: 'Bakkal', items: ['bread', 'bottled_water', 'bandage'] },
     { id: 'tool-shop', slot: '3:2:1', title: 'Aletçi', items: ['flashlight', 'wrench', 'repair_kit'] },
     { id: 'clothing-shop', slot: '3:4:2', title: 'Zırh & Kıyafet', items: ['jacket', 'safety_vest'] },
-  ]);
+  ].map((shop)=>({...shop,slot:shiftSlot(shop.slot)})));
 
   const buildings = Object.freeze([
     ...shops.map((shop) => ({ id: shop.id, slot: shop.slot, title: shop.title, kind: 'shop' })),
-    { id: 'home-one', slot: '2:2:3', title: 'Ev', kind: 'home' },
-    { id: 'home-two', slot: '4:4:0', title: 'Ev', kind: 'home' },
-    { id: 'city-hospital', slot: '2:2:0', title: 'Şehir Hastanesi', kind: 'hospital' },
+    { id: 'home-one', slot: shiftSlot('2:2:3'), title: 'Ev', kind: 'home' },
+    { id: 'home-two', slot: shiftSlot('4:4:0'), title: 'Ev', kind: 'home' },
+    { id: 'city-hospital', slot: shiftSlot('2:2:0'), title: 'Şehir Hastanesi', kind: 'hospital' },
+    { id: 'city-police-station', slot: '7:2:4', title: 'Polis Merkezi', kind: 'police-station' },
+    { id: 'city-fire-station', slot: '6:3:4', title: 'İtfaiye', kind: 'fire-station' },
+    { id: 'city-prison', slot: '8:2:4', title: 'Şehir Hapishanesi', kind: 'prison' },
   ]);
   const enterableBySlot = new Map(buildings.map((building) => [building.slot, building]));
 
   function footprint(kind, x, z, width, depth, height, face, seed, slot = null) {
+    const ix=slot?Number(slot.split(':')[0]):Math.max(0,Math.min(blockCount-1,Math.floor((x-roadLines[0])/42)));
+    const iz=slot?Number(slot.split(':')[1]):Math.max(0,Math.min(blockCount-1,Math.floor((z-roadLines[0])/42)));
+    const id=slot?(enterableBySlot.get(slot)?.id||`city-building-slot-${slot.replaceAll(':','-')}`):`city-building-${ix}-${iz}-${Math.round(x*10)}-${Math.round(z*10)}-${seed}`;
     return {
-      kind, x, z, width, depth, height, face, slot,
-      color: facadePalette[seed % facadePalette.length],
+      id, kind, x, z, width, depth, height, face, slot,
+      color: facadePalette[Math.abs(seed) % facadePalette.length],
       trim: trimPalette[(seed * 3 + 1) % trimPalette.length],
       seed,
     };
@@ -95,7 +100,7 @@
   function getBlockPlan(ix, iz) {
     const bounds = getBlockBounds(ix, iz);
     if (!bounds) return null;
-    if (ix === 3 && iz === 3) {
+    if (ix === 5 && iz === 5) {
       const alleyWidth=4.0,facadeLength=18,buildingDepth=8.1,offset=(alleyWidth+buildingDepth)/2;
       return { ix, iz, landUse: 'spawn-alley', alleyWidth, buildings: [
         footprint('apartment',bounds.centerX-offset,bounds.centerZ,facadeLength,buildingDepth,21,Math.PI/2,31),
@@ -103,7 +108,10 @@
       ] };
     }
     const blockKey = `${ix}:${iz}`;
+    const serviceKind=civicUses[blockKey];
     const required = buildings.filter((building) => building.slot.startsWith(`${blockKey}:`));
+    const specialFacility=required.find((building)=>building.slot.endsWith(':4'));
+    if(specialFacility){const slot=getBuildingSlot(specialFacility.slot),isPrison=specialFacility.id==='city-prison',width=isPrison?Math.min(bounds.width-5,slot.width*1.16):slot.width,depth=isPrison?Math.min(bounds.depth-5,slot.depth*1.16):slot.depth;return{ix,iz,landUse:serviceKind||specialFacility.kind,buildings:[footprint(specialFacility.kind,slot.x,slot.z,width,depth,serviceKind==='police-station'?11:serviceKind==='fire-station'?10:10,slot.face,ix*31+iz*17,specialFacility.slot)]};}
     if (required.length) {
       const planned = [];
       for (let index = 0; index < 4; index += 1) {
@@ -123,9 +131,8 @@
     const innerD = Math.max(15, bounds.depth - 2.6);
     const cx = bounds.centerX, cz = bounds.centerZ;
     const streetFace = ((ix + iz) % 2 === 0) ? Math.PI : 0;
-    const serviceKind = civicUses[blockKey];
     if (serviceKind) {
-      const dimensions = serviceKind === 'school' ? [innerW * .79, innerD * .73, 11] : [innerW * .78, innerD * .72, serviceKind === 'police-station' ? 10 : 9];
+      const dimensions = serviceKind === 'school' ? [innerW * .79, innerD * .73, 11] : [innerW * .78, innerD * .72, 10];
       return { ix, iz, landUse: serviceKind, buildings: [footprint(serviceKind, cx, cz, dimensions[0], dimensions[1], dimensions[2], streetFace, h)] };
     }
 
@@ -169,12 +176,19 @@
 
   function getAllBuildingFootprints() {
     const output = [];
-    for (let ix = 0; ix < 6; ix += 1) for (let iz = 0; iz < 6; iz += 1) {
+    for (let ix = 0; ix < blockCount; ix += 1) for (let iz = 0; iz < blockCount; iz += 1) {
       const plan = getBlockPlan(ix, iz);
       if (plan) output.push(...plan.buildings);
     }
     return output;
   }
+
+  function getBlockStreetProps(ix,iz){
+    const bounds=getBlockBounds(ix,iz);if(!bounds)return[];
+    const left=(ix+iz)%2===0,offset=((ix*7+iz*11)%3-1)*5.4;
+    return[{id:`dumpster-${ix}-${iz}`,type:'dumpster',x:left?bounds.left-.95:bounds.right+.95,z:bounds.centerZ+offset,width:.92,depth:.78,rotation:left?-Math.PI/2:Math.PI/2,hideSpot:true}];
+  }
+  function getAllStreetProps(){const out=[];for(let ix=0;ix<blockCount;ix++)for(let iz=0;iz<blockCount;iz++)out.push(...getBlockStreetProps(ix,iz));return out;}
 
   const citizens = Object.freeze([
     { id: 'citizen-elif', name: 'Elif', disposition: 'friendly', behavior: 'flee', x: -34.75, z: -21, yaw: Math.PI, cashDrop: 18, dialogue: 'Merhaba! Dondurmacı köşedeki sokakta, iyi günler.' },
@@ -187,7 +201,7 @@
     { id: 'citizen-kaan', name: 'Kaan', disposition: 'neutral', behavior: 'attack', x: 21, z: -7.25, yaw: Math.PI, cashDrop: 29, dialogue: 'Yeni açılan dükkânları gördün mü?' },
   ]);
 
-  const hospitalSlot = getBuildingSlot('2:2:0');
+  const hospitalSlot = getBuildingSlot('4:4:0');
   const hospitalSpawn = Object.freeze({
     x: hospitalSlot.x + Math.sin(hospitalSlot.face) * (hospitalSlot.depth / 2 - 1.8),
     y: 0,
@@ -197,7 +211,10 @@
   return Object.freeze({
     roadLines,
     roadWidth,
+    blockCount,
     getBlockBounds,
+    getBlockStreetProps,
+    getAllStreetProps,
     getBuildingSlot,
     getBlockPlan,
     getAllBuildingFootprints,
