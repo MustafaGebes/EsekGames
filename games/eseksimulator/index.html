@@ -47,14 +47,16 @@ import { createCityGameplay } from './city-gameplay.js';
 import { ENTERABLE_BUILDING_CATALOG, createEnterableBuildings } from './enterable-buildings.js';
 const $=s=>document.querySelector(s), screens=[$('#homeScreen'),$('#modeScreen'),$('#lobbyScreen'),$('#pauseScreen')];
 const state={screen:'home',mode:'pc',socket:null,roomId:null,myId:null,name:'Oyuncu',playing:false,paused:false,keys:new Set(),yaw:0,pitch:.2,cameraDistance:8,moveX:0,moveY:0,sprint:false,crouch:false,jumpPressed:false,jumpVelocity:0,jumpY:0,lastSend:0,lastFrame:0,others:new Map(),touchId:null,cameraTouchId:null,cameraDrag:false,mouseX:0,mouseY:0,cameraSensitivity:1,lastAttackAt:-1e6,hidden:false};
-const DONKEY_MENU_SCALE=0.799;const DONKEY_WORLD_SCALE=0.58;const CITY_SPAWN=Object.freeze({x:22,y:0,z:18});const CITY_BOUNDARY=146;const CITY_DATA=window.EsekCityData;const cityBuildingColliders=[];const trashBins=[];let warmWindowMaterial=null,coolWindowMaterial=null,cityGroundMaterial=null;const streetLampMaterials=[];let enterableWorld=null,citySimulation=null,cityGameplay=null,lastInsideBuildingId=null,lastDoorUiKey='';
-const scene=new THREE.Scene();scene.background=new THREE.Color(0xadb9bb);scene.fog=new THREE.Fog(0xadb9bb,45,205);
+const DONKEY_MENU_SCALE=0.799;const DONKEY_WORLD_SCALE=0.58;const CITY_SPAWN=Object.freeze({x:22,y:0,z:18});const CITY_BOUNDARY=240;const CITY_DATA=window.EsekCityData;const cityBuildingColliders=[];const CITY_COLLISION_CELL=14;const cityColliderGrid=new Map();const trashBins=[];let warmWindowMaterial=null,coolWindowMaterial=null,cityGroundMaterial=null;const streetLampMaterials=[];let enterableWorld=null,citySimulation=null,cityGameplay=null,lastInsideBuildingId=null,lastDoorUiKey='';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xadb9bb);scene.fog=new THREE.Fog(0xadb9bb,45,300);
 const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,500);camera.position.set(0,7,12);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.22;$('#world').appendChild(renderer.domElement);
 const menuScene=new THREE.Scene();menuScene.background=new THREE.Color(0x656965);menuScene.fog=new THREE.Fog(0x656965,36,95);const menuCamera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,200);
 menuScene.add(new THREE.HemisphereLight(0xf4f0e7,0x45413a,2.3));const menuSun=new THREE.DirectionalLight(0xffe2ad,3.2);menuSun.position.set(-14,24,15);menuSun.castShadow=true;menuSun.shadow.mapSize.set(1024,1024);menuScene.add(menuSun);
 const dayHemisphere=new THREE.HemisphereLight(0xeaf0ed,0x514b40,2.65);scene.add(dayHemisphere);const worldAmbient=new THREE.AmbientLight(0xffffff,.28);scene.add(worldAmbient);const sun=new THREE.DirectionalLight(0xffdfb0,3.35);sun.position.set(-24,38,20);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
 const mat=(color,rough=.86)=>new THREE.MeshStandardMaterial({color,roughness:rough});
+function addCityColliderToGrid(collider){if(collider.spatialIndexed)return;collider.spatialIndexed=true;const left=Math.floor(collider.minX/CITY_COLLISION_CELL),right=Math.floor(collider.maxX/CITY_COLLISION_CELL),front=Math.floor(collider.minZ/CITY_COLLISION_CELL),back=Math.floor(collider.maxZ/CITY_COLLISION_CELL);for(let gx=left;gx<=right;gx++)for(let gz=front;gz<=back;gz++){const key=`${gx}:${gz}`;if(!cityColliderGrid.has(key))cityColliderGrid.set(key,[]);cityColliderGrid.get(key).push(collider)}}
+function registerCityCollider(x,z,width,depth,rotation=0,padding=.10){const c=Math.abs(Math.cos(rotation)),sn=Math.abs(Math.sin(rotation)),halfX=(c*width+sn*depth)/2+padding,halfZ=(sn*width+c*depth)/2+padding,collider={minX:x-halfX,maxX:x+halfX,minZ:z-halfZ,maxZ:z+halfZ,active:true};cityBuildingColliders.push(collider);addCityColliderToGrid(collider);return collider}
 function box(parent,w,h,d,color,x,y,z,material=null){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material||mat(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
 function donkey(){
  const donkeyGroup=new THREE.Group(),greyMat=new THREE.MeshLambertMaterial({color:0x808080}),muzzleMat=new THREE.MeshLambertMaterial({color:0xdddddd}),blackMat=new THREE.MeshLambertMaterial({color:0x111111});
@@ -77,12 +79,12 @@ function buildCity(){
   const windTrees=[],signalHeads=[];
   const roadWidth=CITY_DATA.roadWidth;
   const sidewalkWidth=3.8;
-  const outerGround=new THREE.Mesh(new THREE.PlaneGeometry(420,420),mat(0x566747,.99));outerGround.rotation.x=-Math.PI/2;outerGround.position.y=-.23;outerGround.receiveShadow=true;scene.add(outerGround);
-  cityGroundMaterial=mat(0x827d72,.97);const ground=new THREE.Mesh(new THREE.PlaneGeometry(320,320),cityGroundMaterial);
+  const outerGround=new THREE.Mesh(new THREE.PlaneGeometry(640,640),mat(0x566747,.99));outerGround.rotation.x=-Math.PI/2;outerGround.position.y=-.23;outerGround.receiveShadow=true;scene.add(outerGround);
+  cityGroundMaterial=mat(0x827d72,.97);const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),cityGroundMaterial);
   ground.rotation.x=-Math.PI/2;ground.position.y=-.15;ground.receiveShadow=true;scene.add(ground);
   const borderGrass=mat(0x586b48,.98),borderSoil=mat(0x796044,.99);
   function borderStrip(width,depth,x,z,y,material){const strip=new THREE.Mesh(new THREE.PlaneGeometry(width,depth),material);strip.rotation.x=-Math.PI/2;strip.position.set(x,y,z);strip.receiveShadow=true;scene.add(strip)}
-  for(const side of [-1,1]){borderStrip(16,320,side*145,0,-.075,borderGrass);borderStrip(320,16,0,side*145,-.075,borderGrass);borderStrip(6,320,side*155,0,-.065,borderSoil);borderStrip(320,6,0,side*155,-.065,borderSoil)}
+  for(const side of [-1,1]){borderStrip(16,500,side*226,0,-.075,borderGrass);borderStrip(500,16,0,side*226,-.075,borderGrass);borderStrip(6,500,side*236,0,-.065,borderSoil);borderStrip(500,6,0,side*236,-.065,borderSoil)}
   const asphalt=new THREE.MeshStandardMaterial({color:0x34383a,roughness:.96});
   const sidewalk=mat(0xa7a195,.92),curb=mat(0xc0b8a7,.85),roadEdge=mat(0x4b4b46,.92);
   const markMatrices=[],paverMatrices=[],windowFrames=[],windowCool=[],windowWarm=[];
@@ -102,8 +104,8 @@ function buildCity(){
 
   function addBoundaryMountains(){
     let seed=97133;const random=()=>{seed=(seed*16807)%2147483647;return(seed-1)/2147483646};
-    const peaks=[],edge=CITY_BOUNDARY+20;
-    for(const axis of ['x','z'])for(const side of [-1,1])for(let along=-151;along<=151;along+=18){
+    const peaks=[],edge=CITY_BOUNDARY+16;
+    for(const axis of ['x','z'])for(const side of [-1,1])for(let along=roadLines[0]-18;along<=roadLines[roadLines.length-1]+18;along+=18){
       const jitter=(random()-.5)*6,offset=(random()-.5)*5;
       peaks.push({x:axis==='x'?along+jitter:side*(edge+offset),z:axis==='x'?side*(edge+offset):along+jitter,height:14+random()*18,rx:11+random()*5,rz:11+random()*5,rotation:random()*Math.PI*2});
     }
@@ -148,21 +150,22 @@ function buildCity(){
     const cuts=roadLines.map(crossing=>({center:crossing,half:roadWidth(crossing)/2+.22}));
     for(const opening of sidewalkOpenings)if(opening.axis===axis&&opening.p===p&&opening.side===side)cuts.push(opening);
     cuts.sort((a,b)=>a.center-b.center);
-    let start=-130;
+    let start=roadLines[0]-20;
     for(const cut of cuts){
       if(cut.center+cut.half<=start)continue;
       addSegment(start,cut.center-cut.half);start=Math.max(start,cut.center+cut.half);
     }
-    addSegment(start,130);
+    addSegment(start,roadLines[roadLines.length-1]+20);
   }
   for(const p of roadLines){
     const width=roadWidth(p);
-    box(scene,width,.13,260,0x34383a,p,.015,0,asphalt);
-    box(scene,260,.13,width,0x34383a,0,.015,p,asphalt);
+    const roadSpan=roadLines[roadLines.length-1]-roadLines[0]+40;
+    box(scene,width,.13,roadSpan,0x34383a,p,.015,0,asphalt);
+    box(scene,roadSpan,.13,width,0x34383a,0,.015,p,asphalt);
     for(const side of [-1,1]){
       const vx=p+side*(width/2+2.25),vz=p+side*(width/2+2.25);
       addPedestrianStrip('z',p,side,width);addPedestrianStrip('x',p,side,width);
-      for(let t=-116;t<=116;t+=4.2){
+      for(let t=roadLines[0]+10;t<=roadLines[roadLines.length-1]-10;t+=4.2){
         if(roadLines.some(q=>Math.abs(t-q)<roadWidth(q)/2+3))continue;
         paverSeam(vx,t,sidewalkWidth-.46,.045);
         paverSeam(t,vz,.045,sidewalkWidth-.46);
@@ -193,7 +196,7 @@ function buildCity(){
   const citySignMaterials=new Map();
   function citySignMaterial(kind){
     if(citySignMaterials.has(kind))return citySignMaterials.get(kind);
-    const labels={'police-station':'POLİS MERKEZİ','fire-station':'İTFAİYE','school':'OKUL','library':'KÜTÜPHANE','clinic':'SAĞLIK OCAĞI','community-center':'TOPLUM MERKEZİ','community-hall':'MAHALLE SALONU','workshop':'ATÖLYE','corner-shop':'MAHALLE ESNAFI','shop':'DÜKKÂN'};
+    const labels={'police-station':'POLİS MERKEZİ','fire-station':'İTFAİYE','prison':'HAPİSHANE','hospital':'HASTANE','prison':'HAPİSHANE','hospital':'HASTANE','school':'OKUL','library':'KÜTÜPHANE','clinic':'SAĞLIK OCAĞI','veterinary-clinic':'VETERİNER','community-center':'TOPLUM MERKEZİ','community-hall':'MAHALLE SALONU','workshop':'ATÖLYE','corner-shop':'MAHALLE ESNAFI','market-hall':'PAZAR HALİ','bus-depot':'OTOBÜS GARAJI','gas-station':'BENZİNLİK','parking-garage':'OTOPARK','sports-center':'SPOR SALONU','train-station':'İSTASYON','shop':'DÜKKÂN'};
     const label=labels[kind];if(!label)return null;
     const canvas=document.createElement('canvas');canvas.width=512;canvas.height=96;const context=canvas.getContext('2d');
     context.clearRect(0,0,canvas.width,canvas.height);context.fillStyle='#fff0cf';context.font='900 46px Arial,sans-serif';context.textAlign='center';context.textBaseline='middle';context.fillText(label,256,50,492);
@@ -286,13 +289,13 @@ function buildCity(){
     box(scene,1.8,.08,depth*.72,0xaaa28d,cx,.13,cz,mat(0xaaa28d,.96));
     for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
       const x=cx+sx*width*.34,z=cz+sz*depth*.34;
-      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.14,.21,1.8,7),mat(0x65513c,.97));trunk.position.set(x,.94,z);scene.add(trunk);
+      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.14,.21,1.8,7),mat(0x65513c,.97));trunk.position.set(x,.94,z);scene.add(trunk);registerCityCollider(x,z,1.2,1.2);
       const canopy=new THREE.Mesh(new THREE.ConeGeometry(1.0,2.4,8),mat((ix+iz)%2?0x52684a:0x637850,.98));canopy.position.set(x,2.75,z);canopy.castShadow=true;scene.add(canopy);
     }
     for(const side of [-1,1]){
       const bench=new THREE.Group();bench.position.set(cx+side*width*.23,.22,cz);
       box(bench,1.8,.16,.52,0x74553a,0,0,0,mat(0x74553a,.85));box(bench,1.8,.7,.14,0x74553a,0,.35,-.2,mat(0x74553a,.85));
-      scene.add(bench);
+      scene.add(bench);registerCityCollider(cx+side*width*.23,cz,1.9,.85);
     }
   }
   for(let ix=0;ix<roadLines.length-1;ix++)for(let iz=0;iz<roadLines.length-1;iz++){
@@ -304,12 +307,18 @@ function buildCity(){
     }
     if(plan.landUse==='pocket-park'){addPocketPark(bounds,ix,iz);continue;}
     for(const building of plan.buildings){
-      const enterable=building.slot?enterableBySlot.get(building.slot):null;
-      if(enterable)enterableSpecs.push({...enterable,x:building.x,z:building.z,w:building.width,d:building.depth,h:building.height,color:building.color,face:building.face,architecturalStyle:building.kind});
-      else addBuilding(building);
+      const catalog=building.slot?enterableBySlot.get(building.slot):null;
+      const titles={'rowhouse':'Sıra Evi','townhouse':'Şehir Evi','apartment':'Apartman','courtyard-house':'Avlulu Ev','corner-shop':'Köşe Dükkânı','community-hall':'Mahalle Salonu','workshop':'Atölye','school':'Okul','library':'Kütüphane','clinic':'Sağlık Ocağı','veterinary-clinic':'Veteriner','community-center':'Mahalle Merkezi','gas-station':'Benzin İstasyonu','market-hall':'Pazar Hali','bus-depot':'Otobüs Garajı','parking-garage':'Otopark','sports-center':'Spor Salonu','train-station':'İstasyon'};
+      const knownTitle=catalog?.title||titles[building.kind]||'Şehir Binası';
+      const knownSign=catalog?.sign||knownTitle.toLocaleUpperCase('tr-TR');
+      const inferredKind=catalog?.kind||building.kind;
+      enterableSpecs.push({...catalog,id:building.id,slot:building.slot||building.id,title:knownTitle,sign:knownSign,kind:inferredKind,architecture:catalog?.architecture||building.kind,x:building.x,z:building.z,w:building.width,d:building.depth,h:building.height,color:building.color,trim:building.trim,accent:catalog?.accent||building.color,awning:catalog?.awning||building.trim,face:building.face,architecturalStyle:building.kind});
     }
   }
   enterableWorld=createEnterableBuildings(THREE,scene,enterableSpecs,cityBuildingColliders);
+  for(const collider of cityBuildingColliders)addCityColliderToGrid(collider);
+  const prison=CITY_DATA.getAllBuildingFootprints().find(building=>building.id==='city-prison');
+  if(prison){const fenceMat=mat(0x585e5b,.62),barMat=mat(0x3c4140,.46),radiusX=prison.width/2+2.45,radiusZ=prison.depth/2+2.45;for(const side of [-1,1]){const hz=prison.z+side*radiusZ;box(scene,prison.width+6,.20,.22,0x515552,prison.x,1.05,hz,fenceMat);registerCityCollider(prison.x,hz,prison.width+6,.22);for(let x=-radiusX;x<=radiusX;x+=1.45){const post=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,2.1,6),barMat);post.position.set(prison.x+x,1.05,hz);post.castShadow=true;scene.add(post);registerCityCollider(prison.x+x,hz,.14,.14)}}for(const side of [-1,1]){const x=prison.x+side*radiusX;box(scene,.22,.20,prison.depth+6,0x515552,x,1.05,prison.z,fenceMat);registerCityCollider(x,prison.z,.22,prison.depth+6);for(let z=-radiusZ;z<=radiusZ;z+=1.45){const post=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,2.1,6),barMat);post.position.set(x,1.05,prison.z+z);post.castShadow=true;scene.add(post);registerCityCollider(x,prison.z+z,.14,.14)}}for(const side of [-1,1]){const x=prison.x+side*radiusX,z=prison.z+radiusZ;const tower=new THREE.Group();tower.position.set(x,0,z);scene.add(tower);box(tower,1.5,5,1.5,0x626660,0,2.5,0,mat(0x626660,.8));box(tower,2.1,.55,2.1,0x414542,0,5.2,0,mat(0x414542,.64));registerCityCollider(x,z,1.7,1.7)}}
   installInstances(markMatrices,new THREE.MeshStandardMaterial({color:0xd9d0b9,roughness:.92}));
   installInstances(paverMatrices,new THREE.MeshStandardMaterial({color:0x77756e,roughness:.96}));
   installInstances(windowFrames,frameMat);installInstances(windowCool,coolGlass);installInstances(windowWarm,warmGlass);
@@ -318,7 +327,7 @@ function buildCity(){
   function streetLamp(x,z){
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.13,4.8,8),mat(0x343b39,.52));pole.position.set(x,2.4,z);pole.castShadow=true;scene.add(pole);
     const arm=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,1.15,7),mat(0x343b39,.52));arm.rotation.x=Math.PI/2;arm.position.set(x,4.68,z+.47);scene.add(arm);
-    const head=box(scene,.34,.17,.66,0xe4d2a7,x,4.52,z+.88,mat(0xe4d2a7,.45));head.material.emissive=new THREE.Color(0x3a2c14);streetLampMaterials.push(head.material);
+    const head=box(scene,.34,.17,.66,0xe4d2a7,x,4.52,z+.88,mat(0xe4d2a7,.45));head.material.emissive=new THREE.Color(0x3a2c14);streetLampMaterials.push(head.material);registerCityCollider(x,z,.42,.42);
   }
   function streetTree(x,z){
     box(scene,1.25,.16,1.25,0x69665c,x,.1,z,mat(0x69665c,.94));
@@ -326,7 +335,7 @@ function buildCity(){
     const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.12,.17,2.0,7),mat(0x65513c,.97));trunk.position.set(0,1.25,0);trunk.castShadow=true;tree.add(trunk);
     const lower=new THREE.Mesh(new THREE.ConeGeometry(.86,2.1,8),mat(0x596a50,.98));lower.position.set(0,3.28,0);lower.castShadow=true;tree.add(lower);
     const upper=new THREE.Mesh(new THREE.ConeGeometry(.62,1.55,8),mat(0x687857,.98));upper.position.set(0,4.0,0);upper.castShadow=true;tree.add(upper);
-    scene.add(tree);windTrees.push({tree,phase:(x*17+z*11)*.013});
+    scene.add(tree);windTrees.push({tree,phase:(x*17+z*11)*.013});registerCityCollider(x,z,1.25,1.25);
   }
   const signalPoleMaterial=mat(0x30383a,.52),signalHousingMaterial=mat(0x202628,.46);
   const signalPoleGeometry=new THREE.CylinderGeometry(.075,.12,4.5,7),signalHousingGeometry=new THREE.BoxGeometry(.55,1.42,.34),signalLensGeometry=new THREE.SphereGeometry(.13,8,6);
@@ -339,7 +348,7 @@ function buildCity(){
       const material=new THREE.MeshStandardMaterial({color:dark,emissive:0x080808,emissiveIntensity:.05,roughness:.35,toneMapped:false});
       const lens=new THREE.Mesh(signalLensGeometry,material);lens.position.set(0,4.53-i*.40,.315);group.add(lens);lamps[color]=material;
     });
-    scene.add(group);signalHeads.push({axis,junctionKey,lamps});
+    scene.add(group);signalHeads.push({axis,junctionKey,lamps});registerCityCollider(x,z,.54,.54);
   }
   // Each signal face points outward at its approaching traffic stream, not diagonally into the junction.
   for(const px of roadLines)for(const pz of roadLines){
@@ -363,23 +372,23 @@ function buildCity(){
     if(!nearSpawnCorridor(t,tz))streetTree(t,tz);
   }
   // Moving traffic is generated on both axes by city-simulation.js.
-  // Trash and bags beside the dedicated alley spawn, not in the traffic lanes.
-  function trashBin(x,z,color){
-    const bin=new THREE.Group();box(bin,.92,1.18,.82,color,0,.62,0);box(bin,1.02,.15,.9,0x535c59,0,1.29,0);
+  // Hideable dumpsters placed on the sidewalk by every block, not in the traffic lanes.
+  function trashBin(prop){
+    const bin=new THREE.Group();box(bin,.92,1.18,.82,0x354442,0,.62,0);box(bin,1.02,.15,.9,0x535c59,0,1.29,0);
     const lid=box(bin,.98,.13,.86,0x606864,0,1.42,0);lid.rotation.x=-.06;
     for(const bx of [-.34,.34]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.095,.095,.08,8),mat(0x1e2221));wheel.rotation.z=Math.PI/2;wheel.position.set(bx,.16,.33);bin.add(wheel)}
-    bin.position.set(x,0,z);scene.add(bin);trashBins.push(bin);
+    bin.position.set(prop.x,0,prop.z);bin.rotation.y=prop.rotation||0;scene.add(bin);trashBins.push(bin);registerCityCollider(prop.x,prop.z,prop.width,prop.depth,prop.rotation||0,.12);
   }
-  trashBin(CITY_SPAWN.x-1.55,25.6,0x354442);trashBin(CITY_SPAWN.x+1.55,27.2,0x34434b);
+  for(const prop of CITY_DATA.getAllStreetProps())trashBin(prop);
   for(let i=0;i<6;i++){
     const bag=new THREE.Mesh(new THREE.SphereGeometry(.32+rand()*.18,9,7),mat([0x333431,0x4a463f,0x504b42][i%3]));
-    bag.scale.set(1,.82,1.15);bag.position.set(CITY_SPAWN.x+(i%2?1:-1)*(1.1+rand()*.55),.26,CITY_SPAWN.z+7+rand()*5);bag.castShadow=true;scene.add(bag);
+    bag.scale.set(1,.82,1.15);bag.position.set(CITY_SPAWN.x+(i%2?1:-1)*(1.1+rand()*.55),.26,CITY_SPAWN.z+7+rand()*5);bag.castShadow=true;scene.add(bag);registerCityCollider(bag.position.x,bag.position.z,.75,.88);
   }
   for(let z=CITY_SPAWN.z-1;z<CITY_SPAWN.z+5;z+=2.8){
     const light=box(scene,.16,.16,.12,0xffd68b,CITY_SPAWN.x-1.88,3.2,z);light.material.emissive=new THREE.Color(0x3d2609);streetLampMaterials.push(light.material);
   }
-  const policePlan=CITY_DATA.getBlockPlan(5,0),policeStationBuilding=policePlan?.buildings?.[0]||{x:104,z:-104};
-  citySimulation=createCitySimulation(THREE,scene,{roadLines,roadWidth,policeStationPosition:policeStationBuilding,state,windTrees,signalHeads,hud:null,getPlayerPosition:()=>player.position,citizens:CITY_DATA.citizens,shopBuildings:enterableWorld.buildings.filter(building=>building.kind!=='home'),isBlocked:(x,z,r=.35)=>isCityBlocked(x,z,r),hasLineOfSight:(from,to)=>isCityLineClear(from.x,from.z,to.x,to.z),isHidden:()=>state.hidden,onLocalCashDrop:(amount)=>send('city_local_cash_drop',{amount}),onPoliceBulletHit:()=>send('city_police_bullet_hit'),onPoliceVisionChange:(visible)=>send('city_police_vision',{visible})});
+  const policeStationBuilding=CITY_DATA.getAllBuildingFootprints().find(building=>building.id==='city-police-station')||{x:104,z:-104};
+  citySimulation=createCitySimulation(THREE,scene,{roadLines,roadWidth,policeStationPosition:policeStationBuilding,state,windTrees,signalHeads,hud:null,getPlayerPosition:()=>player.position,citizens:CITY_DATA.citizens,shopBuildings:enterableWorld.buildings.filter(building=>CITY_DATA.shops.some(shop=>shop.id===building.id)||building.id==='city-hospital'),isBlocked:(x,z,r=.35)=>isCityBlocked(x,z,r),hasLineOfSight:(from,to)=>isCityLineClear(from.x,from.z,to.x,to.z),isHidden:()=>state.hidden,onLocalCashDrop:(amount)=>send('city_local_cash_drop',{amount}),onPoliceBulletHit:()=>send('city_police_bullet_hit'),onPoliceVisionChange:(visible)=>send('city_police_vision',{visible})});
 }
 buildCity();const dayNightCycle=createDayNightCycle(THREE,{scene,hemisphere:dayHemisphere,ambient:worldAmbient,sun,groundMaterial:cityGroundMaterial,warmWindows:warmWindowMaterial,coolWindows:coolWindowMaterial,streetLights:streetLampMaterials,cycleSeconds:240,startProgress:.30});const player=donkey();player.scale.setScalar(DONKEY_WORLD_SCALE);player.position.set(CITY_SPAWN.x,CITY_SPAWN.y,CITY_SPAWN.z);scene.add(player);player.visible=false;
 const menuDonkeys=[];for(let i=0;i<7;i++){const d=donkey();d.scale.setScalar(DONKEY_MENU_SCALE*(.94+(i%3)*.035));menuScene.add(d);menuDonkeys.push({d,phase:i*Math.PI*2/7,r:6.5+(i%2)*1.4,bowPhase:i*1.7})}
@@ -438,7 +447,7 @@ function startGame(spawn=CITY_SPAWN){state.hidden=false;$('#hideTouch').textCont
 function stopGame(toHome=true){state.hidden=false;player.visible=false;if(state.playing)send('leave_room');state.playing=false;state.paused=false;player.visible=false;state.roomId=null;state.others.forEach(o=>scene.remove(o.mesh));state.others.clear();player.position.set(CITY_SPAWN.x,CITY_SPAWN.y,CITY_SPAWN.z);$('#gameLoader').classList.add('hidden');setScreen(toHome?'home':'lobby');if(toHome&&state.socket?.readyState===WebSocket.OPEN)send('rooms_request')}
 function updatePlayers(players){const ids=Object.keys(players);$('#playerCount').textContent=ids.length?` · ${ids.length} oyuncu`:'';for(const [id,p] of Object.entries(players)){if(id===state.myId)continue;let o=state.others.get(id);if(!o){o={mesh:donkey(),target:new THREE.Vector3(),yaw:0,crouching:false,name:p.name||'Oyuncu'};o.mesh.scale.setScalar(DONKEY_WORLD_SCALE);scene.add(o.mesh);state.others.set(id,o)}o.target.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);o.yaw=Number(p.yaw)||0;o.crouching=!!p.isCrouching;o.name=p.name||o.name}for(const [id,o] of state.others){if(!players[id]){scene.remove(o.mesh);state.others.delete(id)}}}
 function pushMove(now,isMoving,isCrouching,isSprinting,isJumping){if(now-state.lastSend<50)return;state.lastSend=now;send('move',{x:player.position.x,y:state.jumpY,z:player.position.z,yaw:state.yaw,pitch:state.pitch,isMoving,isCrouching,isSprinting,isJumping,platform:state.mode})}
-function isCityBlocked(x,z,radius=.45){if(!Number.isFinite(x)||!Number.isFinite(z)||Math.max(Math.abs(x),Math.abs(z))>CITY_BOUNDARY-radius)return true;return cityBuildingColliders.some(b=>x+radius>b.minX&&x-radius<b.maxX&&z+radius>b.minZ&&z-radius<b.maxZ)}function collide(x,z){return !isCityBlocked(x,z,.45)}
+function isCityBlocked(x,z,radius=.45){if(!Number.isFinite(x)||!Number.isFinite(z)||Math.max(Math.abs(x),Math.abs(z))>CITY_BOUNDARY-radius)return true;const left=Math.floor((x-radius)/CITY_COLLISION_CELL),right=Math.floor((x+radius)/CITY_COLLISION_CELL),front=Math.floor((z-radius)/CITY_COLLISION_CELL),back=Math.floor((z+radius)/CITY_COLLISION_CELL);for(let gx=left;gx<=right;gx++)for(let gz=front;gz<=back;gz++)for(const b of cityColliderGrid.get(`${gx}:${gz}`)||[]){if(b.active!==false&&x+radius>b.minX&&x-radius<b.maxX&&z+radius>b.minZ&&z-radius<b.maxZ)return true}return false}function collide(x,z){return !isCityBlocked(x,z,.45)}
 function isCityLineClear(ax,az,bx,bz){const distance=Math.hypot(bx-ax,bz-az),samples=Math.max(8,Math.ceil(distance/.5));for(let i=1;i<samples;i++){const t=i/samples;if(isCityBlocked(ax+(bx-ax)*t,az+(bz-az)*t,.10))return false}return true}
 function nearestTrashBin(){let best=null,dist=Infinity;for(const bin of trashBins){const d=Math.hypot(player.position.x-bin.position.x,player.position.z-bin.position.z);if(d<dist){dist=d;best=bin}}return dist<=2.7?best:null}
 function toggleHide(){if(!state.playing||state.paused)return false;const bin=nearestTrashBin();if(!state.hidden&&!bin){showToast('Saklanmak için çöp kutusuna yaklaş.');return false}state.hidden=!state.hidden;player.visible=!state.hidden;send('city_hide',{hidden:state.hidden});$('#hideTouch').textContent=state.hidden?'ÇIK':'SAKLAN';showToast(state.hidden?'Çöp kutusuna saklandın. Polis seni göremez.':'Çöp kutusundan çıktın.');return true}
