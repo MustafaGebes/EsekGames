@@ -45,22 +45,25 @@ interface MinecraftUIProps {
   onlineSelfId?: string | null;
 }
 
-const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mousePos }) => {
+const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number }; armor: (ItemStack | null)[] }> = ({ mousePos, armor }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const donkeyRef = useRef<THREE.Group | null>(null);
   const headRef = useRef<THREE.Group | null>(null);
+  const mousePosRef = useRef(mousePos);
+  mousePosRef.current = mousePos;
+  const armorKey = armor.map((stack) => stack?.id ?? -1).join(',');
 
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
 
-    const width = 104;
-    const height = 124;
+    const width = 120;
+    const height = 150;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 50);
-    camera.position.set(0, 1.45, 3.4);
-    camera.lookAt(0, 1.15, 0);
+    camera.position.set(0, 1.52, 3.9);
+    camera.lookAt(0, 1.2, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
@@ -169,6 +172,69 @@ const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mou
       donkey.add(hoof);
     }
 
+    const palette: Record<string, { main: number; trim: number; highlight: number }> = {
+      leather: { main: 0x8d572f, trim: 0x4f301b, highlight: 0xb87943 },
+      iron: { main: 0xaab7bf, trim: 0x56636c, highlight: 0xd5e0e5 },
+      gold: { main: 0xe0ae18, trim: 0x79530a, highlight: 0xffdf52 },
+      diamond: { main: 0x31bec5, trim: 0x145c67, highlight: 0x8cf2eb },
+    };
+    const armorFor = (slot: string) => {
+      for (const stack of armor) {
+        if (!stack) continue;
+        const definition = ITEM_DEFS[stack.id]?.armor;
+        if (definition?.slot === slot) return palette[definition.material];
+      }
+      return null;
+    };
+    const addArmorBox = (parent: THREE.Group, w: number, h: number, d: number, material: THREE.Material, x: number, y: number, z: number) => {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      part.position.set(x, y, z);
+      parent.add(part);
+    };
+    const chestColors = armorFor('chest');
+    if (chestColors) {
+      const main = new THREE.MeshLambertMaterial({ color: chestColors.main });
+      const trim = new THREE.MeshLambertMaterial({ color: chestColors.trim });
+      const highlight = new THREE.MeshLambertMaterial({ color: chestColors.highlight });
+      // A fitted body shell plus shoulder pieces reads as clothing, not a floating badge.
+      addArmorBox(donkey, 0.78, 0.65, 1.16, main, 0, 0.95, 0);
+      addArmorBox(donkey, 0.80, 0.055, 1.18, trim, 0, 1.27, 0);
+      addArmorBox(donkey, 0.80, 0.055, 1.18, trim, 0, 0.63, 0);
+      for (const x of [-0.37, 0.37]) {
+        for (const z of [-0.33, 0.33]) {
+          addArmorBox(donkey, 0.22, 0.20, 0.30, main, x, 1.22, z);
+          addArmorBox(donkey, 0.23, 0.04, 0.31, highlight, x, 1.31, z);
+        }
+      }
+      addArmorBox(donkey, 0.10, 0.48, 0.045, highlight, 0, 0.96, 0.59);
+    }
+    const legColors = armorFor('legs');
+    if (legColors) {
+      const main = new THREE.MeshLambertMaterial({ color: legColors.main });
+      const trim = new THREE.MeshLambertMaterial({ color: legColors.trim });
+      for (const [x, z] of legPositions) {
+        addArmorBox(donkey, 0.21, 0.40, 0.21, main, x, 0.47, z);
+        addArmorBox(donkey, 0.22, 0.045, 0.22, trim, x, 0.27, z);
+      }
+    }
+    const bootColors = armorFor('feet');
+    if (bootColors) {
+      const main = new THREE.MeshLambertMaterial({ color: bootColors.main });
+      const trim = new THREE.MeshLambertMaterial({ color: bootColors.trim });
+      for (const [x, z] of legPositions) {
+        addArmorBox(donkey, 0.21, 0.22, 0.22, main, x, 0.15, z);
+        addArmorBox(donkey, 0.22, 0.045, 0.23, trim, x, 0.055, z);
+      }
+    }
+    const helmetColors = armorFor('helmet');
+    if (helmetColors) {
+      const main = new THREE.MeshLambertMaterial({ color: helmetColors.main });
+      const trim = new THREE.MeshLambertMaterial({ color: helmetColors.trim });
+      addArmorBox(headGroup, 0.49, 0.16, 0.56, main, 0, 0.18, 0.015);
+      addArmorBox(headGroup, 0.52, 0.055, 0.58, trim, 0, 0.085, 0.015);
+      for (const x of [-0.22, 0.22]) addArmorBox(headGroup, 0.08, 0.22, 0.30, main, x, -0.015, 0.06);
+    }
+
     // Envanter kamerası +Z tarafından baktığı için yüzü kameraya dönük tut.
     donkey.rotation.y = Math.PI + 0.45;
     scene.add(donkey);
@@ -182,8 +248,8 @@ const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mou
         const rect = container.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
         const centerY = rect.top + rect.height / 2;
-        const dx = (mousePos.x - centerX) / (window.innerWidth / 2);
-        const dy = (mousePos.y - centerY) / (window.innerHeight / 2);
+        const dx = (mousePosRef.current.x - centerX) / (window.innerWidth / 2);
+        const dy = (mousePosRef.current.y - centerY) / (window.innerHeight / 2);
 
         // Body follows mouse gently
         const targetBodyYaw = Math.PI + 0.45 + dx * 0.6;
@@ -203,14 +269,20 @@ const Donkey3DPreview: React.FC<{ mousePos: { x: number; y: number } }> = ({ mou
 
     return () => {
       cancelAnimationFrame(frameId);
+      scene.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.geometry.dispose();
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach((material) => material.dispose());
+      });
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [armorKey]);
 
-  return <div ref={mountRef} className="w-[104px] h-[124px] overflow-hidden" />;
+  return <div ref={mountRef} className="w-[120px] h-[150px] overflow-hidden" />;
 };
 
 export const MinecraftUI: React.FC<MinecraftUIProps> = ({
@@ -234,6 +306,7 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showControlsModal, setShowControlsModal] = useState(false);
   const [showPlayerList, setShowPlayerList] = useState(false);
+  const [creativeCatalogOpen, setCreativeCatalogOpen] = useState(false);
   const [creativePaletteTab, setCreativePaletteTab] = useState('all');
   const [creativeSearch, setCreativeSearch] = useState('');
 
@@ -901,27 +974,33 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
           }}
         >
           <div className="mc-panel p-4 flex gap-4 relative" onMouseDown={(e) => e.stopPropagation()}>
-            {engine.gameMode === 'creative' && (
-              <div className="fixed left-1/2 top-3 z-[40] w-[min(96vw,720px)] max-h-[45vh] -translate-x-1/2 overflow-hidden border-2 border-[#777] bg-black/95 p-2 shadow-xl">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            {engine.gameMode === 'creative' && !creativeCatalogOpen && (
+              <button onClick={() => setCreativeCatalogOpen(true)} className="fixed left-1/2 top-3 z-[40] -translate-x-1/2 border-2 border-yellow-300 bg-black/95 px-3 py-2 text-xs font-bold text-yellow-100 shadow-xl">
+                Yaratıcı eşyalarını göster ({creativePaletteEntries.length})
+              </button>
+            )}
+            {engine.gameMode === 'creative' && creativeCatalogOpen && (
+              <div className="fixed left-1/2 top-3 z-[40] flex h-[min(68vh,520px)] max-h-[calc(100dvh-24px)] w-[min(96vw,720px)] -translate-x-1/2 flex-col overflow-hidden border-2 border-[#777] bg-black/95 p-2 shadow-xl">
+                <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
                   <div className="text-xs font-bold text-yellow-200">YARATICI KATALOĞU · sınırsız eşya</div>
-                  <div className="flex max-w-[72%] gap-1 overflow-x-auto pb-1">
-                    {creativeTabs.map((tab) => (
-                      <button key={tab.id} onClick={() => setCreativePaletteTab(tab.id)} className={`shrink-0 border border-[#777] px-2 py-1 text-xs ${creativePaletteTab === tab.id ? 'bg-[#555] text-yellow-100' : 'bg-[#222] text-gray-300'}`}>
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
+                  <button onClick={() => setCreativeCatalogOpen(false)} className="shrink-0 border border-[#999] bg-[#333] px-2 py-1 text-xs text-white hover:bg-[#555]" aria-label="Yaratıcı eşya kataloğunu kapat">Kapat ✕</button>
+                </div>
+                <div className="mb-2 flex shrink-0 gap-1 overflow-x-auto pb-1 mc-scroll">
+                  {creativeTabs.map((tab) => (
+                    <button key={tab.id} onClick={() => setCreativePaletteTab(tab.id)} className={`shrink-0 border border-[#777] px-2 py-1 text-xs ${creativePaletteTab === tab.id ? 'bg-[#555] text-yellow-100' : 'bg-[#222] text-gray-300'}`}>
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
                 <input
                   value={creativeSearch}
                   onChange={(event) => setCreativeSearch(event.target.value)}
                   placeholder="Bu kategoride eşya ara…"
                   aria-label="Yaratıcı kataloğunda ara"
-                  className="mb-2 w-full border-2 border-[#555] bg-[#222] px-2 py-1 text-xs text-white outline-none placeholder:text-gray-400"
+                  className="mb-2 w-full shrink-0 border-2 border-[#555] bg-[#222] px-2 py-1 text-xs text-white outline-none placeholder:text-gray-400"
                 />
-                <div className="mb-1 text-[10px] text-gray-300">{creativePaletteEntries.length} sonuç · seçince envantere eklenir</div>
-                <div className="grid max-h-[30vh] grid-cols-8 gap-1 overflow-y-auto sm:grid-cols-12">
+                <div className="mb-1 shrink-0 text-[10px] text-gray-300">{creativePaletteEntries.length} sonuç · seçince envantere eklenir</div>
+                <div className="grid min-h-0 flex-1 content-start grid-cols-8 gap-1 overflow-y-auto overscroll-contain pr-1 mc-scroll sm:grid-cols-12">
                   {creativePaletteEntries.map(({ id, name }) => (
                     <button key={id} title={name} onClick={() => { engine.giveCreativeItem(id as AnyItemId); rerender(); }} className="mc-slot !h-9 !w-9 !p-0">
                       <img src={getItemIcon(id as AnyItemId)} alt={name} className="h-7 w-7 pixelated" />
@@ -952,9 +1031,9 @@ export const MinecraftUI: React.FC<MinecraftUIProps> = ({
               {/* Top Row: 3D Character Box & 2x2 Crafting Area */}
               <div className="flex items-center gap-6 mb-4">
                 {/* 3D Donkey Character Display */}
-                <div className="w-28 h-36 bg-[#8b8b8b] border-2 border-[#373737] flex flex-col items-center justify-center p-1">
+                <div className="w-32 h-44 bg-[#8b8b8b] border-2 border-[#373737] flex flex-col items-center justify-center p-1">
                   <div className="text-[10px] font-bold text-[#333] mb-0.5">Eşek (3D)</div>
-                  <Donkey3DPreview mousePos={mousePos} />
+                  <Donkey3DPreview mousePos={mousePos} armor={engine.armor} />
                 </div>
 
                 {/* 2x2 Crafting Area */}

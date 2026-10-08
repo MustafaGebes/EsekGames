@@ -845,20 +845,28 @@ export class MinecraftEngine {
       const main = new THREE.MeshLambertMaterial({ color: colors.main });
       const trim = new THREE.MeshLambertMaterial({ color: colors.trim });
       if (armorDef.slot === 'helmet') {
-        part(0.46, 0.14, 0.48, main, 0, 2.34, 0.69);
-        part(0.50, 0.055, 0.50, trim, 0, 2.26, 0.69);
+        part(0.50, 0.19, 0.56, main, 0, 2.25, 0.72);
+        part(0.53, 0.06, 0.58, trim, 0, 2.13, 0.72);
+        part(0.11, 0.24, 0.34, main, -0.21, 2.13, 0.78);
+        part(0.11, 0.24, 0.34, main, 0.21, 2.13, 0.78);
       } else if (armorDef.slot === 'chest') {
-        part(0.97, 0.49, 1.12, main, 0, 1.14, 0);
-        part(1.00, 0.07, 1.14, trim, 0, 1.38, 0);
+        // Full-length fitted shell around the torso, with shoulder and hem bands.
+        part(1.00, 0.72, 1.59, main, 0, 1.12, 0);
+        part(1.03, 0.06, 1.61, trim, 0, 1.48, 0);
+        part(1.03, 0.06, 1.61, trim, 0, 0.76, 0);
+        for (const x of [-0.50, 0.50]) {
+          part(0.12, 0.48, 0.12, trim, x, 1.12, 0);
+          for (const z of [-0.58, 0.58]) part(0.22, 0.22, 0.30, main, x * 0.82, 1.38, z);
+        }
       } else if (armorDef.slot === 'legs') {
         for (const x of [-0.30, 0.30]) for (const z of [-0.53, 0.53]) {
-          part(0.29, 0.34, 0.29, main, x, 0.63, z);
-          part(0.30, 0.055, 0.30, trim, x, 0.47, z);
+          part(0.29, 0.55, 0.29, main, x, 0.46, z);
+          part(0.30, 0.055, 0.30, trim, x, 0.19, z);
         }
       } else {
         for (const x of [-0.30, 0.30]) for (const z of [-0.53, 0.53]) {
-          part(0.29, 0.16, 0.29, main, x, 0.36, z);
-          part(0.30, 0.045, 0.30, trim, x, 0.28, z);
+          part(0.29, 0.23, 0.30, main, x, 0.15, z);
+          part(0.30, 0.05, 0.31, trim, x, 0.035, z);
         }
       }
     }

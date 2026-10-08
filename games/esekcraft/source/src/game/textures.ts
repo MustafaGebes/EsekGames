@@ -1674,6 +1674,23 @@ export function generateAllItemIcons() {
     ctx.fillRect(12, 12, 4, 4);
   });
 
+  drawIcon(ItemType.FLINT, (ctx) => {
+    ctx.fillStyle = '#31383d';
+    ctx.beginPath(); ctx.moveTo(7, 22); ctx.lineTo(10, 12); ctx.lineTo(18, 6); ctx.lineTo(25, 11); ctx.lineTo(27, 20); ctx.lineTo(19, 26); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#68747b'; ctx.fillRect(12, 11, 7, 3); ctx.fillRect(9, 17, 5, 3);
+    ctx.fillStyle = '#171b1e'; ctx.fillRect(18, 17, 7, 5);
+  });
+  drawIcon(ItemType.RAW_IRON, (ctx) => {
+    ctx.fillStyle = '#9a6043'; ctx.fillRect(7, 13, 18, 10); ctx.fillRect(10, 9, 12, 15);
+    ctx.fillStyle = '#c58d68'; ctx.fillRect(10, 10, 7, 4); ctx.fillRect(18, 16, 6, 4);
+    ctx.fillStyle = '#654334'; ctx.fillRect(9, 21, 14, 3);
+  });
+  drawIcon(ItemType.RAW_GOLD, (ctx) => {
+    ctx.fillStyle = '#b88716'; ctx.fillRect(7, 13, 18, 10); ctx.fillRect(10, 9, 12, 15);
+    ctx.fillStyle = '#f2cd43'; ctx.fillRect(10, 10, 7, 4); ctx.fillRect(18, 16, 6, 4);
+    ctx.fillStyle = '#80600c'; ctx.fillRect(9, 21, 14, 3);
+  });
+
   // Charcoal
   drawIcon(ItemType.CHARCOAL, (ctx) => {
     ctx.fillStyle = '#2c2520';
@@ -1686,11 +1703,11 @@ export function generateAllItemIcons() {
 
   // Iron Ingot
   drawIcon(ItemType.IRON_INGOT, (ctx) => {
-    ctx.fillStyle = '#dcdcdc';
+    ctx.fillStyle = '#aebbc2';
     ctx.fillRect(6, 12, 20, 10);
-    ctx.fillStyle = '#f5f5f5';
+    ctx.fillStyle = '#dce5e9';
     ctx.fillRect(8, 10, 16, 4);
-    ctx.fillStyle = '#8f8f8f';
+    ctx.fillStyle = '#64727a';
     ctx.fillRect(6, 20, 20, 3);
   });
 
@@ -1858,7 +1875,7 @@ export function generateAllItemIcons() {
   const materials: Record<string, { head: string; light: string; dark: string }> = {
     wood: { head: '#9c7f4e', light: '#b89860', dark: '#5e4823' },
     stone: { head: '#7f7f7f', light: '#a0a0a0', dark: '#4f4f4f' },
-    iron: { head: '#dcdcdc', light: '#ffffff', dark: '#8f8f8f' },
+    iron: { head: '#aebbc2', light: '#dce5e9', dark: '#64727a' },
     gold: { head: '#e8b923', light: '#fff27a', dark: '#9a6a00' },
     diamond: { head: '#4dedf4', light: '#b8ffff', dark: '#1f989e' },
   };
@@ -2019,7 +2036,7 @@ export function generateAllItemIcons() {
   };
   const armorColors = {
     leather: { main: '#9a6338', light: '#c18a55', dark: '#57361f' },
-    iron: { main: '#c9d0d4', light: '#f4f6f7', dark: '#69747c' },
+    iron: { main: '#aab7bf', light: '#d5e0e5', dark: '#56636c' },
     gold: { main: '#edc52e', light: '#fff18a', dark: '#8f6508' },
     diamond: { main: '#42d9dc', light: '#b9ffff', dark: '#176f7a' },
   };
