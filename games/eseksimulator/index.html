@@ -128,11 +128,12 @@ function buildCity(){
   const sidewalkOpenings=[];
   const addSidewalkOpening=(axis,p,side,center,width)=>sidewalkOpenings.push({axis,p,side,center,half:width/2+.22});
   for(let ix=0;ix<roadLines.length-1;ix++)for(let iz=0;iz<roadLines.length-1;iz++){
-    if(ix!==3||iz!==3)continue;
-    const left=roadLines[ix]+roadWidth(roadLines[ix])/2+4.15,right=roadLines[ix+1]-roadWidth(roadLines[ix+1])/2-4.15;
-    const midX=(left+right)/2,width=4.0;
-    // Keep the starting alley mouth open; don't cut the other sidewalks.
-    addSidewalkOpening('x',roadLines[iz+1],-1,midX,width);
+    const plan=CITY_DATA.getBlockPlan(ix,iz),alley=plan?.alley;
+    if(!alley)continue;
+    if(alley.axis==='x'){
+      addSidewalkOpening('z',roadLines[ix],1,alley.centerZ,alley.width);
+      addSidewalkOpening('z',roadLines[ix+1],-1,alley.centerZ,alley.width);
+    }else if(alley.axis==='z')addSidewalkOpening('x',roadLines[iz],1,alley.centerX,alley.width);
   }
   // Split pavement at every junction so the raised sidewalk never runs across a road.
   function addPedestrianStrip(axis,p,side,width){
@@ -321,12 +322,22 @@ function buildCity(){
     }
     registerCityCollider(cx,cz,4.8,4.8);
   }
-  function addSpawnAlleyDetails(bounds){
-    const cx=bounds.centerX,cz=bounds.centerZ;
+  function addAlleyPaving(bounds,alley){
+    const cx=alley.centerX,cz=alley.centerZ,width=alley.width,length=alley.length||(alley.axis==='x'?bounds.width:bounds.depth);
     const paving=mat(0x9d8d77,.96),joint=mat(0x6b6052,.92);
-    const path=box(scene,bounds.width,.08,3.05,0x9d8d77,cx,-.04,cz,paving);trackCityChunkObject(path,cx,cz,Math.hypot(bounds.width,3.05)/2);
-    for(const side of [-1,1])box(scene,bounds.width,.026,.055,0x706456,cx,.012,cz+side*1.46,joint);
-    for(let x=bounds.left+1.1;x<bounds.right-.65;x+=1.9)box(scene,.055,.018,2.75,0x6b6052,x,.008,cz,joint);
+    const path=alley.axis==='x'?box(scene,length,.08,width,0x9d8d77,cx,-.04,cz,paving):box(scene,width,.08,length,0x9d8d77,cx,-.04,cz,paving);
+    trackCityChunkObject(path,cx,cz,Math.hypot(length,width)/2);
+    if(alley.axis==='x'){
+      for(const side of [-1,1])box(scene,length,.026,.055,0x706456,cx,.012,cz+side*(width/2-.08),joint);
+      for(let x=bounds.left+1.1;x<bounds.right-.65;x+=1.9)box(scene,.055,.018,width-.3,0x6b6052,x,.008,cz,joint);
+    }else{
+      for(const side of [-1,1])box(scene,.055,.026,length,0x706456,cx+side*(width/2-.08),.012,cz,joint);
+      for(let z=cz-length/2+1.1;z<cz+length/2-.65;z+=1.9)box(scene,width-.3,.018,.055,0x6b6052,cx,.008,z,joint);
+    }
+  }
+  function addSpawnAlleyDetails(bounds,alley){
+    const cx=alley.centerX,cz=alley.centerZ;
+    addAlleyPaving(bounds,alley);
     const cableMat=mat(0x3b3731,.72),bulbMat=new THREE.MeshStandardMaterial({color:0xffd28c,emissive:0xffaa42,emissiveIntensity:.04,roughness:.26});
     streetLampMaterials.push(bulbMat);
     for(const offset of [-8,-4,0,4,8]){
@@ -335,13 +346,14 @@ function buildCity(){
     }
     for(const offset of [-6,-2,2,6])streetLampPositions.push({x:cx+offset,y:5.2,z:cz});
   }
+  function addNeighborhoodAlley(bounds,alley){addAlleyPaving(bounds,alley)}
   for(let ix=0;ix<roadLines.length-1;ix++)for(let iz=0;iz<roadLines.length-1;iz++){
     const bounds=CITY_DATA.getBlockBounds(ix,iz);if(!bounds)continue;
     const midX=bounds.centerX,midZ=bounds.centerZ;
     const plan=CITY_DATA.getBlockPlan(ix,iz);
     if(plan.landUse==='central-plaza'){addCentralPlaza(bounds);continue;}
     if(plan.landUse==='pocket-park'){addPocketPark(bounds,ix,iz);continue;}
-    if(plan.landUse==='spawn-alley')addSpawnAlleyDetails(bounds);
+    if(plan.alley){if(plan.landUse==='spawn-alley')addSpawnAlleyDetails(bounds,plan.alley);else addNeighborhoodAlley(bounds,plan.alley)}
     for(const building of plan.buildings){
       const catalog=building.slot?enterableBySlot.get(building.slot):null;
       const titles={'rowhouse':'Sıra Evi','townhouse':'Şehir Evi','apartment':'Apartman','courtyard-house':'Avlulu Ev','corner-shop':'Köşe Dükkânı','community-hall':'Mahalle Salonu','workshop':'Atölye','school':'Okul','library':'Kütüphane','clinic':'Sağlık Ocağı','veterinary-clinic':'Veteriner','community-center':'Mahalle Merkezi','gas-station':'Benzin İstasyonu','market-hall':'Pazar Hali','bus-depot':'Otobüs Garajı','parking-garage':'Otopark','sports-center':'Spor Salonu','train-station':'İstasyon'};

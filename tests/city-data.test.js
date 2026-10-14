@@ -72,25 +72,45 @@ test('bina ayak izleri birbirine ve kaldırım/parsel sınırlarına taşmıyor'
   }
 });
 
-test('mahalle ara sokakları ve karma kullanımlı dükkân/konut aralıkları yaya geçişine açık', () => {
-  let attachedHomeLanes = 0, mixedUseLanes = 0;
+test('ara sokaklar düz, sabit genişlikte ve bina cepheleriyle hizalı', () => {
+  let residentialLanes = 0, spawnLanes = 0, mixedUseLanes = 0;
   for (let ix = 0; ix < city.blockCount; ix += 1) for (let iz = 0; iz < city.blockCount; iz += 1) {
-    const buildings = city.getBlockPlan(ix, iz).buildings;
-    const row = buildings.filter(building => ['rowhouse', 'townhouse'].includes(building.kind));
-    if (row.length === 3 && Math.max(...row.map(building => building.z)) - Math.min(...row.map(building => building.z)) < .02) {
-      row.sort((a, b) => a.x - b.x);
-      for (let i = 1; i < row.length; i += 1) assert.ok(row[i].x - row[i - 1].x - (row[i].width + row[i - 1].width) / 2 >= 1.45, `alley between ${row[i - 1].id} and ${row[i].id} is too narrow`);
-      attachedHomeLanes += 1;
-    }
-    const shop = buildings.find(building => building.kind === 'corner-shop'), apartment = buildings.find(building => building.kind === 'apartment');
-    if (shop && apartment) {
-      const gap = Math.abs(shop.x - apartment.x) - (shop.width + apartment.width) / 2;
-      assert.ok(gap >= 1.45, `mixed-use alley between ${shop.id} and ${apartment.id} is too narrow`);
-      mixedUseLanes += 1;
+    const plan = city.getBlockPlan(ix, iz), buildings = plan.buildings;
+    if (plan.alley) {
+      assert.ok(['x','z'].includes(plan.alley.axis), `alley in ${ix}:${iz} should follow a straight grid axis`);
+      assert.ok(plan.alley.width >= 2.4, `alley in ${ix}:${iz} should remain walkable`);
+      if (plan.landUse === 'spawn-alley') { assert.equal(plan.alley.axis,'x'); spawnLanes += 1; continue; }
+      if (plan.alley.axis === 'x') {
+        const south = buildings.filter(building => building.z < plan.alley.centerZ).sort((a, b) => a.x - b.x);
+        const north = buildings.filter(building => building.z > plan.alley.centerZ).sort((a, b) => a.x - b.x);
+        assert.equal(south.length, 2, `south row in ${ix}:${iz}`);
+        assert.equal(north.length, 2, `north row in ${ix}:${iz}`);
+        for (const building of south) assert.equal(building.face, 0, `${building.id} should face north into the alley`);
+        for (const building of north) assert.equal(building.face, Math.PI, `${building.id} should face south into the alley`);
+        for (const building of buildings) assert.ok(Math.abs(building.z - plan.alley.centerZ) - building.depth / 2 >= plan.alley.width / 2 + .65, `${building.id} intrudes into the straight alley`);
+        residentialLanes += 1;
+      } else {
+        const shop = buildings.find(building => building.kind === 'corner-shop'), apartment = buildings.find(building => building.kind === 'apartment');
+        const rearHome = buildings.find(building => building.kind === 'townhouse');
+        assert.ok(shop && apartment && rearHome, `complete straight mixed-use lane in ${ix}:${iz}`);
+        assert.ok(Math.abs(shop.z - apartment.z) < .02, 'shop and apartment fronts should share one straight facade line');
+        assert.equal(shop.face, Math.PI / 2); assert.equal(apartment.face, -Math.PI / 2);
+        const gap = Math.abs(shop.x - apartment.x) - (shop.depth + apartment.depth) / 2;
+        assert.ok(gap - plan.alley.width >= .18, `mixed-use alley is pinched at ${ix}:${iz}`);
+        assert.ok(plan.alley.centerZ + plan.alley.length / 2 <= rearHome.z - rearHome.depth / 2 - .5, 'straight alley should end before the rear house');
+        mixedUseLanes += 1;
+      }
     }
   }
-  assert.ok(attachedHomeLanes > 0, 'expected attached-home alleys');
-  assert.ok(mixedUseLanes > 0, 'expected mixed-use alleys');
+  assert.ok(residentialLanes > 0, 'expected repeated, straight residential alleys');
+  assert.equal(spawnLanes, 1, 'the start alley should be the only special spawn lane');
+  assert.ok(mixedUseLanes > 0, 'expected mixed-use pedestrian gaps');
+});
+
+test('küçük konutlar ve hizmet binaları minimum şehir ölçeğini koruyor', () => {
+  const footprints = city.getAllBuildingFootprints();
+  for (const building of footprints.filter(entry => ['rowhouse', 'townhouse', 'courtyard-house'].includes(entry.kind))) assert.ok(building.height >= 10, `${building.id} is too short at ${building.height}m`);
+  for (const [id, height] of [['city-hospital', 16], ['city-police-station', 14], ['city-fire-station', 15]]) assert.ok(footprints.find(building => building.id === id).height >= height, `${id} should read as a civic landmark`);
 });
 
 test('21 çöp kutusu yalnızca aralıklı kaldırım noktalarında; bina ve merkez meydandan uzakta', () => {

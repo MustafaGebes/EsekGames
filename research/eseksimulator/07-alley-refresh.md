@@ -14,9 +14,9 @@ Main Street Alabama’nın cephe kılavuzu, ana yapı renginin malzeme tonundan 
 
 - Şehir genelindeki cephelerde kiremit, kum, adaçayı, mavi-gri ve taş tonlarından oluşan daha ayırt edilir bir palet kullanıldı; koyu doğrama ve kontrollü tente/tabela vurguları korundu.
 - Ara sokaktaki dört binanın girişleri yaya aksına döndürüldü. Dükkân verileriyle görsel bina kataloğunun yuva eşleşmeleri düzeltildi.
-- Ara sokak zeminine iki tonlu taş döşeme ve derz ritmi eklendi. Yürüme koridoru çöp kutusu, bank ve yer saksılarından arındırıldı.
-- Ara sokak cephelerine pencere söveleri ve denizlikler, kapı yanı fenerleri ve sığ çiçeklikler eklendi. Baş mesafesinin üstüne dekoratif ampul dizileri yerleştirildi.
-- Yeni cephe geometrisi başlangıç ara sokağına odaklandı; şehir genelindeki diğer binalara gereksiz geometri eklenmedi.
+- Tanımlı yaya ara sokaklarının tümüne aynı eksende taş döşeme, eşit derz aralığı ve blok sınırlarında hizalı kaldırım girişleri eklendi. Yürüme koridorları çöp kutusu, bank ve yer saksılarından arındırıldı.
+- Başlangıç ara sokağına pencere söveleri ve denizlikler, kapı yanı fenerleri, sığ çiçeklikler ve baş mesafesinin üstünde dekoratif ampul dizileri eklendi.
+- Bina cephe geometrisi başlangıç sokağına odaklandı; diğer ara sokaklarda yalnızca düz zemin/bağlantı işaretleri kullanıldı.
 
 ## Kaynaklar
 

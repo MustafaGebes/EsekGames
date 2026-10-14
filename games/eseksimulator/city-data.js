@@ -111,15 +111,15 @@
         const slotName = `${blockKey}:${index}`, slot = getBuildingSlot(slotName), known = enterableBySlot.get(slotName);
         const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
         const alleyFace = index < 2 ? 0 : Math.PI;
-        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 9 + ((ix * 3 + iz + index) % 4) * 2, alleyFace, ix * 19 + iz * 11 + index, slotName));
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 12 + ((ix * 3 + iz + index) % 3) * 2, alleyFace, ix * 19 + iz * 11 + index, slotName));
       }
-      return { ix, iz, landUse: 'spawn-alley', buildings: planned };
+      return { ix, iz, landUse: 'spawn-alley', alley: { axis: 'x', centerX: bounds.centerX, centerZ: bounds.centerZ, width: 3.05 }, buildings: planned };
     }
     const blockKey = `${ix}:${iz}`;
     const serviceKind=civicUses[blockKey];
     const required = buildings.filter((building) => building.slot.startsWith(`${blockKey}:`));
     const specialFacility=required.find((building)=>building.slot.endsWith(':4'));
-    if(specialFacility){const slot=getBuildingSlot(specialFacility.slot),isPrison=specialFacility.id==='city-prison',width=isPrison?Math.min(bounds.width-5,slot.width*1.16):slot.width,depth=isPrison?Math.min(bounds.depth-5,slot.depth*1.16):slot.depth;return{ix,iz,landUse:serviceKind||specialFacility.kind,buildings:[footprint(specialFacility.kind,slot.x,slot.z,width,depth,serviceKind==='police-station'?11:serviceKind==='fire-station'?10:10,slot.face,ix*31+iz*17,specialFacility.slot)]};}
+    if(specialFacility){const slot=getBuildingSlot(specialFacility.slot),isPrison=specialFacility.id==='city-prison',width=isPrison?Math.min(bounds.width-5,slot.width*1.16):slot.width,depth=isPrison?Math.min(bounds.depth-5,slot.depth*1.16):slot.depth;const heights={hospital:16,'police-station':14,'fire-station':15,prison:14};return{ix,iz,landUse:serviceKind||specialFacility.kind,buildings:[footprint(specialFacility.kind,slot.x,slot.z,width,depth,heights[specialFacility.kind]||12,slot.face,ix*31+iz*17,specialFacility.slot)]};}
     if (required.length) {
       const planned = [];
       for (let index = 0; index < 4; index += 1) {
@@ -128,7 +128,7 @@
         if (!slot) continue;
         const known = enterableBySlot.get(slotName);
         const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
-        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, known?.kind === 'hospital' ? 14 : 9 + ((ix * 3 + iz + index) % 4) * 2, slot.face, ix * 19 + iz * 11 + index, slotName));
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, known?.kind === 'hospital' ? 16 : 11 + ((ix * 3 + iz + index) % 4) * 2, slot.face, ix * 19 + iz * 11 + index, slotName));
       }
       return { ix, iz, landUse: 'mixed-use', buildings: planned };
     }
@@ -140,46 +140,56 @@
     const cx = bounds.centerX, cz = bounds.centerZ;
     const streetFace = ((ix + iz) % 2 === 0) ? Math.PI : 0;
     if (serviceKind) {
-      const dimensions = serviceKind === 'school' ? [innerW * .79, innerD * .73, 11] : [innerW * .78, innerD * .72, 10];
+      const dimensions = serviceKind === 'school' ? [innerW * .79, innerD * .73, 14] : [innerW * .78, innerD * .72, 13];
       return { ix, iz, landUse: serviceKind, buildings: [footprint(serviceKind, cx, cz, dimensions[0], dimensions[1], dimensions[2], streetFace, h)] };
     }
 
     const plans = [];
+    let alley = null;
     const push = (kind, x, z, w, d, height, face = streetFace, offset = 0) => plans.push(footprint(kind, x, z, w, d, height, face, h + offset));
     switch (h % 6) {
-      case 0: { // Narrow attached homes along a walkable mid-block lane.
-        const laneWidth=1.65,w=Math.min(6.0,(innerW-laneWidth*2)/3),d=innerD*.68;
-        for (let i = 0; i < 3; i += 1) push(i === 1 ? 'townhouse' : 'rowhouse', cx + (i - 1) * (w + laneWidth), cz, w, d, 7 + ((h + i) % 3) * 2, streetFace, i);
+      case 0: { // Paired home rows make one straight, evenly wide mid-block pedestrian lane.
+        const laneWidth=4.0,w=Math.min(7.2,(innerW-4.0)/2),d=Math.min(7.6,(innerD-laneWidth-1.4)/2);
+        const xOffset=w/2+.75,zOffset=laneWidth/2+d/2+.7;
+        for(const side of [-1,1])for(const half of [-1,1]){
+          const index=(side===1?2:0)+(half===1?1:0),kind=index%2?'townhouse':'rowhouse';
+          push(kind,cx+half*xOffset,cz+side*zOffset,w,d,12+((h+index)%3)*2,side===-1?0:Math.PI,index);
+        }
+        alley={axis:'x',centerX:cx,centerZ:cz,width:laneWidth};
         break;
       }
       case 1: { // A deep courtyard pair with distinct footprints and heights.
         push('apartment', cx - innerW * .25, cz, innerW * .39, innerD * .76, 17 + (h % 5), 0, 1);
-        push('courtyard-house', cx + innerW * .25, cz + innerD * .06, innerW * .34, innerD * .64, 8 + (h % 4), Math.PI, 2);
+        push('courtyard-house', cx + innerW * .25, cz + innerD * .06, innerW * .34, innerD * .64, 11 + (h % 4), Math.PI, 2);
         break;
       }
-      case 2: { // A corner shop, small rear house, and a taller mixed-use block.
-        push('corner-shop', cx - innerW * .265, cz - innerD * .23, innerW * .40, innerD * .36, 9, Math.PI, 3);
-        push('apartment', cx + innerW * .265, cz - innerD * .18, innerW * .40, innerD * .44, 18 + (h % 6), 0, 4);
-        push('townhouse', cx, cz + innerD * .28, innerW * .47, innerD * .28, 8, 0, 5);
+      case 2: { // A straight service alley between aligned shop and apartment fronts.
+        const shopWidth=innerW*.40,shopDepth=innerD*.36,apartmentWidth=innerW*.40,apartmentDepth=innerD*.44;
+        const pairZ=cz-innerD*.18,sideOffset=innerW*.28;
+        push('corner-shop',cx-sideOffset,pairZ,shopWidth,shopDepth,11,Math.PI/2,3);
+        push('apartment',cx+sideOffset,pairZ,apartmentWidth,apartmentDepth,18+(h%6),-Math.PI/2,4);
+        push('townhouse',cx+sideOffset,cz+innerD*.28,innerW*.47,innerD*.28,10,Math.PI,5);
+        const alleyWidth=Math.max(2.4,sideOffset*2-(shopDepth+apartmentDepth)/2-.2),endZ=cz+innerD*.10;
+        alley={axis:'z',centerX:cx,centerZ:(bounds.front+endZ)/2,width:alleyWidth,length:endZ-bounds.front};
         break;
       }
       case 3: { // A single distinctive civic-scale workshop or community hall.
-        push(h % 12 === 3 ? 'community-hall' : 'workshop', cx, cz, innerW * .78, innerD * .70, 9 + (h % 6), streetFace, 6);
+        push(h % 12 === 3 ? 'community-hall' : 'workshop', cx, cz, innerW * .78, innerD * .70, 12 + (h % 4), streetFace, 6);
         break;
       }
       case 4: { // Four varied houses around a shared, open courtyard.
         const w = innerW * .39, d = innerD * .36;
         const positions = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
-        positions.forEach(([sx, sz], i) => push(i === 2 ? 'courtyard-house' : 'townhouse', cx + sx * innerW * .255, cz + sz * innerD * .25, w * (i === 1 ? .9 : 1), d * (i === 0 ? .88 : 1), 7 + ((h + i) % 4) * 2, i % 2 ? Math.PI / 2 : streetFace, 7 + i));
+        positions.forEach(([sx, sz], i) => push(i === 2 ? 'courtyard-house' : 'townhouse', cx + sx * innerW * .255, cz + sz * innerD * .25, w * (i === 1 ? .9 : 1), d * (i === 0 ? .88 : 1), 10 + ((h + i) % 4) * 2, i % 2 ? Math.PI / 2 : streetFace, 7 + i));
         break;
       }
       default: { // Apartments with a lower wing, keeping the block permeable.
         push('apartment', cx - innerW * .17, cz, innerW * .47, innerD * .68, 19 + (h % 7), 0, 12);
-        push('townhouse', cx + innerW * .31, cz + innerD * .19, innerW * .24, innerD * .34, 8, Math.PI, 13);
+        push('townhouse', cx + innerW * .31, cz + innerD * .19, innerW * .24, innerD * .34, 10, Math.PI, 13);
         break;
       }
     }
-    return { ix, iz, landUse: 'residential-mixed', buildings: plans };
+    return { ix, iz, landUse: 'residential-mixed', alley, buildings: plans };
   }
 
   function getAllBuildingFootprints() {
