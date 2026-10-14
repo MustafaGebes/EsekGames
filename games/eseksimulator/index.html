@@ -194,7 +194,7 @@ function buildCity(){
     putMatrix(windowFrames,x,y,z,1.22,1.55,.14,rot,.045);
     putMatrix(warm?windowWarm:windowCool,x,y,z,1.0,1.31,.08,rot,.125);
   }
-  const facadePalette=[0xb8aa94,0xa59c8d,0x8f8579,0xb5b3a7,0x9da7a5,0x9e8575,0xc0b08f,0x777875,0xa99d8a];
+  const facadePalette=[0xc17e68,0xd3b982,0x829b80,0x7696a6,0xd7cbb4,0xad8079,0x8b9d91,0x9ba9b8,0xc6985f,0x9e9687];
   const citySignMaterials=new Map();
   function citySignMaterial(kind){
     if(citySignMaterials.has(kind))return citySignMaterials.get(kind);
@@ -321,24 +321,38 @@ function buildCity(){
     }
     registerCityCollider(cx,cz,4.8,4.8);
   }
+  function addSpawnAlleyDetails(bounds){
+    const cx=bounds.centerX,cz=bounds.centerZ;
+    const paving=mat(0x9d8d77,.96),joint=mat(0x6b6052,.92);
+    const path=box(scene,bounds.width,.08,3.05,0x9d8d77,cx,-.04,cz,paving);trackCityChunkObject(path,cx,cz,Math.hypot(bounds.width,3.05)/2);
+    for(const side of [-1,1])box(scene,bounds.width,.026,.055,0x706456,cx,.012,cz+side*1.46,joint);
+    for(let x=bounds.left+1.1;x<bounds.right-.65;x+=1.9)box(scene,.055,.018,2.75,0x6b6052,x,.008,cz,joint);
+    const cableMat=mat(0x3b3731,.72),bulbMat=new THREE.MeshStandardMaterial({color:0xffd28c,emissive:0xffaa42,emissiveIntensity:.04,roughness:.26});
+    streetLampMaterials.push(bulbMat);
+    for(const offset of [-8,-4,0,4,8]){
+      const x=cx+offset,cable=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,2.72,6),cableMat);cable.rotation.x=Math.PI/2;cable.position.set(x,5.45,cz);scene.add(cable);trackCityChunkObject(cable,x,cz,1.5);
+      for(const dz of [-.92,0,.92]){const bulb=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),bulbMat);bulb.position.set(x,5.30,cz+dz);scene.add(bulb);trackCityChunkObject(bulb,x,cz,1);}
+    }
+    for(const offset of [-6,-2,2,6])streetLampPositions.push({x:cx+offset,y:5.2,z:cz});
+  }
   for(let ix=0;ix<roadLines.length-1;ix++)for(let iz=0;iz<roadLines.length-1;iz++){
     const bounds=CITY_DATA.getBlockBounds(ix,iz);if(!bounds)continue;
     const midX=bounds.centerX,midZ=bounds.centerZ;
     const plan=CITY_DATA.getBlockPlan(ix,iz);
     if(plan.landUse==='central-plaza'){addCentralPlaza(bounds);continue;}
     if(plan.landUse==='pocket-park'){addPocketPark(bounds,ix,iz);continue;}
-    if(plan.landUse==='spawn-alley')box(scene,bounds.width,.08,2.8,0x77756e,bounds.centerX,-.04,bounds.centerZ,mat(0x77756e,.96));
+    if(plan.landUse==='spawn-alley')addSpawnAlleyDetails(bounds);
     for(const building of plan.buildings){
       const catalog=building.slot?enterableBySlot.get(building.slot):null;
       const titles={'rowhouse':'Sıra Evi','townhouse':'Şehir Evi','apartment':'Apartman','courtyard-house':'Avlulu Ev','corner-shop':'Köşe Dükkânı','community-hall':'Mahalle Salonu','workshop':'Atölye','school':'Okul','library':'Kütüphane','clinic':'Sağlık Ocağı','veterinary-clinic':'Veteriner','community-center':'Mahalle Merkezi','gas-station':'Benzin İstasyonu','market-hall':'Pazar Hali','bus-depot':'Otobüs Garajı','parking-garage':'Otopark','sports-center':'Spor Salonu','train-station':'İstasyon'};
       const knownTitle=catalog?.title||titles[building.kind]||'Şehir Binası';
       const knownSign=catalog?.sign||knownTitle.toLocaleUpperCase('tr-TR');
       const inferredKind=catalog?.kind||building.kind;
-      enterableSpecs.push({...catalog,id:building.id,slot:building.slot||building.id,title:knownTitle,sign:knownSign,kind:inferredKind,architecture:catalog?.architecture||building.kind,x:building.x,z:building.z,w:building.width,d:building.depth,h:building.height,color:building.color,trim:building.trim,accent:catalog?.accent||building.color,awning:catalog?.awning||building.trim,face:building.face,architecturalStyle:building.kind});
+      enterableSpecs.push({...catalog,id:building.id,slot:building.slot||building.id,title:knownTitle,sign:knownSign,kind:inferredKind,architecture:catalog?.architecture||building.kind,x:building.x,z:building.z,w:building.width,d:building.depth,h:building.height,color:building.color,trim:building.trim,accent:catalog?.accent||building.color,awning:catalog?.awning||building.trim,face:building.face,architecturalStyle:building.kind,alleyDetail:plan.landUse==='spawn-alley'});
     }
   }
   enterableWorld=createEnterableBuildings(THREE,scene,enterableSpecs,cityBuildingColliders);
-  for(const building of enterableWorld.buildings)trackCityChunkObject(building.root,building.x,building.z,Math.hypot(building.width,building.depth)/2);
+  for(const building of enterableWorld.buildings){trackCityChunkObject(building.root,building.x,building.z,Math.hypot(building.width,building.depth)/2);if(building.sconceMaterials)streetLampMaterials.push(...building.sconceMaterials);}
   for(const collider of cityBuildingColliders)addCityColliderToGrid(collider);
   const prison=CITY_DATA.getAllBuildingFootprints().find(building=>building.id==='city-prison');
   if(prison){const fenceMat=mat(0x585e5b,.62),barMat=mat(0x3c4140,.46),radiusX=prison.width/2+2.45,radiusZ=prison.depth/2+2.45;for(const side of [-1,1]){const hz=prison.z+side*radiusZ;box(scene,prison.width+6,.20,.22,0x515552,prison.x,1.05,hz,fenceMat);registerCityCollider(prison.x,hz,prison.width+6,.22);for(let x=-radiusX;x<=radiusX;x+=1.45){const post=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,2.1,6),barMat);post.position.set(prison.x+x,1.05,hz);post.castShadow=true;scene.add(post);registerCityCollider(prison.x+x,hz,.14,.14)}}for(const side of [-1,1]){const x=prison.x+side*radiusX;box(scene,.22,.20,prison.depth+6,0x515552,x,1.05,prison.z,fenceMat);registerCityCollider(x,prison.z,.22,prison.depth+6);for(let z=-radiusZ;z<=radiusZ;z+=1.45){const post=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,2.1,6),barMat);post.position.set(x,1.05,prison.z+z);post.castShadow=true;scene.add(post);registerCityCollider(x,prison.z+z,.14,.14)}}for(const side of [-1,1]){const x=prison.x+side*radiusX,z=prison.z+radiusZ;const tower=new THREE.Group();tower.position.set(x,0,z);scene.add(tower);box(tower,1.5,5,1.5,0x626660,0,2.5,0,mat(0x626660,.8));box(tower,2.1,.55,2.1,0x414542,0,5.2,0,mat(0x414542,.64));registerCityCollider(x,z,1.7,1.7)}}
@@ -384,7 +398,7 @@ function buildCity(){
       trafficLight(x,z,faceX,faceZ,axis,`${px}:${pz}`);
     }
   }
-  const nearSpawnCorridor=(x,z)=>Math.abs(x-CITY_SPAWN.x)<14&&z>CITY_SPAWN.z-15&&z<CITY_SPAWN.z+22;
+  const nearSpawnCorridor=(x,z)=>Math.abs(z-CITY_SPAWN.z)<4.2&&Math.abs(x-CITY_SPAWN.x)<16.5;
   const blockCenters=roadLines.slice(0,-1).map((line,i)=>(line+roadLines[i+1])/2);
   for(let i=0;i<roadLines.length;i++)for(const t of blockCenters){
     const p=roadLines[i],width=roadWidth(p),side=((i+Math.round((t+63)/42))%2===0)?1:-1;
@@ -404,10 +418,6 @@ function buildCity(){
     bin.position.set(prop.x,0,prop.z);bin.rotation.y=prop.rotation||0;scene.add(bin);trackCityChunkObject(bin,prop.x,prop.z,1.1);trashBins.push(bin);registerCityCollider(prop.x,prop.z,prop.width,prop.depth,prop.rotation||0,.12);
   }
   for(const prop of CITY_DATA.getAllStreetProps())trashBin(prop);
-  streetLamp(CITY_SPAWN.x-9,CITY_SPAWN.z);streetLamp(CITY_SPAWN.x+9,CITY_SPAWN.z);
-  for(let z=CITY_SPAWN.z-1;z<CITY_SPAWN.z+5;z+=2.8){
-    const light=box(scene,.16,.16,.12,0xffd68b,CITY_SPAWN.x-1.88,3.2,z);light.material.emissive=new THREE.Color(0x3d2609);streetLampMaterials.push(light.material);
-  }
   const policeStationBuilding=CITY_DATA.getAllBuildingFootprints().find(building=>building.id==='city-police-station')||{x:104,z:-104};
   citySimulation=createCitySimulation(THREE,scene,{roadLines,roadWidth,policeStationPosition:policeStationBuilding,state,windTrees,signalHeads,hud:null,getPlayerPosition:()=>player.position,citizens:CITY_DATA.citizens,shopBuildings:enterableWorld.buildings.filter(building=>CITY_DATA.shops.some(shop=>shop.id===building.id)||building.id==='city-hospital'),isBlocked:(x,z,r=.35)=>isCityBlocked(x,z,r),hasLineOfSight:(from,to)=>isCityLineClear(from.x,from.z,to.x,to.z),isHidden:()=>state.hidden,onLocalCashDrop:(amount)=>send('city_local_cash_drop',{amount}),onPoliceBulletHit:()=>send('city_police_bullet_hit'),onPoliceVisionChange:(visible)=>send('city_police_vision',{visible})});
 }
@@ -466,7 +476,7 @@ function authToken(){return localStorage.getItem('esek_auth_token')||localStorag
 function enterRoom(roomId){if(!state.socket||state.socket.readyState!==WebSocket.OPEN){setNotice('Sunucu bağlantısı hazırlanıyor…',false);return}state.roomId=roomId;setNotice('Sunucuya giriliyor…');send('join_room',{roomId,token:authToken(),platform:state.mode,progressId:progressId()})}
 function handleMessage(m){cityGameplay?.handleMessage(m);if(m.type==='building_door_states'){enterableWorld?.setDoorStates(m.doors||[])}else if(m.type==='building_door_state'){enterableWorld?.setDoorOpen(m.buildingId,m.open)}else if(m.type==='attack'){if(m.id!==state.myId){const attacker=state.others.get(m.id);if(attacker)triggerDonkeyAttack(attacker.mesh)}}else if(m.type==='rooms_list'){renderRooms(m.rooms||[]);if(state.screen==='lobby')setNotice('Sunucu listesi güncellendi.')}else if(m.type==='room_created'){state.roomId=m.room?.id||null;setNotice('Lobi oluşturuldu. Şehir hazırlanıyor…');if(state.roomId)enterRoom(state.roomId)}else if(m.type==='room_joined'){state.roomId=m.room?.id||state.roomId}else if(m.type==='room_error'||m.type==='join_denied'){setNotice(m.message||'Sunucu işlemi başarısız.',false);send('rooms_request')}else if(m.type==='join_accepted'){state.myId=m.id||state.myId;state.name=m.state?.name||'Oyuncu';startGame(m.spawn||CITY_SPAWN)}else if(m.type==='init'){state.myId=m.id||state.myId}else if(m.type==='players'){updatePlayers(m.players||{})}else if(m.type==='online_count'){document.title=`EsekSimulator · ${m.count||0} çevrimiçi`}}
 function renderRooms(rooms){const list=$('#serverList');list.replaceChildren();if(!rooms.length){const empty=document.createElement('div');empty.className='empty';empty.innerHTML='Şu an açık sunucu yok.<br><strong>İlk şehri sen kur.</strong>';list.appendChild(empty);return}for(const room of rooms){const card=document.createElement('article');card.className='server-card';const copy=document.createElement('div');const title=document.createElement('strong');title.textContent=`🏙️ ${room.name}`;const detail=document.createElement('small');detail.textContent=`Şehir · Kurucu: ${room.hostName||'Oyuncu'}`;const count=document.createElement('div');count.className='server-count';count.textContent=`${room.currentPlayers||0} / ${room.maxPlayers||10} kişi`;copy.append(title,detail,count);const button=document.createElement('button');button.className='join-btn';button.textContent=(room.currentPlayers>=room.maxPlayers)?'DOLU':'KATIL';button.disabled=room.currentPlayers>=room.maxPlayers;button.addEventListener('click',()=>enterRoom(room.id));card.append(copy,button);list.appendChild(card)}}
-function startGame(spawn=CITY_SPAWN){state.hidden=false;$('#hideTouch').textContent='SAKLAN';state.playing=true;state.paused=false;player.visible=true;$('#gameLoader').classList.remove('hidden');setScreen('game');player.position.set(Number.isFinite(Number(spawn?.x))?Number(spawn.x):CITY_SPAWN.x,Number.isFinite(Number(spawn?.y))?Number(spawn.y):CITY_SPAWN.y,Number.isFinite(Number(spawn?.z))?Number(spawn.z):CITY_SPAWN.z);player.scale.setScalar(DONKEY_WORLD_SCALE);state.jumpY=0;state.jumpVelocity=0;state.cameraDistance=8;state.yaw=0;state.pitch=.20;player.rotation.y=state.yaw;setTimeout(()=>{$('#gameLoader').classList.add('hidden');$('#playerLabel').textContent=state.name;showToast('Ara sokakta doğdun. Meydan ve dükkânlar yakında!')},1200)}
+function startGame(spawn=CITY_SPAWN){state.hidden=false;$('#hideTouch').textContent='SAKLAN';state.playing=true;state.paused=false;player.visible=true;$('#gameLoader').classList.remove('hidden');setScreen('game');player.position.set(Number.isFinite(Number(spawn?.x))?Number(spawn.x):CITY_SPAWN.x,Number.isFinite(Number(spawn?.y))?Number(spawn.y):CITY_SPAWN.y,Number.isFinite(Number(spawn?.z))?Number(spawn.z):CITY_SPAWN.z);player.scale.setScalar(DONKEY_WORLD_SCALE);state.jumpY=0;state.jumpVelocity=0;state.cameraDistance=8;state.yaw=Math.PI/2;state.pitch=.20;player.rotation.y=state.yaw;setTimeout(()=>{$('#gameLoader').classList.add('hidden');$('#playerLabel').textContent=state.name;showToast('Ara sokakta doğdun. Meydan ve dükkânlar yakında!')},1200)}
 function stopGame(toHome=true){state.hidden=false;player.visible=false;if(state.playing)send('leave_room');state.playing=false;state.paused=false;player.visible=false;state.roomId=null;state.others.forEach(o=>scene.remove(o.mesh));state.others.clear();player.position.set(CITY_SPAWN.x,CITY_SPAWN.y,CITY_SPAWN.z);$('#gameLoader').classList.add('hidden');setScreen(toHome?'home':'lobby');if(toHome&&state.socket?.readyState===WebSocket.OPEN)send('rooms_request')}
 function updatePlayers(players){const ids=Object.keys(players);$('#playerCount').textContent=ids.length?` · ${ids.length} oyuncu`:'';for(const [id,p] of Object.entries(players)){if(id===state.myId)continue;let o=state.others.get(id);if(!o){o={mesh:donkey(),target:new THREE.Vector3(),yaw:0,crouching:false,name:p.name||'Oyuncu'};o.mesh.scale.setScalar(DONKEY_WORLD_SCALE);scene.add(o.mesh);state.others.set(id,o)}o.target.set(Number(p.x)||0,Number(p.y)||0,Number(p.z)||0);o.yaw=Number(p.yaw)||0;o.crouching=!!p.isCrouching;o.name=p.name||o.name}for(const [id,o] of state.others){if(!players[id]){scene.remove(o.mesh);state.others.delete(id)}}}
 function pushMove(now,isMoving,isCrouching,isSprinting,isJumping){if(now-state.lastSend<50)return;state.lastSend=now;send('move',{x:player.position.x,y:state.jumpY,z:player.position.z,yaw:player.rotation.y,pitch:state.pitch,isMoving,isCrouching,isSprinting,isJumping,platform:state.mode})}

@@ -42,8 +42,16 @@ test('bütün binaların kimlikleri benzersiz; açılabilir binaların kapı yuv
   assert.ok(footprints.length >= 150);
   assert.equal(new Set(footprints.map(building => building.id)).size, footprints.length);
   assert.ok(footprints.every(building => building.id && building.width > 0 && building.depth > 0));
+  assert.ok(new Set(footprints.map(building => building.color)).size >= 8, 'facades should use a varied, restrained neighborhood palette');
   for (const building of city.buildings) assert.ok(footprints.some(entry => entry.id === building.id && entry.slot === building.slot), `missing ${building.id}`);
   assert.equal(new Set(city.buildings.map(building => building.slot)).size, city.buildings.length);
+});
+
+test('açılabilir bina kataloğunun yuvaları şehir verisiyle bire bir eşleşiyor', async () => {
+  const { ENTERABLE_BUILDING_CATALOG } = await import('../games/eseksimulator/enterable-buildings.js');
+  const catalogBySlot = new Map(ENTERABLE_BUILDING_CATALOG.map(building => [building.slot, building]));
+  assert.equal(catalogBySlot.size, city.buildings.length);
+  for (const building of city.buildings) assert.equal(catalogBySlot.get(building.slot)?.id, building.id, `catalog mismatch for ${building.id}`);
 });
 
 test('bina ayak izleri birbirine ve kaldırım/parsel sınırlarına taşmıyor', () => {
@@ -114,6 +122,7 @@ test('eşek doğma noktası meydan yakınındaki dükkân ve konutlar arasındak
   const buildings = city.getBlockPlan(city.spawnAlley.ix, city.spawnAlley.iz).buildings;
   const spawnFootprint = { ...city.spawnPosition, width: .9, depth: .9, face: 0 };
   assert.equal(buildings.length, 4, 'shops and homes remain around the alley');
+  assert.deepEqual(buildings.map(building => building.face), [0, 0, Math.PI, Math.PI], 'shop fronts and home entrances face the shared alley');
   assert.ok(Math.hypot(city.spawnPosition.x - city.plazaPosition.x, city.spawnPosition.z - city.plazaPosition.z) < 50, 'the alley remains close to the plaza');
   assert.ok(buildings.every(building => !overlaps(spawnFootprint, building)), 'spawn point must be clear of building footprints');
   assert.ok(!city.getAllStreetProps().some(prop => prop.blockKey === `${city.spawnAlley.ix}:${city.spawnAlley.iz}`));

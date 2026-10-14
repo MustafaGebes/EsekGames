@@ -13,8 +13,8 @@
   const civicUses = Object.freeze({
     '3:3':'school','2:7':'library','7:7':'community-center'
   });
-  const facadePalette = Object.freeze([0xb8aa94, 0xa59c8d, 0x8f8579, 0xb5b3a7, 0x9da7a5, 0x9e8575, 0xc0b08f, 0x777875, 0xa99d8a]);
-  const trimPalette = Object.freeze([0x665b4e, 0x514d47, 0x756954, 0x686b66, 0x594b42]);
+  const facadePalette = Object.freeze([0xc17e68, 0xd3b982, 0x829b80, 0x7696a6, 0xd7cbb4, 0xad8079, 0x8b9d91, 0x9ba9b8, 0xc6985f, 0x9e9687]);
+  const trimPalette = Object.freeze([0x514c43, 0x5b4438, 0x4e6260, 0x65553d, 0x47535b, 0x647056]);
 
   function getBlockBounds(ix, iz) {
     if (!Number.isInteger(ix) || !Number.isInteger(iz) || ix < 0 || ix >= blockCount || iz < 0 || iz >= blockCount) return null;
@@ -110,7 +110,8 @@
       for (let index = 0; index < 4; index += 1) {
         const slotName = `${blockKey}:${index}`, slot = getBuildingSlot(slotName), known = enterableBySlot.get(slotName);
         const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
-        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 9 + ((ix * 3 + iz + index) % 4) * 2, slot.face, ix * 19 + iz * 11 + index, slotName));
+        const alleyFace = index < 2 ? 0 : Math.PI;
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 9 + ((ix * 3 + iz + index) % 4) * 2, alleyFace, ix * 19 + iz * 11 + index, slotName));
       }
       return { ix, iz, landUse: 'spawn-alley', buildings: planned };
     }

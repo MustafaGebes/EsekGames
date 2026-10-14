@@ -1,17 +1,17 @@
 export const ENTERABLE_BUILDING_CATALOG = Object.freeze([
-  { slot: '4:5:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', architecture: 'icecream-shop', accent: 0x79b9c7, awning: 0xd87867 },
-  { slot: '4:5:1', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', architecture: 'armory', accent: 0x8c7657, awning: 0x5d574b },
-  { slot: '4:5:2', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', architecture: 'cafe', accent: 0xc99a62, awning: 0x647b68 },
-  { slot: '4:5:3', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', architecture: 'market', accent: 0x75a67a, awning: 0x6c9c72 },
-  { slot: '5:4:0', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', architecture: 'grocery', accent: 0xd3a75c, awning: 0x9d724d },
-  { slot: '5:4:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', architecture: 'workshop', accent: 0x8397a1, awning: 0x596872 },
-  { slot: '5:6:2', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', architecture: 'boutique', accent: 0xa386b6, awning: 0x78618b },
-  { slot: '4:4:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', architecture: 'townhouse', accent: 0xa87b5d, awning: 0x766354 },
-  { slot: '6:6:0', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', architecture: 'courtyard-house', accent: 0x78909a, awning: 0x586e76 },
-  { slot: '4:4:0', id: 'city-hospital', title: 'Şehir Hastanesi', sign: 'HASTANE', kind: 'hospital', architecture: 'hospital', accent: 0xc75048, awning: 0xe2d9c8 },
-  { slot: '7:2:4', id: 'city-police-station', title: 'Polis Merkezi', sign: 'POLİS MERKEZİ', kind: 'police-station', architecture: 'police-station', accent: 0x2f4b67, awning: 0x253c54 },
-  { slot: '6:3:4', id: 'city-fire-station', title: 'İtfaiye', sign: 'İTFAİYE', kind: 'fire-station', architecture: 'fire-station', accent: 0xb94434, awning: 0xe1b16b },
-  { slot: '8:2:4', id: 'city-prison', title: 'Şehir Hapishanesi', sign: 'HAPİSHANE', kind: 'prison', architecture: 'prison', accent: 0x77766e, awning: 0x4c514e },
+  { slot: '5:4:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', architecture: 'icecream-shop', accent: 0x79b9c7, awning: 0xd87867 },
+  { slot: '6:5:0', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', architecture: 'armory', accent: 0x8c7657, awning: 0x5d574b },
+  { slot: '5:6:0', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', architecture: 'cafe', accent: 0xc99a62, awning: 0x647b68 },
+  { slot: '4:5:0', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', architecture: 'market', accent: 0x75a67a, awning: 0x6c9c72 },
+  { slot: '5:6:1', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', architecture: 'grocery', accent: 0xd3a75c, awning: 0x9d724d },
+  { slot: '6:5:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', architecture: 'workshop', accent: 0x8397a1, awning: 0x596872 },
+  { slot: '4:5:1', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', architecture: 'boutique', accent: 0xa386b6, awning: 0x78618b },
+  { slot: '4:3:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', architecture: 'townhouse', accent: 0xa87b5d, awning: 0x766354 },
+  { slot: '6:6:3', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', architecture: 'courtyard-house', accent: 0x78909a, awning: 0x586e76 },
+  { slot: '4:4:4', id: 'city-hospital', title: 'Şehir Hastanesi', sign: 'HASTANE', kind: 'hospital', architecture: 'hospital', accent: 0xc75048, awning: 0xe2d9c8 },
+  { slot: '6:4:4', id: 'city-police-station', title: 'Polis Merkezi', sign: 'POLİS MERKEZİ', kind: 'police-station', architecture: 'police-station', accent: 0x2f4b67, awning: 0x253c54 },
+  { slot: '4:6:4', id: 'city-fire-station', title: 'İtfaiye', sign: 'İTFAİYE', kind: 'fire-station', architecture: 'fire-station', accent: 0xb94434, awning: 0xe1b16b },
+  { slot: '7:4:4', id: 'city-prison', title: 'Şehir Hapishanesi', sign: 'HAPİSHANE', kind: 'prison', architecture: 'prison', accent: 0x77766e, awning: 0x4c514e },
 ]);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -354,7 +354,35 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     building.collider = addLocalCollider(building, 0, front + 0.08, doorWidth - 0.04, 0.24);
     building.colliders = localColliders;
 
-    for (const side of [-1, 1]) box(root, Math.max(1.15, leftWidth - 0.46), 1.18, 0.09, glass, side * (doorWidth / 2 + leftWidth / 2), 1.48, front + 0.13);
+    const displayWindowWidth = Math.max(1.15, leftWidth - 0.46);
+    if (building.alleyDetail) {
+      building.sconceMaterials = [];
+      const planter = new THREE.MeshStandardMaterial({ color: 0x785b45, roughness: 0.9 });
+      const foliage = new THREE.MeshStandardMaterial({ color: 0x68845d, roughness: 0.96 });
+      for (const side of [-1, 1]) {
+        const windowX = side * (doorWidth / 2 + leftWidth / 2);
+        box(root, displayWindowWidth + 0.20, 1.40, 0.11, trim, windowX, 1.48, front + 0.09);
+        box(root, displayWindowWidth, 1.18, 0.10, glass, windowX, 1.48, front + 0.17);
+        box(root, 0.075, 1.08, 0.08, jamb, windowX, 1.48, front + 0.24);
+        box(root, displayWindowWidth + 0.24, 0.14, 0.28, trim, windowX, 0.80, front + 0.24);
+        box(root, Math.min(1.7, displayWindowWidth * 0.7), 0.15, 0.30, planter, windowX, 0.88, front + 0.29);
+        for (let i = -1; i <= 1; i += 1) {
+          const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.25, 5), foliage);
+          leaf.position.set(windowX + i * 0.34, 1.01, front + 0.30);
+          root.add(leaf);
+        }
+      }
+      for (const side of [-1, 1]) {
+        const x = side * (doorWidth / 2 + 0.34);
+        box(root, 0.25, 0.36, 0.16, trim, x, 2.24, front + 0.18);
+        const lantern = new THREE.MeshStandardMaterial({ color: 0xffd69a, emissive: 0xffad45, emissiveIntensity: 0.04, roughness: 0.34 });
+        box(root, 0.13, 0.22, 0.13, lantern, x, 2.24, front + 0.29);
+        building.sconceMaterials.push(lantern);
+      }
+      box(root, building.width + 0.18, 0.16, 0.24, trim, 0, building.h - 0.25, front + 0.05);
+    } else {
+      for (const side of [-1, 1]) box(root, displayWindowWidth, 1.18, 0.09, glass, side * (doorWidth / 2 + leftWidth / 2), 1.48, front + 0.13);
+    }
     if (building.kind === 'prison') {
       const barMaterial = new THREE.MeshStandardMaterial({color:0x303633,metalness:.45,roughness:.5});
       for(const side of [-1,1])for(let bar=-3;bar<=3;bar++)box(root,.055,1.18,.08,barMaterial,side*(doorWidth/2+leftWidth/2)+bar*.20,1.48,front+.19);
