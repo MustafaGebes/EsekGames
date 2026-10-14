@@ -1060,7 +1060,7 @@ app.get("/api/version", (req, res) => {
 // ============================================================
 
 const MAX_NEED = 9;
-const SPAWN = { x: 22, y: 0, z: 18 }; // Şehir merkezindeki iki bina arasındaki çöp kutulu ara sokak
+const SPAWN = { x: 21, y: 0, z: 12 }; // Merkez meydanın çeşmesinden uzakta, meydana açılan kaldırım
 
 const APPLE_MAX = 4;
 const APPLE_RESPAWN_MS = 45000;
