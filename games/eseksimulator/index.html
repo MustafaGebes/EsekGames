@@ -322,36 +322,63 @@ function buildCity(){
     }
     registerCityCollider(cx,cz,4.8,4.8);
   }
+  function createAlleyPaverTexture(colors){
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
+    const context=canvas.getContext('2d');context.fillStyle='#817c70';context.fillRect(0,0,canvas.width,canvas.height);
+    for(let row=0;row<4;row++)for(let column=-1;column<5;column++){
+      const x=column*64+(row%2)*32,y=row*32,index=(row*7+column*3+24)%colors.length;
+      context.fillStyle=`#${colors[index].toString(16).padStart(6,'0')}`;context.fillRect(x+2,y+2,60,28);
+      context.fillStyle='rgba(255,255,255,.12)';context.fillRect(x+5,y+5,52,2);
+    }
+    const texture=new THREE.CanvasTexture(canvas);texture.wrapS=THREE.RepeatWrapping;texture.wrapT=THREE.RepeatWrapping;
+    if(THREE.SRGBColorSpace)texture.colorSpace=THREE.SRGBColorSpace;
+    return texture;
+  }
+  const spawnPaverTexture=createAlleyPaverTexture([0xb4a889,0xc0b598,0xaaa083,0xcabfa5,0xbab094]);
+  const neighborhoodPaverTexture=createAlleyPaverTexture([0x98978a,0xa5a18f,0x898d83,0xb0a996,0x929489]);
   function addAlleyPaving(bounds,alley){
     const cx=alley.centerX,cz=alley.centerZ,width=alley.width,length=alley.length||(alley.axis==='x'?bounds.width:bounds.depth);
-    const spawnStyle=alley.style==='spawn-cobble',pavingColor=spawnStyle?0x888a83:0x9d8d77,jointColor=spawnStyle?0x5d605a:0x6b6052;
-    const paving=mat(pavingColor,.96),joint=mat(jointColor,.92);
-    const path=alley.axis==='x'?box(scene,length,.08,width,pavingColor,cx,-.04,cz,paving):box(scene,width,.08,length,pavingColor,cx,-.04,cz,paving);
+    const spawnStyle=alley.style==='spawn-cobble',pavingColor=spawnStyle?0x9b8f79:0x898a80;
+    const path=alley.axis==='x'?box(scene,length,.08,width,pavingColor,cx,-.04,cz,mat(pavingColor,.96)):box(scene,width,.08,length,pavingColor,cx,-.04,cz,mat(pavingColor,.96));
     trackCityChunkObject(path,cx,cz,Math.hypot(length,width)/2);
-    if(alley.axis==='x'){
-      if(spawnStyle){
-        const centerWidth=Math.min(1.45,width-.8),center=box(scene,length,.025,centerWidth,0xb9b09b,cx,.012,cz,mat(0xb9b09b,.94));
-        trackCityChunkObject(center,cx,cz,Math.hypot(length,centerWidth)/2);
-        for(const side of [-1,1]){const border=box(scene,length,.025,.2,0x686a64,cx,.012,cz+side*(width/2-.16),mat(0x686a64,.91));trackCityChunkObject(border,cx,cz+side*(width/2-.16),length/2);}
-      }
-      for(const side of [-1,1])box(scene,length,.026,.055,0x706456,cx,.012,cz+side*(width/2-.08),joint);
-      const jointStep=spawnStyle?1.15:1.9;
-      for(let x=bounds.left+1.1;x<bounds.right-.65;x+=jointStep)box(scene,.055,.018,width-.3,jointColor,x,.008,cz,joint);
-    }else{
-      for(const side of [-1,1])box(scene,.055,.026,length,0x706456,cx+side*(width/2-.08),.012,cz,joint);
-      for(let z=cz-length/2+1.1;z<cz+length/2-.65;z+=1.9)box(scene,width-.3,.018,.055,0x6b6052,cx,.008,z,joint);
+    const texture=(spawnStyle?spawnPaverTexture:neighborhoodPaverTexture).clone();
+    texture.repeat.set(Math.max(1,(alley.axis==='x'?length:width)/1.8),Math.max(1,(alley.axis==='x'?width:length)/1.8));texture.needsUpdate=true;
+    const tile=new THREE.Mesh(new THREE.PlaneGeometry(alley.axis==='x'?length:width,alley.axis==='x'?width:length),new THREE.MeshStandardMaterial({map:texture,roughness:.95}));
+    tile.rotation.x=-Math.PI/2;tile.position.set(cx,.006,cz);tile.receiveShadow=true;scene.add(tile);trackCityChunkObject(tile,cx,cz,Math.hypot(length,width)/2);
+    const centerWidth=Math.min(spawnStyle?2.1:1.15,width-.8),centerColor=spawnStyle?0xd4c7a8:0xb9b19d;
+    const center=alley.axis==='x'?box(scene,length,.016,centerWidth,centerColor,cx,.012,cz,mat(centerColor,.94)):box(scene,centerWidth,.016,length,centerColor,cx,.012,cz,mat(centerColor,.94));
+    trackCityChunkObject(center,cx,cz,Math.hypot(length,centerWidth)/2);
+    for(const side of [-1,1]){
+      const edgeColor=spawnStyle?0x716957:0x686c65;
+      const border=alley.axis==='x'?box(scene,length,.018,.09,edgeColor,cx,.013,cz+side*(width/2-.07),mat(edgeColor,.91)):box(scene,.09,.018,length,edgeColor,cx+side*(width/2-.07),.013,cz,mat(edgeColor,.91));
+      trackCityChunkObject(border,cx,cz,Math.hypot(length,width)/2);
     }
   }
   function addSpawnAlleyDetails(bounds,alley){
     const cx=alley.centerX,cz=alley.centerZ;
     addAlleyPaving(bounds,alley);
-    const cableMat=mat(0x3b3731,.72),bulbMat=new THREE.MeshStandardMaterial({color:0xffd28c,emissive:0xffaa42,emissiveIntensity:.04,roughness:.26});
+    const cableMat=mat(0x4a4135,.78),bulbMat=new THREE.MeshStandardMaterial({color:0xffd99b,emissive:0xffb34f,emissiveIntensity:.04,roughness:.26});
     streetLampMaterials.push(bulbMat);
-    for(const offset of [-8,-4,0,4,8]){
-      const x=cx+offset,cable=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,2.72,6),cableMat);cable.rotation.x=Math.PI/2;cable.position.set(x,5.45,cz);scene.add(cable);trackCityChunkObject(cable,x,cz,1.5);
-      for(const dz of [-.92,0,.92]){const bulb=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),bulbMat);bulb.position.set(x,5.30,cz+dz);scene.add(bulb);trackCityChunkObject(bulb,x,cz,1);}
+    const cableLength=bounds.width-3.2,strandOffset=Math.min(1.95,alley.width/2-.68),bulbXs=[];
+    for(let x=bounds.left+2;x<bounds.right-1.4;x+=3.6)bulbXs.push(x);
+    for(const side of [-1,1]){
+      const z=cz+side*strandOffset,cable=box(scene,cableLength,.026,.026,0x4a4135,cx,5.48,z,cableMat);trackCityChunkObject(cable,cx,cz,Math.hypot(cableLength,alley.width)/2);
+      for(const x of bulbXs){
+        const drop=new THREE.Mesh(new THREE.CylinderGeometry(.012,.012,.18,5),cableMat);drop.position.set(x,5.37,z);scene.add(drop);trackCityChunkObject(drop,x,cz,1);
+        const bulb=new THREE.Mesh(new THREE.SphereGeometry(.085,8,6),bulbMat);bulb.position.set(x,5.25,z);scene.add(bulb);trackCityChunkObject(bulb,x,cz,1);
+      }
     }
-    for(const offset of [-6,-2,2,6])streetLampPositions.push({x:cx+offset,y:5.2,z:cz});
+    for(const x of [cx-5.95,cx+5.95])for(const side of [-1,1])streetLampPositions.push({x,y:2.65,z:cz+side*(alley.width/2-.08)});
+    const planterMaterial=mat(0x887055,.91),rimMaterial=mat(0xb69b71,.82),foliageMaterial=mat(0x6e916a,.96),flowerMaterial=mat(0xd78669,.72);
+    for(const x of [cx-9.4,cx+9.4])for(const side of [-1,1]){
+      const z=cz+side*(alley.width/2-.43),planter=new THREE.Group();planter.position.set(x,0,z);
+      box(planter,.82,.38,.54,0x887055,0,.22,0,planterMaterial);box(planter,.9,.08,.61,0xb69b71,0,.45,0,rimMaterial);
+      for(let leaf=0;leaf<3;leaf++){
+        const plant=new THREE.Mesh(new THREE.ConeGeometry(.16,.46,6),foliageMaterial);plant.position.set((leaf-1)*.2,.69,0);plant.castShadow=true;planter.add(plant);
+        const flower=new THREE.Mesh(new THREE.SphereGeometry(.07,6,5),flowerMaterial);flower.position.set((leaf-1)*.2,.81,.09);planter.add(flower);
+      }
+      scene.add(planter);trackCityChunkObject(planter,x,z,.8);registerCityCollider(x,z,.92,.7,0,.1);
+    }
   }
   function addNeighborhoodAlley(bounds,alley){addAlleyPaving(bounds,alley)}
   for(let ix=0;ix<roadLines.length-1;ix++)for(let iz=0;iz<roadLines.length-1;iz++){

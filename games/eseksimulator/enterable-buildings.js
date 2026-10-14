@@ -1,11 +1,11 @@
 export const ENTERABLE_BUILDING_CATALOG = Object.freeze([
-  { slot: '5:4:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', architecture: 'icecream-shop', accent: 0x79b9c7, awning: 0xd87867 },
-  { slot: '6:5:0', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', architecture: 'armory', accent: 0x8c7657, awning: 0x5d574b },
-  { slot: '5:6:0', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', architecture: 'cafe', accent: 0xc99a62, awning: 0x647b68 },
-  { slot: '4:5:0', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', architecture: 'market', accent: 0x75a67a, awning: 0x6c9c72 },
-  { slot: '5:6:1', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', architecture: 'grocery', accent: 0xd3a75c, awning: 0x9d724d },
-  { slot: '6:5:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', architecture: 'workshop', accent: 0x8397a1, awning: 0x596872 },
-  { slot: '4:5:1', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', architecture: 'boutique', accent: 0xa386b6, awning: 0x78618b },
+  { slot: '5:4:0', id: 'icecream-shop', title: 'Dondurmacı', sign: 'DONDURMACI', kind: 'icecream', architecture: 'icecream-shop', accent: 0x5594a4, awning: 0xe2ae5d },
+  { slot: '6:5:0', id: 'weapons-shop', title: 'Silahçı', sign: 'SİLAHÇI', kind: 'weapons', architecture: 'armory', accent: 0x5d6b78, awning: 0x9aa58b },
+  { slot: '5:6:0', id: 'cafe', title: 'Kafeci', sign: 'KAFE', kind: 'cafe', architecture: 'cafe', accent: 0x9e6042, awning: 0x84a585 },
+  { slot: '4:5:0', id: 'market', title: 'Marketçi', sign: 'MARKET', kind: 'market', architecture: 'market', accent: 0x4f7d60, awning: 0xd59a4f },
+  { slot: '5:6:1', id: 'grocery', title: 'Bakkal', sign: 'BAKKAL', kind: 'grocery', architecture: 'grocery', accent: 0xb07740, awning: 0x8da582 },
+  { slot: '6:5:1', id: 'tool-shop', title: 'Aletçi', sign: 'ALETÇİ', kind: 'tools', architecture: 'workshop', accent: 0x567e88, awning: 0xc6a86c },
+  { slot: '4:5:1', id: 'clothing-shop', title: 'Zırh & Kıyafet', sign: 'ZIRH · KIYAFET', kind: 'clothing', architecture: 'boutique', accent: 0x6b557f, awning: 0x79a9b2 },
   { slot: '4:3:3', id: 'home-one', title: 'Ev', sign: 'EV 01', kind: 'home', architecture: 'townhouse', accent: 0xa87b5d, awning: 0x766354 },
   { slot: '6:6:3', id: 'home-two', title: 'Ev', sign: 'EV 02', kind: 'home', architecture: 'courtyard-house', accent: 0x78909a, awning: 0x586e76 },
   { slot: '4:4:4', id: 'city-hospital', title: 'Şehir Hastanesi', sign: 'HASTANE', kind: 'hospital', architecture: 'hospital', accent: 0xc75048, awning: 0xe2d9c8 },
@@ -370,6 +370,9 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
           const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.25, 5), foliage);
           leaf.position.set(windowX + i * 0.34, 1.01, front + 0.30);
           root.add(leaf);
+          const flower = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 4), i % 2 ? materials.productA : materials.cream);
+          flower.position.set(windowX + i * 0.34 + 0.10, 1.06, front + 0.36);
+          root.add(flower);
         }
       }
       for (const side of [-1, 1]) {
@@ -387,7 +390,13 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       const barMaterial = new THREE.MeshStandardMaterial({color:0x303633,metalness:.45,roughness:.5});
       for(const side of [-1,1])for(let bar=-3;bar<=3;bar++)box(root,.055,1.18,.08,barMaterial,side*(doorWidth/2+leftWidth/2)+bar*.20,1.48,front+.19);
     }
-    box(root, Math.min(building.width - 1.4, 4.2), 0.25, 0.92, awning, 0, 2.55, front + 0.49);
+    const awningWidth=Math.min(building.width-1.4,4.2);
+    box(root, awningWidth, 0.25, 0.92, awning, 0, 2.55, front + 0.49);
+    if(building.alleyDetail){
+      const stripeCount=8,stripeWidth=awningWidth/stripeCount,valanceZ=front+.97;
+      box(root,awningWidth,.16,.08,awning,0,2.39,valanceZ);
+      for(let stripe=0;stripe<stripeCount;stripe+=2)box(root,stripeWidth*.62,.15,.035,materials.fabric,-awningWidth/2+stripeWidth*(stripe+.5),2.39,valanceZ+.05);
+    }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 5.8), 0.58), signMaterial(building.sign, building.accent));
     sign.position.set(0, 2.92, front + 0.22); root.add(sign);
 

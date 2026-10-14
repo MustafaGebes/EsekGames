@@ -78,11 +78,13 @@ test('ara sokaklar düz, sabit genişlikte ve bina cepheleriyle hizalı', () => 
     const plan = city.getBlockPlan(ix, iz), buildings = plan.buildings;
     if (plan.alley) {
       assert.ok(['x','z'].includes(plan.alley.axis), `alley in ${ix}:${iz} should follow a straight grid axis`);
-      assert.ok(plan.alley.width >= 2.4, `alley in ${ix}:${iz} should remain walkable`);
+      assert.ok(plan.alley.width >= 4.8, `alley in ${ix}:${iz} should have a comfortable, uncluttered walking width`);
       if (plan.landUse === 'spawn-alley') {
         assert.equal(plan.alley.axis,'x');
         assert.equal(plan.alley.style,'spawn-cobble');
-        assert.ok(plan.alley.width >= 4.3, 'the starting alley should be visibly wider than a narrow service lane');
+        assert.ok(plan.alley.width >= 5.7, 'the starting alley should read as a small pedestrian street, not a service slot');
+        assert.ok(buildings.every(building=>building.depth<=6.6&&building.height<=12),'spawn-alley buildings should leave a broad, human-scale street canyon');
+        assert.equal(new Set(buildings.map(building=>building.color)).size,4,'the four spawn-alley facades should have distinct but coordinated colors');
         const south=buildings.filter(building=>building.z<plan.alley.centerZ),north=buildings.filter(building=>building.z>plan.alley.centerZ);
         assert.equal(south.length,2); assert.equal(north.length,2);
         const southEdge=Math.max(...south.map(building=>building.z+building.depth/2));
@@ -91,6 +93,7 @@ test('ara sokaklar düz, sabit genişlikte ve bina cepheleriyle hizalı', () => 
         spawnLanes += 1; continue;
       }
       if (plan.alley.axis === 'x') {
+        assert.ok(plan.alley.width>=5.2,'residential mid-block lanes should stay generous');
         const south = buildings.filter(building => building.z < plan.alley.centerZ).sort((a, b) => a.x - b.x);
         const north = buildings.filter(building => building.z > plan.alley.centerZ).sort((a, b) => a.x - b.x);
         assert.equal(south.length, 2, `south row in ${ix}:${iz}`);
@@ -100,6 +103,7 @@ test('ara sokaklar düz, sabit genişlikte ve bina cepheleriyle hizalı', () => 
         for (const building of buildings) assert.ok(Math.abs(building.z - plan.alley.centerZ) - building.depth / 2 >= plan.alley.width / 2 + .65, `${building.id} intrudes into the straight alley`);
         residentialLanes += 1;
       } else {
+        assert.ok(plan.alley.width>=5.0,'mixed-use lanes should not pinch between shop and apartment fronts');
         const shop = buildings.find(building => building.kind === 'corner-shop'), apartment = buildings.find(building => building.kind === 'apartment');
         const rearHome = buildings.find(building => building.kind === 'townhouse');
         assert.ok(shop && apartment && rearHome, `complete straight mixed-use lane in ${ix}:${iz}`);

@@ -13,8 +13,8 @@
   const civicUses = Object.freeze({
     '3:3':'school','2:7':'library','7:7':'community-center'
   });
-  const facadePalette = Object.freeze([0xc17e68, 0xd3b982, 0x829b80, 0x7696a6, 0xd7cbb4, 0xad8079, 0x8b9d91, 0x9ba9b8, 0xc6985f, 0x9e9687]);
-  const trimPalette = Object.freeze([0x514c43, 0x5b4438, 0x4e6260, 0x65553d, 0x47535b, 0x647056]);
+  const facadePalette = Object.freeze([0xc9826c, 0xdcb66d, 0x87a981, 0x76a7b2, 0xe2d1b5, 0xc67e78, 0x80a292, 0x8fa7c2, 0xd39a53, 0xa69d8b]);
+  const trimPalette = Object.freeze([0x4c443a, 0x674638, 0x405f59, 0x705535, 0x3f5362, 0x566b50]);
 
   function getBlockBounds(ix, iz) {
     if (!Number.isInteger(ix) || !Number.isInteger(iz) || ix < 0 || ix >= blockCount || iz < 0 || iz >= blockCount) return null;
@@ -38,11 +38,11 @@
     const signs = centers[index];
     if (!signs) return null;
     const [sx, sz] = signs;
-    const width = Math.min(8.6, (bounds.width - 4.5) / 2);
-    const depth = Math.min(8.4, (bounds.depth - 4.5) / 2);
     const isSpawnAlley = ix === spawnAlley.ix && iz === spawnAlley.iz;
+    const width = Math.min(8.6, (bounds.width - 4.5) / 2);
+    const depth = isSpawnAlley ? 6.6 : Math.min(8.4, (bounds.depth - 4.5) / 2);
     const xOffset = width / 2 + 1.65;
-    const zOffset = depth / 2 + (isSpawnAlley ? 2.3 : 1.65);
+    const zOffset = depth / 2 + (isSpawnAlley ? 3.1 : 1.65);
     const x = bounds.centerX + sx * xOffset;
     const z = bounds.centerZ + sz * zOffset;
     const distanceLeft = Math.abs(x - bounds.left);
@@ -114,9 +114,9 @@
         const slotName = `${blockKey}:${index}`, slot = getBuildingSlot(slotName), known = enterableBySlot.get(slotName);
         const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
         const alleyFace = index < 2 ? 0 : Math.PI;
-        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 12 + ((ix * 3 + iz + index) % 3) * 2, alleyFace, ix * 19 + iz * 11 + index, slotName));
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 10 + (index % 2) * 1.5, alleyFace, ix * 19 + iz * 11 + index, slotName));
       }
-      return { ix, iz, landUse: 'spawn-alley', alley: { axis: 'x', centerX: bounds.centerX, centerZ: bounds.centerZ, width: 4.3, style: 'spawn-cobble' }, buildings: planned };
+      return { ix, iz, landUse: 'spawn-alley', alley: { axis: 'x', centerX: bounds.centerX, centerZ: bounds.centerZ, width: 5.7, style: 'spawn-cobble' }, buildings: planned };
     }
     const blockKey = `${ix}:${iz}`;
     const serviceKind=civicUses[blockKey];
@@ -152,7 +152,7 @@
     const push = (kind, x, z, w, d, height, face = streetFace, offset = 0) => plans.push(footprint(kind, x, z, w, d, height, face, h + offset));
     switch (h % 6) {
       case 0: { // Paired home rows make one straight, evenly wide mid-block pedestrian lane.
-        const laneWidth=4.0,w=Math.min(7.2,(innerW-4.0)/2),d=Math.min(7.6,(innerD-laneWidth-1.4)/2);
+        const laneWidth=5.2,w=Math.min(7.2,(innerW-4.0)/2),d=Math.min(7.6,(innerD-laneWidth-1.4)/2);
         const xOffset=w/2+.75,zOffset=laneWidth/2+d/2+.7;
         for(const side of [-1,1])for(const half of [-1,1]){
           const index=(side===1?2:0)+(half===1?1:0),kind=index%2?'townhouse':'rowhouse';
@@ -166,13 +166,14 @@
         push('courtyard-house', cx + innerW * .25, cz + innerD * .06, innerW * .34, innerD * .64, 11 + (h % 4), Math.PI, 2);
         break;
       }
-      case 2: { // A straight service alley between aligned shop and apartment fronts.
-        const shopWidth=innerW*.40,shopDepth=innerD*.36,apartmentWidth=innerW*.40,apartmentDepth=innerD*.44;
-        const pairZ=cz-innerD*.18,sideOffset=innerW*.28;
+      case 2: { // A straight, pedestrian-friendly lane between aligned shop and apartment fronts.
+        const shopWidth=innerW*.40,shopDepth=Math.min(6.1,innerD*.32),apartmentWidth=innerW*.40,apartmentDepth=Math.min(6.8,innerD*.36);
+        const pairZ=cz-innerD*.18,targetAlleyWidth=5.1;
+        const sideOffset=Math.min(innerW/2-Math.max(shopDepth,apartmentDepth)/2-.25,(targetAlleyWidth+(shopDepth+apartmentDepth)/2+.2)/2);
         push('corner-shop',cx-sideOffset,pairZ,shopWidth,shopDepth,11,Math.PI/2,3);
         push('apartment',cx+sideOffset,pairZ,apartmentWidth,apartmentDepth,18+(h%6),-Math.PI/2,4);
         push('townhouse',cx+sideOffset,cz+innerD*.28,innerW*.47,innerD*.28,10,Math.PI,5);
-        const alleyWidth=Math.max(2.4,sideOffset*2-(shopDepth+apartmentDepth)/2-.2),endZ=cz+innerD*.10;
+        const alleyWidth=sideOffset*2-(shopDepth+apartmentDepth)/2-.2,endZ=cz+innerD*.10;
         alley={axis:'z',centerX:cx,centerZ:(bounds.front+endZ)/2,width:alleyWidth,length:endZ-bounds.front};
         break;
       }
