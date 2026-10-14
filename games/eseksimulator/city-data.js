@@ -40,8 +40,11 @@
     const [sx, sz] = signs;
     const width = Math.min(8.6, (bounds.width - 4.5) / 2);
     const depth = Math.min(8.4, (bounds.depth - 4.5) / 2);
-    const x = bounds.centerX + sx * (width / 2 + 1.65);
-    const z = bounds.centerZ + sz * (depth / 2 + 1.65);
+    const isSpawnAlley = ix === spawnAlley.ix && iz === spawnAlley.iz;
+    const xOffset = width / 2 + 1.65;
+    const zOffset = depth / 2 + (isSpawnAlley ? 2.3 : 1.65);
+    const x = bounds.centerX + sx * xOffset;
+    const z = bounds.centerZ + sz * zOffset;
     const distanceLeft = Math.abs(x - bounds.left);
     const distanceRight = Math.abs(bounds.right - x);
     const distanceFront = Math.abs(z - bounds.front);
@@ -113,7 +116,7 @@
         const alleyFace = index < 2 ? 0 : Math.PI;
         planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 12 + ((ix * 3 + iz + index) % 3) * 2, alleyFace, ix * 19 + iz * 11 + index, slotName));
       }
-      return { ix, iz, landUse: 'spawn-alley', alley: { axis: 'x', centerX: bounds.centerX, centerZ: bounds.centerZ, width: 3.05 }, buildings: planned };
+      return { ix, iz, landUse: 'spawn-alley', alley: { axis: 'x', centerX: bounds.centerX, centerZ: bounds.centerZ, width: 4.3, style: 'spawn-cobble' }, buildings: planned };
     }
     const blockKey = `${ix}:${iz}`;
     const serviceKind=civicUses[blockKey];

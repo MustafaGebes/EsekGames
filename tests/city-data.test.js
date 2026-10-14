@@ -79,7 +79,17 @@ test('ara sokaklar düz, sabit genişlikte ve bina cepheleriyle hizalı', () => 
     if (plan.alley) {
       assert.ok(['x','z'].includes(plan.alley.axis), `alley in ${ix}:${iz} should follow a straight grid axis`);
       assert.ok(plan.alley.width >= 2.4, `alley in ${ix}:${iz} should remain walkable`);
-      if (plan.landUse === 'spawn-alley') { assert.equal(plan.alley.axis,'x'); spawnLanes += 1; continue; }
+      if (plan.landUse === 'spawn-alley') {
+        assert.equal(plan.alley.axis,'x');
+        assert.equal(plan.alley.style,'spawn-cobble');
+        assert.ok(plan.alley.width >= 4.3, 'the starting alley should be visibly wider than a narrow service lane');
+        const south=buildings.filter(building=>building.z<plan.alley.centerZ),north=buildings.filter(building=>building.z>plan.alley.centerZ);
+        assert.equal(south.length,2); assert.equal(north.length,2);
+        const southEdge=Math.max(...south.map(building=>building.z+building.depth/2));
+        const northEdge=Math.min(...north.map(building=>building.z-building.depth/2));
+        assert.ok(northEdge-southEdge>=plan.alley.width+.2,'the wider walking lane must stay clear between both building rows');
+        spawnLanes += 1; continue;
+      }
       if (plan.alley.axis === 'x') {
         const south = buildings.filter(building => building.z < plan.alley.centerZ).sort((a, b) => a.x - b.x);
         const north = buildings.filter(building => building.z > plan.alley.centerZ).sort((a, b) => a.x - b.x);

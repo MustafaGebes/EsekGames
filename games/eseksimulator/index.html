@@ -324,12 +324,19 @@ function buildCity(){
   }
   function addAlleyPaving(bounds,alley){
     const cx=alley.centerX,cz=alley.centerZ,width=alley.width,length=alley.length||(alley.axis==='x'?bounds.width:bounds.depth);
-    const paving=mat(0x9d8d77,.96),joint=mat(0x6b6052,.92);
-    const path=alley.axis==='x'?box(scene,length,.08,width,0x9d8d77,cx,-.04,cz,paving):box(scene,width,.08,length,0x9d8d77,cx,-.04,cz,paving);
+    const spawnStyle=alley.style==='spawn-cobble',pavingColor=spawnStyle?0x888a83:0x9d8d77,jointColor=spawnStyle?0x5d605a:0x6b6052;
+    const paving=mat(pavingColor,.96),joint=mat(jointColor,.92);
+    const path=alley.axis==='x'?box(scene,length,.08,width,pavingColor,cx,-.04,cz,paving):box(scene,width,.08,length,pavingColor,cx,-.04,cz,paving);
     trackCityChunkObject(path,cx,cz,Math.hypot(length,width)/2);
     if(alley.axis==='x'){
+      if(spawnStyle){
+        const centerWidth=Math.min(1.45,width-.8),center=box(scene,length,.025,centerWidth,0xb9b09b,cx,.012,cz,mat(0xb9b09b,.94));
+        trackCityChunkObject(center,cx,cz,Math.hypot(length,centerWidth)/2);
+        for(const side of [-1,1]){const border=box(scene,length,.025,.2,0x686a64,cx,.012,cz+side*(width/2-.16),mat(0x686a64,.91));trackCityChunkObject(border,cx,cz+side*(width/2-.16),length/2);}
+      }
       for(const side of [-1,1])box(scene,length,.026,.055,0x706456,cx,.012,cz+side*(width/2-.08),joint);
-      for(let x=bounds.left+1.1;x<bounds.right-.65;x+=1.9)box(scene,.055,.018,width-.3,0x6b6052,x,.008,cz,joint);
+      const jointStep=spawnStyle?1.15:1.9;
+      for(let x=bounds.left+1.1;x<bounds.right-.65;x+=jointStep)box(scene,.055,.018,width-.3,jointColor,x,.008,cz,joint);
     }else{
       for(const side of [-1,1])box(scene,.055,.026,length,0x706456,cx+side*(width/2-.08),.012,cz,joint);
       for(let z=cz-length/2+1.1;z<cz+length/2-.65;z+=1.9)box(scene,width-.3,.018,.055,0x6b6052,cx,.008,z,joint);
