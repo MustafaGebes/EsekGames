@@ -1060,7 +1060,7 @@ app.get("/api/version", (req, res) => {
 // ============================================================
 
 const MAX_NEED = 9;
-const SPAWN = { x: 21, y: 0, z: 12 }; // Merkez meydanın çeşmesinden uzakta, meydana açılan kaldırım
+const SPAWN = { x: 22, y: 0, z: 18 }; // Şehir haritası kendi doğma noktasını kullanır.
 
 const APPLE_MAX = 4;
 const APPLE_RESPAWN_MS = 45000;
@@ -2043,9 +2043,10 @@ function joinGame(player, data) {
     player.armor = 0;
     player.lastDamageAt = Date.now();
 
-    player.x = SPAWN.x;
-    player.y = SPAWN.y;
-    player.z = SPAWN.z;
+    const playerSpawn = player.mapId === "city" ? CITY_DATA.spawnPosition : SPAWN;
+    player.x = playerSpawn.x;
+    player.y = playerSpawn.y;
+    player.z = playerSpawn.z;
     player.yaw = 0;
     player.pitch = 0;
 
@@ -2058,7 +2059,7 @@ function joinGame(player, data) {
     player.nextBearBiteAt = 0;
     sendTo(player, {
         type: "join_accepted",
-        spawn: { x: SPAWN.x, y: SPAWN.y, z: SPAWN.z },
+        spawn: { x: playerSpawn.x, y: playerSpawn.y, z: playerSpawn.z },
         state: {
             name: player.name,
             health: player.health,

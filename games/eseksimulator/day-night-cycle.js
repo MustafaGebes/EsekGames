@@ -29,6 +29,7 @@ export function createDayNightCycle(THREE, {
   coolWindows = null,
   groundMaterial = null,
   streetLights = [],
+  streetLampEmitters = [],
   cycleSeconds = 240,
   startProgress = 0.30
 }) {
@@ -87,6 +88,11 @@ export function createDayNightCycle(THREE, {
     if (coolWindows) coolWindows.emissiveIntensity = lerp(from.coolWindows, to.coolWindows, blend);
     const lampGlow = lerp(from.streetLights, to.streetLights, blend);
     for (const material of streetLights) material.emissiveIntensity = lampGlow;
+    const emittedIntensity = Math.max(0, lampGlow - 0.3) * 28;
+    for (const light of streetLampEmitters) {
+      light.intensity = emittedIntensity;
+      light.visible = emittedIntensity > 0.15;
+    }
 
     return phase;
   }

@@ -7,7 +7,8 @@
   const blockCount = roadLines.length - 1;
   const roadWidth = (value) => Math.abs(value) < 0.01 ? 14 : (Math.abs(value) < 50 ? 10 : 8.5);
   const centralPlaza = Object.freeze({ ix: 5, iz: 5 });
-  const plazaPosition = Object.freeze({ x: 21, z: 21 });
+  const plazaPosition = Object.freeze({ x: 22, z: 22 });
+  const spawnAlley = Object.freeze({ ix: 4, iz: 5 });
   const parks = new Set(['1:2','2:8','3:8','7:1','8:7','0:0','0:8','1:9','4:0','4:9','8:1','9:4','9:8']);
   const civicUses = Object.freeze({
     '3:3':'school','2:7':'library','7:7':'community-center'
@@ -23,6 +24,9 @@
     const back = roadLines[iz + 1] - roadWidth(roadLines[iz + 1]) / 2 - 4.15;
     return { left, right, front, back, width: right - left, depth: back - front, centerX: (left + right) / 2, centerZ: (front + back) / 2 };
   }
+
+  const spawnAlleyBounds = getBlockBounds(spawnAlley.ix, spawnAlley.iz);
+  const spawnPosition = Object.freeze({ x: spawnAlleyBounds.centerX, y: 0, z: spawnAlleyBounds.centerZ });
 
   function getBuildingSlot(slot) {
     const [ix, iz, index] = String(slot).split(':').map(Number);
@@ -101,6 +105,15 @@
     const bounds = getBlockBounds(ix, iz);
     if (!bounds) return null;
     if (ix === centralPlaza.ix && iz === centralPlaza.iz) return { ix, iz, landUse: 'central-plaza', buildings: [] };
+    if (ix === spawnAlley.ix && iz === spawnAlley.iz) {
+      const blockKey = `${ix}:${iz}`, planned = [];
+      for (let index = 0; index < 4; index += 1) {
+        const slotName = `${blockKey}:${index}`, slot = getBuildingSlot(slotName), known = enterableBySlot.get(slotName);
+        const archetypes = ['rowhouse', 'corner-shop', 'apartment', 'townhouse'];
+        planned.push(footprint(known ? known.kind : archetypes[(ix + iz + index) % archetypes.length], slot.x, slot.z, slot.width, slot.depth, 9 + ((ix * 3 + iz + index) % 4) * 2, slot.face, ix * 19 + iz * 11 + index, slotName));
+      }
+      return { ix, iz, landUse: 'spawn-alley', buildings: planned };
+    }
     const blockKey = `${ix}:${iz}`;
     const serviceKind=civicUses[blockKey];
     const required = buildings.filter((building) => building.slot.startsWith(`${blockKey}:`));
@@ -210,6 +223,8 @@
     blockCount,
     centralPlaza,
     plazaPosition,
+    spawnAlley,
+    spawnPosition,
     getBlockBounds,
     getBlockStreetProps,
     getAllStreetProps,

@@ -25,7 +25,13 @@ test('10×10 haritanın tamamı planlı; merkez blok dairesel çeşmeli meydan o
   assert.ok(plans.every(Boolean));
   assert.equal(city.getBlockPlan(5, 5).landUse, 'central-plaza');
   assert.equal(city.getBlockPlan(5, 5).buildings.length, 0);
-  assert.deepEqual(city.plazaPosition, { x: 21, z: 21 });
+  assert.deepEqual(city.plazaPosition, { x: 22, z: 22 });
+  assert.deepEqual(city.spawnAlley, { ix: 4, iz: 5 });
+  assert.equal(city.getBlockPlan(4, 5).landUse, 'spawn-alley');
+  assert.equal(city.getBlockPlan(4, 5).buildings.length, 4);
+  assert.equal(city.spawnPosition.y, 0);
+  assert.ok(Math.abs(city.spawnPosition.x - city.getBlockBounds(4, 5).centerX) < 0.01);
+  assert.ok(Math.abs(city.spawnPosition.z - city.getBlockBounds(4, 5).centerZ) < 0.01);
   assert.ok(plans.filter(plan => plan.landUse === 'pocket-park').length >= 10);
   assert.equal(city.roadLines[2], -126);
   assert.equal(city.roadLines[8], 126);
@@ -102,6 +108,15 @@ test('meydan çevresinde dükkânlar, yakınında hastane/polis/itfaiye ve farkl
   assert.ok(prison.width > police.width && prison.depth > police.depth, 'prison should be a larger special facility');
   assert.ok(Math.abs(prison.x - police.x) < 50 && Math.abs(prison.z - police.z) < 2, 'prison should be next to the police station');
   assert.ok(kinds.size >= 15, `expected varied architecture, found ${kinds.size} kinds`);
+});
+
+test('eşek doğma noktası meydan yakınındaki dükkân ve konutlar arasındaki yaya aralığında', () => {
+  const buildings = city.getBlockPlan(city.spawnAlley.ix, city.spawnAlley.iz).buildings;
+  const spawnFootprint = { ...city.spawnPosition, width: .9, depth: .9, face: 0 };
+  assert.equal(buildings.length, 4, 'shops and homes remain around the alley');
+  assert.ok(Math.hypot(city.spawnPosition.x - city.plazaPosition.x, city.spawnPosition.z - city.plazaPosition.z) < 50, 'the alley remains close to the plaza');
+  assert.ok(buildings.every(building => !overlaps(spawnFootprint, building)), 'spawn point must be clear of building footprints');
+  assert.ok(!city.getAllStreetProps().some(prop => prop.blockKey === `${city.spawnAlley.ix}:${city.spawnAlley.iz}`));
 });
 
 test('combat ve polis değerleri kısa menzil/can ve 60 saniye sözleşmesini koruyor', () => {
