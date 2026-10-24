@@ -110,6 +110,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
 
   function addFurniture(root, building, materials, addLocalCollider) {
     const { kind, width, depth } = building;
+    const arch = building.architecture || building.architecturalStyle || kind;
     const counterWidth = Math.min(width - 2.0, 5.5);
     const counterZ = -depth * 0.16;
 
@@ -132,7 +133,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         const plant=new THREE.Mesh(new THREE.ConeGeometry(.42,.92,7),materials.productB);plant.position.set(-width*.35,.88,depth*.32);plant.castShadow=true;root.add(plant);
         addLocalCollider(building,-width*.35,depth*.32,.72,.72);
       }else{
-        const shelfX=-width*.36,shelfZ=0;
+        const shelfX=-width*.36,shelfZ=.30;
         box(root,.58,1.92,2.05,materials.wood,shelfX,.96,shelfZ);
         for(const level of [.52,1.04,1.56])box(root,.72,.09,2.05,materials.trim,shelfX+.06,level,shelfZ);
         for(let i=0;i<4;i++)box(root,.22,.28,.24,i%2?materials.productA:materials.accent,shelfX+.08,.72+(i%2)*.48,-.68+i*.44);
