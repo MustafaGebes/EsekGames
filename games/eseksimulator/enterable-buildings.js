@@ -597,11 +597,15 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       for(const side of [-1,1])for(let bar=-3;bar<=3;bar++)box(root,.055,1.18,.08,barMaterial,side*(doorWidth/2+leftWidth/2)+bar*.20,1.48,front+.19);
     }
     const awningWidth=Math.min(building.width-1.4,4.2);
-    box(root, awningWidth, 0.25, 0.92, awning, 0, 2.55, front + 0.49);
-    if(building.alleyDetail){
-      const stripeCount=8,stripeWidth=awningWidth/stripeCount,valanceZ=front+.97;
-      box(root,awningWidth,.16,.08,awning,0,2.39,valanceZ);
-      for(let stripe=0;stripe<stripeCount;stripe+=2)box(root,stripeWidth*.62,.15,.035,materials.fabric,-awningWidth/2+stripeWidth*(stripe+.5),2.39,valanceZ+.05);
+    const hasShopAwning=['cafe','icecream','weapons','market','grocery','tools','clothing','shop'].includes(building.kind)
+      || ['cafe','market','grocery','boutique','icecream-shop','armory','corner-shop','shop'].includes(arch);
+    if(hasShopAwning){
+      box(root, awningWidth, 0.25, 0.92, awning, 0, 2.55, front + 0.49);
+      if(building.alleyDetail){
+        const stripeCount=8,stripeWidth=awningWidth/stripeCount,valanceZ=front+.97;
+        box(root,awningWidth,.16,.08,awning,0,2.39,valanceZ);
+        for(let stripe=0;stripe<stripeCount;stripe+=2)box(root,stripeWidth*.62,.15,.035,materials.fabric,-awningWidth/2+stripeWidth*(stripe+.5),2.39,valanceZ+.05);
+      }
     }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 5.8), 0.58), signMaterial(building.sign, building.accent));
     sign.position.set(0, 2.92, front + 0.22); root.add(sign);
@@ -691,9 +695,59 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       }
       box(root, building.width + 0.32, 0.20, building.depth + 0.32, trim, 0, building.h + 0.03, 0);
     }
-    if (['townhouse','courtyard-house','rowhouse','home','corner-shop','market','grocery','boutique','icecream-shop','cafe'].includes(arch)) {
-      const roofMaterial = new THREE.MeshStandardMaterial({color:building.trim||0x665e52,roughness:.86});
-      const roofShape=new THREE.Mesh(new THREE.ConeGeometry(1,1,4),roofMaterial);roofShape.rotation.y=Math.PI/4;roofShape.position.set(0,building.h+.55,0);roofShape.scale.set(Math.min(building.width,building.depth)*.60,1.1,Math.min(building.width,building.depth)*.60);roofShape.castShadow=true;root.add(roofShape);
+    const roofMaterial = new THREE.MeshStandardMaterial({ color: building.trim || 0x665e52, roughness: .86 });
+    const retailKinds = ['cafe','icecream','weapons','market','grocery','clothing','shop'];
+    if (['rowhouse','townhouse','home','courtyard-house'].includes(arch) || ['home','rowhouse','townhouse','courtyard-house'].includes(building.kind)) {
+      building.roofProfile = arch === 'courtyard-house' ? 'courtyard-hip' : arch + '-gable';
+      const span = Math.min(building.width * .64, building.depth * 1.14);
+      for (const side of [-1,1]) { const plane=box(root,span,.34,building.depth+.62,roofMaterial,side*span*.23,building.h+.58,0); plane.rotation.z=side*-.46; }
+      if(arch==='courtyard-house') box(root,building.width*.42,.30,building.depth*.34,materials.accent,0,building.h+.38,0);
+    } else if (arch === 'apartment' || building.kind === 'apartment') {
+      building.roofProfile='apartment-setback';
+      box(root,building.width*.58,1.25,building.depth*.56,plaster,0,building.h+.58,-building.depth*.06);
+      box(root,building.width*.64,.18,building.depth*.62,roofMaterial,0,building.h+1.30,-building.depth*.06);
+      const tank=new THREE.Mesh(new THREE.CylinderGeometry(.62,.68,1.4,10),materials.metal);tank.position.set(building.width*.23,building.h+2.05,-building.depth*.20);root.add(tank);
+    } else if (retailKinds.includes(building.kind) || ['cafe','market','grocery','boutique','icecream-shop','armory','corner-shop','shop'].includes(arch)) {
+      building.roofProfile=arch+'-commercial-parapet';
+      box(root,building.width+.24,.55,.32,materials.accent,0,building.h+.20,building.depth*.30);
+      box(root,building.width+.18,.20,building.depth+.22,roofMaterial,0,building.h+.54,0);
+      for(const side of [-1,1])box(root,.18,.72,building.depth+.16,materials.accent,side*(building.width/2),building.h+.28,0);
+    } else if (['hospital','clinic','veterinary-clinic'].includes(arch) || ['hospital','clinic','veterinary-clinic'].includes(building.kind)) {
+      building.roofProfile=arch==='veterinary-clinic'?'veterinary-clinic-pavilion':arch==='clinic'?'clinic-stepped':'hospital-stepped';
+      for(const side of [-1,1]){box(root,building.width*.26,1.15,building.depth*.68,plaster,side*building.width*.31,building.h+.52,-building.depth*.04);box(root,building.width*.29,.18,building.depth*.72,roofMaterial,side*building.width*.31,building.h+1.18,-building.depth*.04);}
+      box(root,building.width*.34,2.0,building.depth*.38,materials.cream,0,building.h+1.0,-building.depth*.08);
+      box(root,.34,1.1,.20,materials.accent,0,building.h+1.15,building.depth*.12);box(root,1.1,.34,.20,materials.accent,0,building.h+1.15,building.depth*.12);
+    } else if (arch==='school') {
+      building.roofProfile='school-clock-tower';
+      box(root,building.width*.68,.52,building.depth*.75,roofMaterial,0,building.h+.24,0);
+      box(root,building.width*.20,1.65,building.depth*.22,materials.accent,0,building.h+1.10,-building.depth*.16);
+      const clock=new THREE.Mesh(new THREE.CylinderGeometry(.48,.48,.16,16),materials.cream);clock.rotation.x=Math.PI/2;clock.position.set(0,building.h+1.26,building.depth*.02);root.add(clock);
+      const peak=new THREE.Mesh(new THREE.ConeGeometry(1,1.1,4),roofMaterial);peak.position.set(0,building.h+2.05,-building.depth*.16);peak.scale.set(building.width*.13,1,building.depth*.13);root.add(peak);
+    } else if (arch==='library') {
+      building.roofProfile='library-gable';
+      box(root,building.width*.82,.25,building.depth*.82,roofMaterial,0,building.h+.16,0);
+      for(const side of [-1,1]){const plane=box(root,building.width*.46,.30,building.depth*.88,roofMaterial,side*building.width*.22,building.h+.64,0);plane.rotation.z=side*-.42;}
+      box(root,building.width*.68,.24,.34,materials.accent,0,building.h+.30,building.depth*.34);
+    } else if (arch==='workshop'||building.kind==='tools') {
+      building.roofProfile='workshop-sawtooth';
+      for(let i=-1;i<=1;i++){box(root,building.width*.28,.42,building.depth*.94,roofMaterial,i*building.width*.30,building.h+.32,0);box(root,building.width*.10,.75,building.depth*.94,materials.metal,i*building.width*.30+building.width*.14,building.h+.48,0);}
+    } else if (arch==='fire-station') {
+      building.roofProfile='fire-station-bays';box(root,building.width*.74,.30,building.depth*.78,roofMaterial,0,building.h+.16,0);
+      for(const side of [-1,1])box(root,building.width*.22,1.35,building.depth*.76,materials.accent,side*building.width*.28,building.h+.68,building.depth*.02);
+    } else if (arch==='police-station') {
+      building.roofProfile='police-station-tower';box(root,building.width*.72,.34,building.depth*.76,roofMaterial,0,building.h+.18,0);
+      box(root,building.width*.18,2.25,building.depth*.20,materials.accent,building.width*.30,building.h+1.30,-building.depth*.28);
+      box(root,building.width*.23,.22,building.depth*.25,materials.cream,building.width*.30,building.h+2.48,-building.depth*.28);
+    } else if (arch==='prison') {
+      building.roofProfile='prison-watchtowers';box(root,building.width*.82,.40,building.depth*.84,roofMaterial,0,building.h+.20,0);
+      for(const side of [-1,1]){box(root,building.width*.14,2,building.depth*.16,materials.trim,side*building.width*.34,building.h+1.08,building.depth*.28);const cap=new THREE.Mesh(new THREE.ConeGeometry(1,1,4),materials.accent);cap.position.set(side*building.width*.34,building.h+2.58,building.depth*.28);cap.scale.set(building.width*.10,1,building.depth*.10);root.add(cap);}
+    } else if (arch==='community-center'||arch==='community-hall') {
+      building.roofProfile=arch==='community-center'?'community-center-pavilion':'community-hall-bell';
+      box(root,building.width*.82,.38,building.depth*.80,roofMaterial,0,building.h+.20,0);
+      box(root,building.width*.34,1.45,building.depth*.25,materials.accent,0,building.h+.86,-building.depth*.28);
+      if(arch==='community-hall'){const bell=new THREE.Mesh(new THREE.SphereGeometry(.38,8,6),materials.cream);bell.position.set(0,building.h+1.80,-building.depth*.28);root.add(bell);}
+    } else {
+      building.roofProfile=arch+'-flat-roof';box(root,building.width+.18,.24,building.depth+.18,roofMaterial,0,building.h+.08,0);
     }
     if (building.kind === 'apartment' || arch === 'apartment') {
       const floors=Math.min(3,Math.max(1,Math.floor((building.h-1)/3.05)));

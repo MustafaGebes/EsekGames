@@ -1,5 +1,11 @@
 # Esek Simulator — şehir binalarını yeniden tasarlama planı
 
+## Gerçek durum ve düzeltme
+Önceki PR #22 türlere göre ek cephe parçaları ekledi; ancak ana bina gövdesi ve girişteki genel tente/çatı görünümü büyük ölçüde ortak kaldığı için şehir yeterince farklı görünmedi. Bu nedenle PR #22 hedefi karşılamış sayılmıyor.
+
+Bu düzeltme dalında konutlara eğimli çatı ve farklı üst kütle, apartmanlara geri çekilmiş çatı katı, dükkânlara ticari parapet, hastane/kliniklere kademeli kanatlar, okul ve kütüphaneye ayrı tepe profilleri, atölyeye testere dişi çatı, kamu binalarına özgü kule/pavyon profilleri ekleniyor. Konut ve kamu türlerinde ortak dükkân tentesi kaldırılıyor. Otomatik test en az 18 ayrı çatı/kütle profilini doğruluyor; gerçek oyunda ekran görüntüsü, telefon görünümü ve performans kontrolü hâlâ gerekiyor.
+
+
 ## Araştırma özeti
 
 Şehir 10×10 bloktan oluşuyor; şehir verisi 233 bina ayak izi ve 16 bina türü üretiyor. Dış cepheler çoğunlukla ortak kutu taban, çatı, pencere ve saçak üreticisiyle kuruluyor; bazı türlere özel ekler var. Sahne üreticisi 233 ayak izinin tamamına giriş, oda kabuğu ve türe göre mobilya üretimi kuruyor. Bunun yanında 13 katalog kaydı ana dükkân ve hizmet binalarına özel kimlik verir. Dış cepheler ortak temel üreticiyi, bazı iç mekânlar da ortak aile yerleşimlerini paylaşıyor.

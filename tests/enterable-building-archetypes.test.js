@@ -59,6 +59,7 @@ test('şehir bina türleri ayrı iç/dış model parçaları üretir ve kapı ak
   const world = createEnterableBuildings(THREE, scene, [...specs,...additionalSpecs], collisionRects);
   const models = world.buildings;
   assert.equal(models.length, 4+additionalKinds.length);
+  assert.ok(new Set(models.map(model=>model.roofProfile)).size >= 18, 'building archetypes should use distinct roof and massing profiles');
   assert.equal(new Set(models.slice(0,4).map(model => model.root.children.length)).size, 4, 'café, townhouse, courtyard home, and hospital should have distinct model assemblies');
   assert.ok(models.slice(4).every(model=>model.root.children.length>20),'every city archetype should assemble a visible exterior and interior');
   assert.ok(collisionRects.length > 20, 'room furniture and walls must keep collision shapes');
