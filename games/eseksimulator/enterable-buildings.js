@@ -121,6 +121,23 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       box(root, 1.25, .72, .82, materials.wood, width * .2, .42, depth * .22);
       box(root, 1.4, .08, .96, materials.trim, width * .2, .80, depth * .22);
       for (const [x,z,w,d] of [[-width*.24,-depth*.24,bedWidth+.15,2.3],[width*.22,-depth*.20,2.5,1.0],[width*.2,depth*.22,1.5,1.0]]) addLocalCollider(building,x,z,w,d);
+
+      const wardrobeX=width*.36,wardrobeZ=-depth*.36;
+      box(root,.92,1.82,.66,materials.wood,wardrobeX,.91,wardrobeZ);
+      box(root,.74,1.46,.04,materials.trim,wardrobeX,.91,wardrobeZ+.35);
+      box(root,.06,.22,.08,materials.metal,wardrobeX+.25,.92,wardrobeZ+.39);
+      addLocalCollider(building,wardrobeX,wardrobeZ,.98,.72);
+      if(arch==='courtyard-house'){
+        const pot=new THREE.Mesh(new THREE.CylinderGeometry(.28,.22,.48,8),materials.trim);pot.position.set(-width*.35,.24,depth*.32);root.add(pot);
+        const plant=new THREE.Mesh(new THREE.ConeGeometry(.42,.92,7),materials.productB);plant.position.set(-width*.35,.88,depth*.32);plant.castShadow=true;root.add(plant);
+        addLocalCollider(building,-width*.35,depth*.32,.72,.72);
+      }else{
+        const shelfX=-width*.36,shelfZ=0;
+        box(root,.58,1.92,2.05,materials.wood,shelfX,.96,shelfZ);
+        for(const level of [.52,1.04,1.56])box(root,.72,.09,2.05,materials.trim,shelfX+.06,level,shelfZ);
+        for(let i=0;i<4;i++)box(root,.22,.28,.24,i%2?materials.productA:materials.accent,shelfX+.08,.72+(i%2)*.48,-.68+i*.44);
+        addLocalCollider(building,shelfX,shelfZ,.72,2.1);
+      }
       return;
     }
 
@@ -177,11 +194,20 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         box(root, 1.52, 0.24, 2.15, materials.wood, x, 0.18, -2.25);
         box(root, 1.44, 0.16, 1.92, materials.cream, x, 0.38, -2.25);
         box(root, 1.46, 0.22, 0.46, materials.fabric, x, 0.54, -3.04);
+        box(root,.68,.42,.36,materials.metal,x,1.02,-2.70);
+        box(root,.52,.26,.08,materials.accent,x,1.04,-2.49);
         addLocalCollider(building, x, -2.25, 1.62, 2.3);
       }
       box(root, 0.92, 1.55, 0.68, materials.wood, width * 0.34, 0.78, 1.42);
       box(root, 1.0, 0.12, 0.74, materials.trim, width * 0.34, 1.58, 1.42);
       addLocalCollider(building, width * 0.34, 1.42, 1.05, 0.8);
+
+      const waitZ=depth*.30;
+      for(const x of [-4,0,4]){
+        box(root,1.25,.14,.52,materials.fabric,x,.48,waitZ);
+        box(root,1.25,.62,.14,materials.wood,x,.82,waitZ-.19);
+        addLocalCollider(building,x,waitZ,1.34,.62);
+      }
       return;
     }
 
@@ -225,6 +251,20 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
           addLocalCollider(building,x+side*.86,z,.48,.48);
         }
       }
+      const machineX=-counterWidth*.22,machineZ=counterZ-.08;
+      box(root,1.18,.78,.58,materials.freezer,machineX,1.47,machineZ);
+      box(root,1.22,.12,.62,materials.metal,machineX,1.91,machineZ);
+      for(const x of [-.32,.32]){
+        const cup=new THREE.Mesh(new THREE.CylinderGeometry(.10,.12,.18,8),materials.cream);cup.position.set(machineX+x,2.07,machineZ);root.add(cup);
+      }
+      const displayX=counterWidth*.25;
+      box(root,1.45,.72,.65,materials.wood,displayX,1.40,machineZ);
+      box(root,1.48,.08,.68,materials.glass,displayX,1.80,machineZ);
+      for(let i=0;i<3;i++){
+        const pastry=new THREE.Mesh(new THREE.SphereGeometry(.16,8,6),i===1?materials.productB:materials.productA);
+        pastry.position.set(displayX-.42+i*.42,1.89,machineZ);root.add(pastry);
+      }
+      addLocalCollider(building,displayX,machineZ,1.52,.72);
       return;
     }
 
@@ -399,6 +439,34 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 5.8), 0.58), signMaterial(building.sign, building.accent));
     sign.position.set(0, 2.92, front + 0.22); root.add(sign);
+
+    if(arch==='cafe'){
+      const stripeCount=8,stripeWidth=awningWidth/stripeCount;
+      for(let i=0;i<stripeCount;i++)if(i%2===0)box(root,stripeWidth*.72,.23,.90,materials.cream,-awningWidth/2+stripeWidth*(i+.5),2.56,front+.50);
+      box(root,awningWidth,.15,.09,awning,0,2.38,front+.96);
+      for(let i=0;i<stripeCount;i+=2)box(root,stripeWidth*.62,.14,.04,materials.cream,-awningWidth/2+stripeWidth*(i+.5),2.38,front+1.01);
+      for(const side of [-1,1])box(root,.10,1.02,.10,materials.wood,side*Math.min(1.9,awningWidth*.42),1.82,front+.84);
+      const menu=new THREE.Mesh(new THREE.PlaneGeometry(1.42,.52),signMaterial('KAHVE & TATLI',building.accent));
+      menu.position.set(building.width*.37,2.75,front+.24);root.add(menu);
+    }
+    if(building.kind==='home'){
+      box(root,Math.min(3.8,building.width*.55),.18,1.32,trim,0,.12,front+.78);
+      box(root,Math.min(3.35,building.width*.48),.18,.96,awning,0,2.72,front+.70);
+      for(const side of [-1,1])box(root,.12,2.35,.12,materials.wood,side*Math.min(1.45,building.width*.20),1.18,front+1.02);
+      if(arch==='courtyard-house'){
+        const pot=new THREE.Mesh(new THREE.CylinderGeometry(.25,.20,.40,8),trim);pot.position.set(-building.width*.34,.20,front+.48);root.add(pot);
+        const foliage=new THREE.Mesh(new THREE.ConeGeometry(.38,.88,7),new THREE.MeshStandardMaterial({color:0x6b8b62,roughness:.94}));foliage.position.set(-building.width*.34,.78,front+.48);foliage.castShadow=true;root.add(foliage);
+      }else{
+        const chimney=new THREE.Group();chimney.position.set(building.width*.28,building.h+.25,-building.depth*.18);root.add(chimney);
+        box(chimney,.72,1.55,.72,materials.trim,0,.42,0);
+        box(chimney,.88,.16,.88,materials.wood,0,1.22,0);
+      }
+    }
+    if(building.kind==='hospital'){
+      box(root,Math.min(8,building.width-2),.28,1.16,materials.cream,0,3.42,front+.62);
+      box(root,Math.min(7.5,building.width-2.4),.14,1.22,materials.accent,0,3.62,front+.62);
+      for(const side of [-1,1])box(root,.24,2.7,.24,materials.trim,side*Math.min(3.3,building.width*.22),1.35,front+.96);
+    }
 
     if (building.kind === 'hospital' || building.kind === 'clinic' || building.kind === 'veterinary-clinic') {
       const crossRed = new THREE.MeshStandardMaterial({ color: 0xc75048, emissive: 0x37110e, roughness: 0.55 });
