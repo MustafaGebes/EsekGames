@@ -93,6 +93,76 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     return new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
   }
 
+  function addArchitecturalSilhouette(root, building, materials, arch, front) {
+    const { width, depth, h, seed = 0 } = building;
+    const post = (x, y, z, height, material) => box(root, .16, height, .16, material, x, y, z);
+    if (arch === 'rowhouse') {
+      box(root, width*.58,.16,.88,materials.trim,0,.12,front+.58);
+      for(const side of [-1,1])box(root,.22,1.22,.10,materials.trim,side*(width*.31),1.55,front+.16);
+      if(seed%2===0){box(root,.72,1.35,.72,materials.trim,width*.29,h+.40,-depth*.20);box(root,.86,.15,.86,materials.wood,width*.29,h+1.14,-depth*.20);}
+    } else if (arch === 'townhouse') {
+      for(const side of [-1,1])post(side*Math.min(1.65,width*.22),1.48,front+.78,2.85,materials.trim);
+      box(root,Math.min(4.2,width*.64),.20,1.18,materials.awning||materials.accent,0,2.98,front+.72);
+      box(root,Math.min(3.0,width*.48),.14,.12,materials.cream,0,3.12,front+.72);
+    } else if (arch === 'courtyard-house') {
+      box(root,width*.46,.18,.22,materials.trim,0,3.28,front+.18);
+      for(const side of [-1,1]){post(side*width*.24,1.47,front+.20,2.80,materials.trim);box(root,.72,.44,.60,materials.wood,side*width*.34,.23,front+.55);}
+    } else if (arch === 'apartment') {
+      box(root,width*.72,.38,.35,materials.accent,0,h+.34,front+.12);
+      for(const side of [-1,1])box(root,.20,h*.72,.22,materials.trim,side*(width/2-.34),h*.48,front+.18);
+    } else if (arch === 'corner-shop') {
+      const bandWidth=Math.min(width-1.0,6.2);
+      box(root,bandWidth,.22,1.08,materials.accent,0,2.76,front+.55);
+      for(let i=0;i<7;i++)if(i%2===0)box(root,bandWidth/8,.20,1.10,materials.cream,-bandWidth/2+bandWidth*(i+.5)/7,2.77,front+.55);
+      for(const side of [-1,1])box(root,.16,1.7,.14,materials.trim,side*Math.min(3.0,width*.36),1.52,front+.22);
+    } else if (arch === 'shop' || arch === 'market' || arch === 'grocery' || arch === 'boutique' || arch === 'icecream-shop' || arch === 'armory') {
+      const bandWidth=Math.min(width-1.2,5.8);
+      box(root,bandWidth,.20,.94,materials.accent,0,2.72,front+.48);
+      box(root,bandWidth,.16,.08,materials.cream,0,2.58,front+.97);
+      for(const side of [-1,1])box(root,.12,1.45,.12,materials.wood,side*bandWidth*.42,1.78,front+.80);
+    } else if (arch === 'workshop') {
+      const garageWidth=Math.min(width*.66,6.2);
+      box(root,garageWidth,2.25,.18,materials.metal,0,1.18,front+.20);
+      for(let y=.38;y<2.2;y+=.36)box(root,garageWidth-.12,.055,.22,materials.trim,0,y,front+.32);
+      for(const side of [-1,1])box(root,.65,.55,.65,materials.metal,side*width*.31,h+.28,-depth*.20);
+    } else if (arch === 'school') {
+      const clock=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.16,16),materials.cream);
+      clock.rotation.x=Math.PI/2;clock.position.set(0,4.42,front+.27);root.add(clock);
+      box(root,.07,.42,.08,materials.accent,0,4.45,front+.38);
+      box(root,.42,.07,.08,materials.accent,.16,4.48,front+.38);
+      post(-width*.40,1.85,front+.28,3.7,materials.trim);post(width*.40,1.85,front+.28,3.7,materials.trim);
+      box(root,width*.82,.16,.22,materials.accent,0,3.70,front+.32);
+    } else if (arch === 'library') {
+      const porticoWidth=Math.min(width*.72,7.2);
+      box(root,porticoWidth,.26,1.18,materials.trim,0,3.18,front+.68);
+      for(const side of [-1,1])post(side*porticoWidth*.42,1.5,front+.82,2.85,materials.cream);
+      const book=new THREE.Mesh(new THREE.BoxGeometry(.66,.52,.12),materials.accent);book.position.set(0,3.82,front+.35);root.add(book);
+      box(root,.08,.40,.16,materials.cream,0,3.82,front+.43);
+    } else if (arch === 'community-center') {
+      const widthCap=Math.min(width*.74,7.5);
+      box(root,widthCap,.32,1.35,materials.accent,0,3.20,front+.72);
+      for(const side of [-1,1])post(side*widthCap*.43,1.52,front+.86,2.9,materials.trim);
+      box(root,widthCap*.72,.14,.10,materials.cream,0,3.46,front+.38);
+    } else if (arch === 'community-hall') {
+      box(root,width*.78,.26,.68,materials.trim,0,3.06,front+.48);
+      for(const side of [-1,1])post(side*width*.34,1.50,front+.70,2.8,materials.wood);
+      const bell=new THREE.Mesh(new THREE.SphereGeometry(.28,8,6),materials.accent);bell.position.set(0,h+.45,0);root.add(bell);
+    } else if (arch === 'police-station') {
+      box(root,width*.78,.22,.28,materials.accent,0,h+.25,0);
+      for(const side of [-1,1])box(root,.24,.42,.24,materials.cream,side*width*.34,h+.55,0);
+    } else if (arch === 'fire-station') {
+      for(const side of [-1,1]){box(root,.34,.30,.26,materials.accent,side*width*.30,3.35,front+.18);box(root,.22,.12,.18,materials.cream,side*width*.30,3.36,front+.34);}
+    } else if (arch === 'prison') {
+      for(const side of [-1,1]){box(root,.55,3.2,.55,materials.trim,side*(width*.42),1.6,front+.08);box(root,.76,.24,.76,materials.accent,side*(width*.42),3.30,front+.08);}
+    } else if (arch === 'hospital' || arch === 'clinic' || arch === 'veterinary-clinic') {
+      const signColor=materials.accent;
+      box(root,Math.min(width*.42,5.8),.26,.46,materials.cream,0,4.12,front+.20);
+      box(root,.20,.76,.16,signColor,0,4.12,front+.48);
+      box(root,.76,.20,.16,signColor,0,4.12,front+.48);
+      if(arch==='veterinary-clinic')for(const side of [-1,1]){const ear=new THREE.Mesh(new THREE.SphereGeometry(.10,6,5),signColor);ear.position.set(side*.24,3.86,front+.49);root.add(ear);}
+    }
+  }
+
   function addInteriorShelves(root, building, materials, addLocalCollider, side) {
     const x = side * (building.width / 2 - 0.62);
     const shelfWidth = Math.min(3.6, building.depth - 2.5);
@@ -440,6 +510,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 5.8), 0.58), signMaterial(building.sign, building.accent));
     sign.position.set(0, 2.92, front + 0.22); root.add(sign);
+    addArchitecturalSilhouette(root,building,materials,arch,front);
 
     if(arch==='cafe'){
       const stripeCount=8,stripeWidth=awningWidth/stripeCount;
