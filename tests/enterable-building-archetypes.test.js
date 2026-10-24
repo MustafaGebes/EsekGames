@@ -44,7 +44,7 @@ const THREE = {
   SRGBColorSpace: 'srgb',
 };
 
-test('kafe, ev ve hastane ayrı iç/dış model parçaları üretir ve kapı akışını korur', async () => {
+test('şehir bina türleri ayrı iç/dış model parçaları üretir ve kapı akışını korur', async () => {
   const { createEnterableBuildings } = await import('../games/eseksimulator/enterable-buildings.js');
   const scene = new Group();
   const collisionRects = [];
