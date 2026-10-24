@@ -696,9 +696,9 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       box(root, building.width + 0.32, 0.20, building.depth + 0.32, trim, 0, building.h + 0.03, 0);
     }
     const roofMaterial = new THREE.MeshStandardMaterial({ color: building.trim || 0x665e52, roughness: .86 });
-    const retailKinds = ['cafe','icecream','weapons','market','grocery','tools','clothing','shop'];
+    const retailKinds = ['cafe','icecream','weapons','market','grocery','clothing','shop'];
     if (['rowhouse','townhouse','home','courtyard-house'].includes(arch) || ['home','rowhouse','townhouse','courtyard-house'].includes(building.kind)) {
-      building.roofProfile = arch === 'courtyard-house' ? 'courtyard-hip' : 'residential-gable';
+      building.roofProfile = arch === 'courtyard-house' ? 'courtyard-hip' : arch + '-gable';
       const span = Math.min(building.width * .64, building.depth * 1.14);
       for (const side of [-1,1]) { const plane=box(root,span,.34,building.depth+.62,roofMaterial,side*span*.23,building.h+.58,0); plane.rotation.z=side*-.46; }
       if(arch==='courtyard-house') box(root,building.width*.42,.30,building.depth*.34,materials.accent,0,building.h+.38,0);
