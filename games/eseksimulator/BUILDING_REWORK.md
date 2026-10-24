@@ -6,11 +6,11 @@
 
 Hedef; bina türlerini ve oyun işlevlerini kataloglamak, sonra her aileye ayrı siluet, cephe ve iç mekân planı vermek. Şehir ölçeğinde tekrarlanan küçük parçaların draw call maliyetini sınırlamak için Three.js `InstancedMesh` öneriyor. Özel, tekil modeller için glTF/GLB uygun bir aktarım biçimi. [InstancedMesh](https://threejs.org/docs/pages/InstancedMesh.html) · [Three.js model yükleme rehberi](https://threejs.org/manual/pages/loading-3d-models.html) · [GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html)
 
-## Bu daldaki ilk uygulama dilimi
-- Kafe cephesi çizgili tente ve dış menü panosuyla ayrışıyor; içeride espresso makinesi ve vitrinli tatlı tezgâhı var.
-- Ev girişine saçak/porch eklendi. Townhouse içi kitaplıkla; avlulu ev içi bitkiyle farklılaşıyor.
-- Hastaneye giriş saçağı/kolonları eklendi; içeride hasta monitörleri ve bekleme oturma alanı var.
-- Kapı animasyonu, mobilya çarpışmaları ve bu üç prototipin model parçalarını kontrol eden test eklendi.
+## Bu daldaki genişletilmiş uygulama dilimi
+- 16 şehir bina türü ve ek katalog türleri için türlere özgü dış siluet/cephe parçaları eklendi.
+- İç mekânlar apartman, kütüphane, okul, servis, dükkân, klinik, veteriner, market ve atölye gibi işlevlere göre ayrıştırıldı; önceki kafe/ev/hastane prototipleri korundu.
+- Test artık 22 ek türü de sahneye kurup görünür model parçaları, çarpışma alanları ve kafe kapı animasyonunu denetliyor.
+- Bu, kod ve otomatik test kapsamıdır; masaüstü/telefon görsel kontrolü ile yayın performansı henüz tamamlanmış sayılmaz.
 
 ## Tasarım ilkeleri
 
@@ -49,10 +49,9 @@ Tablo başlangıç sınıflandırmasıdır. Kodda bulunan tüm `kind` değerleri
 - Görsel varyasyonu küresel `Math.random` yerine bina `seed` değerinden üret.
 
 ### 2. Dış cephe prototipleri
-- Önce üç dikey örnek yap: mahalle dükkânı, ev ve kamu binası.
-- Siluet, giriş/vitrin, malzeme paleti, ışık ve collider'ı birlikte tamamla.
-- Kaldırım, yaya aralığı ve başlangıç sokağı testlerini koru.
-- Prototiplerden sonra diğer bina ailelerine aynı katalog sözleşmesiyle geç.
+- İlk kafe, ev ve hastane örneklerinden sonra türlere özgü procedural siluet ve cephe parçaları 16 şehir türüne ve ek katalog türlerine yayıldı.
+- Siluet, giriş/vitrin, malzeme paleti ve collider birlikte üretiliyor.
+- Otomatik test türlerin kurulmasını denetliyor; üst üste binme, kapı hizası, görsel kalite ve performans için oyun içi masaüstü/telefon incelemesi hâlâ gerekli.
 
 ### 3. İşleve uygun iç mekânlar
 - Bina başına sabit oda planı tanımla: giriş, dolaşım, mobilya ve collider noktaları aynı veriden üretilsin.
