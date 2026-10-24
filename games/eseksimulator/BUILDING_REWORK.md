@@ -17,7 +17,7 @@ Hedef; bina türlerini ve oyun işlevlerini kataloglamak, sonra her aileye ayrı
 - Her yapı türünün ayrı silueti, çatı biçimi, giriş yeri ve cephe dili olsun.
 - Aynı türdeki örnekler sabit bina tohumundan küçük, kararlı varyasyonlar alsın; kopya hissi azalsın ve tüm oyuncular aynı şehri görsün.
 - İç mekânlar işleve uysun: mağazada ürün rafı/tezgâh, evde oda mobilyası, hastanede kayıt/bekleme/tedavi, itfaiyede araç bölmesi/ekipman.
-- Her binanın iç yerleşim verisi olsun. Mevcut 13 kapılı yapı ilk aşamada erişilebilir kalmalı; diğer yapılar erişim sistemiyle kademeli açılabilir.
+- Her binanın iç yerleşim verisi olsun. Mevcut 233 giriş/kapı akışı korunmalı; 13 özel katalog kaydının dükkân ve hizmet işlevleri kaybolmamalı.
 - Kapı, collider, şehir chunk görünürlüğü, çok oyunculu etkileşim ve lobi akışları korunmalı.
 - GTA'dan model, doku, tabela veya marka alınmamalı; Esek Simulator'a özgü şehir dili ve Türkçe işaretler kullanılmalı.
 - Önce hafif procedural Three.js modelleri kullanılsın. GLB yalnızca tekil landmark veya elle üretilmiş özel model gerçekten değer kattığında eklensin.
@@ -62,7 +62,7 @@ Tablo başlangıç sınıflandırmasıdır. Kodda bulunan tüm `kind` değerleri
 
 ### 4. Tüm şehir örneklerine yayma
 - Aynı türün cephe varyasyonlarını sabit `seed` ile belirle.
-- Kapalı binaların iç yerleşim verilerini de tanımla; uygun konut ve hizmet binalarına kapı/erişim eklemeyi kademeli yap.
+- Tüm bina türlerinin iç yerleşim verisini tanımla; görev ve hizmet etkileşimlerini kademeli olarak her türe yay.
 - Landmark yapıları özel modüler parçalarla tamamla; tekrar eden pencere, çit ve küçük süsleri toplu çiz.
 
 ### 5. Yayın ve regresyon kapısı
@@ -74,7 +74,7 @@ Tablo başlangıç sınıflandırmasıdır. Kodda bulunan tüm `kind` değerleri
 ## Tamamlanma ölçütleri
 
 - Her şehir bina türünün kararlı kimliği, ayrı dış cephe tarifi ve işlevine uygun iç yerleşim tanımı var.
-- Kapılı binaların geçiş/collider akışı çalışıyor ve mevcut 13 yapı erişilebilir kalıyor.
+- 233 binanın geçiş/collider akışı çalışıyor ve 13 özel katalog kimliği korunuyor.
 - Yeniden yüklemede bina şekli ve varyasyonu aynı kalıyor.
 - Yerleşim testleri ve mobil performans kontrolleri geçiyor.
 
@@ -84,4 +84,4 @@ Tablo başlangıç sınıflandırmasıdır. Kodda bulunan tüm `kind` değerleri
 2. Kafe, ev ve hastaneyi dış cephe + iç mekân olarak prototiple.
 3. Diğer açılabilir yapıları ayrı iç planlara taşı.
 4. Kalan konut, eğitim, kültür ve servis türlerine benzersiz cephe ve iç yerleşim ver.
-5. Kapalı binaları görev/etkileşim sistemiyle kademeli aç.
+5. Bina türlerine göre görev ve etkileşim içeriğini kademeli ekle.
