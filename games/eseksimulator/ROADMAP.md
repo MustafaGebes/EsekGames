@@ -1,5 +1,9 @@
 # Esek Simulator — geliştirme yol haritası
 
+## Bina tasarımındaki düzeltme
+PR #22 yalnızca küçük cephe ekleri içerdiği için binalar hâlâ birbirine benziyordu. Yeni `feature/distinct-building-massing` dalı ortak görünümü etkileyen düz tente ve çatı yaklaşımını değiştirip tür bazında farklı kütle profilleri ekliyor. Birleşmeden önce otomatik testler yeşil; oyun içi görsel ve cihaz kontrolü yapılmalı.
+
+
 ## Bu dalda
 - Cep parklarına dört küçük çiçeklik eklendi. Çiçeklikler çarpışma ve şehir chunk görünürlüğüyle kaydediliyor.
 - Bina türlerine özel dış cephe ve iç mekân uygulaması [BUILDING_REWORK.md](./BUILDING_REWORK.md) içinde belgelendi.
