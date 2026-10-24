@@ -54,10 +54,13 @@ test('kafe, ev ve hastane ayrı iç/dış model parçaları üretir ve kapı ak�
     { id: 'prototype-courtyard', kind: 'home', architecture: 'courtyard-house', sign: 'EV', w: 8.6, d: 8.4, h: 17, x: 40, z: 0, face: 0, color: 0x87a981, trim: 0x405f59, accent: 0x78909a, awning: 0x586e76, seed: 17 },
     { id: 'prototype-hospital', kind: 'hospital', architecture: 'hospital', sign: 'HASTANE', w: 16.5, d: 16.5, h: 16, x: 60, z: 0, face: 0, color: 0xe2d1b5, trim: 0x405f59, accent: 0xc75048, awning: 0xe2d9c8, seed: 19 },
   ];
-  const world = createEnterableBuildings(THREE, scene, specs, collisionRects);
+  const additionalKinds = ['apartment','community-center','community-hall','corner-shop','courtyard-house','fire-station','hospital','library','police-station','prison','rowhouse','shop','school','townhouse','workshop','market','grocery','boutique','icecream-shop','armory','veterinary-clinic','clinic'];
+  const additionalSpecs = additionalKinds.map((kind,index)=>({id:`archetype-${kind}`,kind,architecture:kind,sign:kind.toLocaleUpperCase('tr-TR'),w:16,d:16,h:16,x:100+index*30,z:0,face:0,color:0xdcb66d,trim:0x405f59,accent:0xc75048,awning:0xe2d9c8,seed:index+21}));
+  const world = createEnterableBuildings(THREE, scene, [...specs,...additionalSpecs], collisionRects);
   const models = world.buildings;
-  assert.equal(models.length, 4);
-  assert.equal(new Set(models.map(model => model.root.children.length)).size, 4, 'each prototype should add its own model/interior pieces');
+  assert.equal(models.length, 4+additionalKinds.length);
+  assert.equal(new Set(models.slice(0,4).map(model => model.root.children.length)).size, 4, 'café, townhouse, courtyard home, and hospital should have distinct model assemblies');
+  assert.ok(models.slice(4).every(model=>model.root.children.length>20),'every city archetype should assemble a visible exterior and interior');
   assert.ok(collisionRects.length > 20, 'room furniture and walls must keep collision shapes');
   assert.equal(world.setDoorOpen('prototype-cafe', true), true);
   world.update(0.1, { x: 0, z: 0 });
