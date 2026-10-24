@@ -2,7 +2,7 @@
 
 ## Araştırma özeti
 
-Şehir 10×10 bloktan oluşuyor; şehir verisi 150'den fazla bina ayak izi ve 15'ten fazla bina türü üretiyor. Dış cepheler çoğunlukla ortak kutu taban, çatı, pencere ve saçak üreticisiyle kuruluyor; bazı türlere özel ekler var. Açılabilir bina kataloğunda 13 yapı bulunuyor. İç üretim mağaza türlerinin bir kısmını ayırıyor; evler, sağlık yapıları ve bazı hizmet binaları ise ortak yerleşim mantığını paylaşıyor.
+Şehir 10×10 bloktan oluşuyor; şehir verisi 233 bina ayak izi ve 16 bina türü üretiyor. Dış cepheler çoğunlukla ortak kutu taban, çatı, pencere ve saçak üreticisiyle kuruluyor; bazı türlere özel ekler var. Açılabilir bina kataloğunda 13 yapı bulunuyor. İç üretim mağaza türlerinin bir kısmını ayırıyor; evler, sağlık yapıları ve bazı hizmet binaları ise ortak yerleşim mantığını paylaşıyor.
 
 Hedef; bina türlerini ve oyun işlevlerini kataloglamak, sonra her aileye ayrı siluet, cephe ve iç mekân planı vermek. Şehir ölçeğinde tekrarlanan küçük parçaların draw call maliyetini sınırlamak için Three.js `InstancedMesh` öneriyor. Özel, tekil modeller için glTF/GLB uygun bir aktarım biçimi. [InstancedMesh](https://threejs.org/docs/pages/InstancedMesh.html) · [Three.js model yükleme rehberi](https://threejs.org/manual/pages/loading-3d-models.html) · [GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html)
 
