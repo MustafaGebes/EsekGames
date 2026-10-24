@@ -206,9 +206,46 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         const shelfX=-width*.36,shelfZ=.30;
         box(root,.58,1.92,2.05,materials.wood,shelfX,.96,shelfZ);
         for(const level of [.52,1.04,1.56])box(root,.72,.09,2.05,materials.trim,shelfX+.06,level,shelfZ);
-        for(let i=0;i<4;i++)box(root,.22,.28,.24,i%2?materials.productA:materials.accent,shelfX+.08,.72+(i%2)*.48,-.68+i*.44);
+        for(let i=0;i<4;i++)box(root,.22,.28,.24,i%2?materials.productA:materials.accent,shelfX+.08,.72+(i%2)*.48,shelfZ-.68+i*.44);
         addLocalCollider(building,shelfX,shelfZ,.72,2.1);
       }
+      if(arch==='apartment'){
+        const stairX=width*.34,stairZ=depth*.12;
+        for(let step=0;step<5;step++)box(root,1.25,.20,.72,materials.wood,stairX,step*.22+.10,stairZ-step*.48);
+        box(root,.12,1.25,2.6,materials.metal,stairX+.65,.66,stairZ-.90);
+        addLocalCollider(building,stairX,stairZ-.80,1.45,2.75);
+      }
+      return;
+    }
+
+    if (kind === 'workshop') {
+      const benchZ=-depth*.28;
+      box(root,Math.min(width-2,5.8),.92,1.12,materials.wood,0,.50,benchZ);
+      box(root,Math.min(width-1.8,5.9),.12,1.18,materials.metal,0,1.04,benchZ);
+      box(root,Math.min(width-2.2,5.6),1.55,.20,materials.rack,0,1.62,-depth*.38);
+      for(let i=0;i<5;i++){const x=-2.1+i*1.05;box(root,.16,.88,.12,materials.metal,x,1.58,-depth*.37);box(root,.48,.12,.14,materials.accent,x+.12,2.08,-depth*.37);}
+      addLocalCollider(building,0,benchZ,Math.min(width-1.8,6),1.2);
+      addLocalCollider(building,0,-depth*.38,Math.min(width-2,5.8),.28);
+      return;
+    }
+    if(kind==='community-center'||kind==='community-hall'){
+      const tableZ=-depth*.12;
+      for(const x of [-2.3,2.3]){
+        box(root,2.4,.14,1.25,materials.wood,x,.82,tableZ);
+        for(const side of [-1,1])box(root,.48,.12,.48,materials.fabric,x+side*1.55,.45,tableZ);
+        addLocalCollider(building,x,tableZ,2.6,1.4);
+        for(const side of [-1,1])addLocalCollider(building,x+side*1.55,tableZ,.54,.54);
+      }
+      box(root,Math.min(width-2,5.5),.94,.72,materials.counter,0,.52,-depth*.36);
+      addLocalCollider(building,0,-depth*.36,Math.min(width-1.8,5.7),.82);
+      return;
+    }
+    if(kind==='corner-shop'||kind==='shop'){
+      const checkoutZ=-depth*.12;
+      box(root,Math.min(width-2,4.8),.96,.82,materials.counter,0,.52,checkoutZ);
+      for(const side of [-1,1])addInteriorShelves(root,building,materials,addLocalCollider,side);
+      for(const x of [-1.7,0,1.7]){const fruit=new THREE.Mesh(new THREE.SphereGeometry(.20,8,6),x===0?materials.productB:materials.productA);fruit.position.set(x,1.18,checkoutZ-.08);root.add(fruit);}
+      addLocalCollider(building,0,checkoutZ,Math.min(width-1.8,5),.92);
       return;
     }
 
@@ -291,10 +328,24 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       return;
     }
 
-    if (kind === 'library' || kind === 'market-hall' || kind === 'bus-depot' || kind === 'train-station' || kind === 'sports-center') {
+    if (kind === 'library') {
+      for(const side of [-1,1])addInteriorShelves(root,building,materials,addLocalCollider,side);
+      for(const x of [-2.7,0,2.7]){
+        box(root,1.35,.12,2.2,materials.wood,x,.92,0);
+        for(const side of [-1,1])box(root,.42,.10,.42,materials.fabric,x+side*.92,.47,0);
+        addLocalCollider(building,x,0,1.85,2.25);
+      }
+      box(root,Math.min(width*.42,4.8),.9,.85,materials.counter,0,.48,depth*.16);
+      addLocalCollider(building,0,depth*.16,Math.min(width*.44,5),.92);
+      return;
+    }
+    if (kind === 'market-hall' || kind === 'bus-depot' || kind === 'train-station' || kind === 'sports-center') {
       for(const side of [-1,1])addInteriorShelves(root,building,materials,addLocalCollider,side);
       box(root,Math.min(width*.42,4.8),.9,.85,materials.counter,0,.48,depth*.16);
       addLocalCollider(building,0,depth*.16,Math.min(width*.44,5),.92);
+      if(kind==='market-hall')for(const x of [-2.7,0,2.7]){box(root,1.6,.70,1.1,materials.wood,x,.38,-.15);addLocalCollider(building,x,-.15,1.7,1.2);}
+      if(kind==='bus-depot'||kind==='train-station')for(const x of [-2.8,2.8]){box(root,1.8,.16,.58,materials.fabric,x,.48,depth*.30);box(root,1.8,.62,.14,materials.wood,x,.82,depth*.30-.2);addLocalCollider(building,x,depth*.30,1.9,.7);}
+      if(kind==='sports-center')for(const x of [-2.6,2.6]){box(root,.72,1.55,.72,materials.metal,x,.78,-depth*.22);box(root,1.15,.12,1.0,materials.accent,x,1.62,-depth*.22);addLocalCollider(building,x,-depth*.22,.9,.9);}
       return;
     }
 
