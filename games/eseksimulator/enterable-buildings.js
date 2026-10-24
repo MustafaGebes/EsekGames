@@ -294,7 +294,31 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       return;
     }
 
-    if (kind === 'hospital' || kind === 'clinic' || kind === 'veterinary-clinic') {
+    if(kind==='clinic'){
+      box(root,Math.min(width-2,4.2),.92,.82,materials.counter,0,.50,counterZ);
+      addLocalCollider(building,0,counterZ,Math.min(width-1.8,4.5),.94);
+      box(root,1.45,.22,2.05,materials.wood,-width*.22,.18,-depth*.24);
+      box(root,1.38,.16,1.82,materials.cream,-width*.22,.38,-depth*.24);
+      box(root,.88,1.45,.62,materials.wood,width*.28,.74,-depth*.28);
+      box(root,.96,.12,.70,materials.accent,width*.28,1.50,-depth*.28);
+      addLocalCollider(building,-width*.22,-depth*.24,1.55,2.18);
+      addLocalCollider(building,width*.28,-depth*.28,1.05,.78);
+      return;
+    }
+    if(kind==='veterinary-clinic'){
+      box(root,Math.min(width-2,4.2),.92,.82,materials.counter,0,.50,counterZ);
+      addLocalCollider(building,0,counterZ,Math.min(width-1.8,4.5),.94);
+      for(const side of [-1,1]){
+        box(root,1.25,.25,1.55,materials.wood,side*width*.25,.20,-depth*.22);
+        box(root,1.15,.12,1.42,materials.fabric,side*width*.25,.38,-depth*.22);
+        box(root,1.25,.62,.10,materials.metal,side*width*.25,.70,-depth*.95);
+        addLocalCollider(building,side*width*.25,-depth*.22,1.35,1.70);
+      }
+      const paw=new THREE.Mesh(new THREE.SphereGeometry(.32,8,6),materials.accent);paw.position.set(0,2.20,-depth*.40);root.add(paw);
+      for(const x of [-.42,-.14,.14,.42]){const toe=new THREE.Mesh(new THREE.SphereGeometry(.12,6,5),materials.accent);toe.position.set(x,2.49,-depth*.40);root.add(toe);}
+      return;
+    }
+    if (kind === 'hospital') {
       box(root, Math.min(width - 2.0, 4.8), 0.94, 0.82, materials.counter, 0, 0.52, counterZ);
       box(root, Math.min(width - 1.9, 4.9), 0.12, 0.94, materials.trim, 0, 1.05, counterZ);
       addLocalCollider(building, 0, counterZ, Math.min(width - 1.8, 5.0), 1.0);
@@ -349,6 +373,26 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       return;
     }
 
+    if(kind==='market'){
+      box(root,Math.min(width-2,4.3),.90,.82,materials.counter,0,.50,depth*.24);
+      addLocalCollider(building,0,depth*.24,Math.min(width-1.8,4.6),.94);
+      for(const side of [-1,1])for(const z of [-depth*.20,depth*.10]){
+        const x=side*Math.min(2.45,width*.30);
+        box(root,1.15,.66,1.10,materials.wood,x,.36,z);
+        for(let i=0;i<3;i++){const produce=new THREE.Mesh(new THREE.SphereGeometry(.15,7,5),i%2?materials.productB:materials.productA);produce.position.set(x-.28+i*.28,.79,z);root.add(produce);}
+        addLocalCollider(building,x,z,1.2,1.14);
+      }
+      return;
+    }
+    if(kind==='grocery'){
+      for(const side of [-1,1])addInteriorShelves(root,building,materials,addLocalCollider,side);
+      box(root,Math.min(width-2,3.8),.90,.80,materials.counter,0,.50,-depth*.16);
+      box(root,Math.min(width-1.8,3.9),.10,.90,materials.accent,0,1.02,-depth*.16);
+      for(const x of [-1.3,0,1.3])box(root,.68,.58,.68,materials.wood,x,.34,depth*.25);
+      addLocalCollider(building,0,-depth*.16,Math.min(width-1.7,4.1),.96);
+      for(const x of [-1.3,0,1.3])addLocalCollider(building,x,depth*.25,.72,.72);
+      return;
+    }
     if (kind === 'gas-station') {
       box(root,Math.min(width-2,4.8),.9,.82,materials.counter,0,.48,-depth*.23);
       addLocalCollider(building,0,-depth*.23,Math.min(width-1.8,5),.9);
