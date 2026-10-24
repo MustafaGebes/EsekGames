@@ -3,10 +3,11 @@
 ## Bu dalda
 - Cep parklarına dört küçük çiçeklik eklendi. Çiçeklikler çarpışma ve şehir chunk görünürlüğüyle kaydediliyor.
 - Bina türlerine özel dış cephe ve iç mekân planı: [BUILDING_REWORK.md](./BUILDING_REWORK.md).
+- İlk prototip koda eklendi: kafe, ev ve hastane modelleri; kapı ve mobilya çarpışması korunuyor.
 
 ## 1. Şehir binaları
 - Bina türlerini ve kapı yuvalarını kataloglayıp test sözleşmesi kur.
-- Kafe, ev ve hastanede dış cephe ile iç mekânı birlikte prototiple.
+- İlk kafe, ev ve hastane prototipleri tamamlandı; görsel yerleşim ve performans kontrolü sırada.
 - Türlere özgü çatı, cephe, giriş ve oda planlarını tamamla; kalan bina türlerine yay.
 - Görsel varyasyonları sabit bina tohumundan üret; tüm oyuncular aynı şehri görsün.
 - Çarpışma, kapı geçişi, chunk görünürlüğü ve mobil performansı yayın kapısı yap.
