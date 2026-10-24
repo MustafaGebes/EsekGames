@@ -301,6 +301,22 @@ function buildCity(){
       box(bench,1.8,.16,.52,0x74553a,0,0,0,mat(0x74553a,.85));box(bench,1.8,.7,.14,0x74553a,0,.35,-.2,mat(0x74553a,.85));
       scene.add(bench);trackCityChunkObject(bench,bench.position.x,cz,1.1);registerCityCollider(cx+side*width*.23,cz,1.9,.85);
     }
+    addParkFlowerbeds(cx,cz,width,depth,ix,iz);
+  }
+  const parkPlanterWood=mat(0x74553a,.88),parkPlanterSoil=mat(0x594b37,.98),parkFlowerStem=mat(0x526d43,.98),parkFlowerPetals=[mat(0xe2b95f,.72),mat(0xc86c5e,.72),mat(0xe9dfbd,.72)];
+  function addParkFlowerbeds(cx,cz,width,depth,ix,iz){
+    // Four small, collidable planters sit between the cross paths and the park trees.
+    for(const [sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+      const x=cx+sx*width*.22,z=cz+sz*depth*.22,planter=new THREE.Group();
+      box(planter,1.35,.42,1.35,0x74553a,0,.21,0,parkPlanterWood);
+      box(planter,1.16,.08,1.16,0x594b37,0,.46,0,parkPlanterSoil);
+      for(let i=0;i<3;i++){
+        const fx=(i-1)*.32,fz=(i%2===0?.16:-.16);
+        const stem=new THREE.Mesh(new THREE.CylinderGeometry(.025,.035,.38,5),parkFlowerStem);stem.position.set(fx,.69,fz);planter.add(stem);
+        const flower=new THREE.Mesh(new THREE.SphereGeometry(.14,7,5),parkFlowerPetals[(ix+iz+i)%parkFlowerPetals.length]);flower.position.set(fx,.91,fz);flower.castShadow=true;planter.add(flower);
+      }
+      scene.add(planter);trackCityChunkObject(planter,x,z,1.45);registerCityCollider(x,z,1.45,1.45);
+    }
   }
   function addCentralPlaza(bounds){
     const cx=bounds.centerX,cz=bounds.centerZ;
