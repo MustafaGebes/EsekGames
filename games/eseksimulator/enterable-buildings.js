@@ -154,7 +154,25 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       for(const side of [-1,1]){box(root,.34,.30,.26,materials.accent,side*width*.30,3.35,front+.18);box(root,.22,.12,.18,materials.cream,side*width*.30,3.36,front+.34);}
     } else if (arch === 'prison') {
       for(const side of [-1,1]){box(root,.55,3.2,.55,materials.trim,side*(width*.42),1.6,front+.08);box(root,.76,.24,.76,materials.accent,side*(width*.42),3.30,front+.08);}
-    } else if (arch === 'hospital' || arch === 'clinic' || arch === 'veterinary-clinic') {
+    } else if (arch === 'hospital') {
+      const canopyWidth = Math.min(width * .58, 7.4);
+      const entranceCanopy = box(root, canopyWidth, .30, 1.45, materials.hospitalTeal, 0, 2.72, front + .66);
+      entranceCanopy.name = 'hospital-entrance-canopy';
+      box(root, canopyWidth + .18, .12, .10, materials.cream, 0, 2.51, front + 1.40).name = 'hospital-canopy-lip';
+      for (const side of [-1, 1]) {
+        const column = box(root, .24, 2.45, .24, materials.cream, side * Math.min(canopyWidth * .43, 3.0), 1.30, front + 1.04);
+        column.name = `hospital-entry-column-${side}`;
+        const pier = box(root, .36, 1.9, .20, materials.hospitalTeal, side * width * .39, 1.12, front + .14);
+        pier.name = `hospital-facade-pier-${side}`;
+      }
+      const entrySign = box(root, canopyWidth * .82, .52, .13, materials.trim, 0, 3.38, front + .17);
+      entrySign.name = 'hospital-sign-panel';
+      const crossRed = materials.accent;
+      const crossY = building.h + 1.0;
+      const crossZ = -building.depth * .08 + building.depth * .20 + .08;
+      box(root, .28, .92, .12, crossRed, 0, crossY, crossZ).name = 'hospital-roof-cross-vertical';
+      box(root, .92, .28, .12, crossRed, 0, crossY, crossZ).name = 'hospital-roof-cross-horizontal';
+    } else if (arch === 'clinic' || arch === 'veterinary-clinic') {
       const signColor=materials.accent;
       box(root,Math.min(width*.42,5.8),.26,.46,materials.cream,0,4.12,front+.20);
       box(root,.20,.76,.16,signColor,0,4.12,front+.48);
@@ -319,27 +337,192 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       return;
     }
     if (kind === 'hospital') {
-      box(root, Math.min(width - 2.0, 4.8), 0.94, 0.82, materials.counter, 0, 0.52, counterZ);
-      box(root, Math.min(width - 1.9, 4.9), 0.12, 0.94, materials.trim, 0, 1.05, counterZ);
-      addLocalCollider(building, 0, counterZ, Math.min(width - 1.8, 5.0), 1.0);
-      for (const x of [-Math.min(2.15,width*.25), Math.min(2.15,width*.25)]) {
-        box(root, 1.52, 0.24, 2.15, materials.wood, x, 0.18, -2.25);
-        box(root, 1.44, 0.16, 1.92, materials.cream, x, 0.38, -2.25);
-        box(root, 1.46, 0.22, 0.46, materials.fabric, x, 0.54, -3.04);
-        box(root,.68,.42,.36,materials.metal,x,1.02,-2.70);
-        box(root,.52,.26,.08,materials.accent,x,1.04,-2.49);
-        addLocalCollider(building, x, -2.25, 1.62, 2.3);
-      }
-      box(root, 0.92, 1.55, 0.68, materials.wood, width * 0.34, 0.78, 1.42);
-      box(root, 1.0, 0.12, 0.74, materials.trim, width * 0.34, 1.58, 1.42);
-      addLocalCollider(building, width * 0.34, 1.42, 1.05, 0.8);
+      const interior = new THREE.Group();
+      interior.name = 'hospital-interior';
+      root.add(interior);
+      building.interiorRoot = interior;
 
-      const waitZ=depth*.30;
-      for(const x of [-4,0,4]){
-        box(root,1.25,.14,.52,materials.fabric,x,.48,waitZ);
-        box(root,1.25,.62,.14,materials.wood,x,.82,waitZ-.19);
-        addLocalCollider(building,x,waitZ,1.34,.62);
+      const innerFront = depth / 2 - wallThickness - 0.12;
+      const innerBack = -depth / 2 + wallThickness + 0.12;
+      const partitionX = Math.min(width * 0.18, 2.85);
+      const partitionThickness = 0.16;
+      const partitionHeight = 2.78;
+      const openingZ = 2.0;
+      const openingWidth = 2.5;
+      const openingFront = openingZ + openingWidth / 2;
+      const openingBack = openingZ - openingWidth / 2;
+      building.hospitalInteriorOpenings = [-1, 1].map(side => ({
+        side: side < 0 ? 'left' : 'right', x: side * partitionX, z: openingZ, width: openingWidth, hasDoor: false
+      }));
+
+      for (const side of [-1, 1]) {
+        const x = side * partitionX;
+        const frontLength = innerFront - openingFront;
+        const backLength = openingBack - innerBack;
+        const frontWall = box(interior, partitionThickness, partitionHeight, frontLength, materials.innerWall, x, partitionHeight / 2, (innerFront + openingFront) / 2);
+        frontWall.name = `hospital-divider-${side}-front`;
+        const backWall = box(interior, partitionThickness, partitionHeight, backLength, materials.innerWall, x, partitionHeight / 2, (openingBack + innerBack) / 2);
+        backWall.name = `hospital-divider-${side}-back`;
+        addLocalCollider(building, x, (innerFront + openingFront) / 2, partitionThickness, frontLength).layoutId = `hospital-divider-${side}-front`;
+        addLocalCollider(building, x, (openingBack + innerBack) / 2, partitionThickness, backLength).layoutId = `hospital-divider-${side}-back`;
+        const lintel = box(interior, partitionThickness, .18, openingWidth, materials.trim, x, 3.12, openingZ);
+        lintel.name = `hospital-open-arch-${side}`;
       }
+
+      const receptionZ = innerFront - 2.35;
+      const receptionWidth = Math.min(width * 0.23, 3.8);
+      const receptionBody = box(interior, receptionWidth, .88, .78, materials.counter, 0, .48, receptionZ);
+      receptionBody.name = 'hospital-reception-counter';
+      box(interior, receptionWidth + .16, .14, .90, materials.cream, 0, .99, receptionZ).name = 'hospital-reception-top';
+      box(interior, receptionWidth * .82, .12, .10, materials.hospitalTeal, 0, .52, receptionZ + .405).name = 'hospital-reception-front-band';
+      addLocalCollider(building, 0, receptionZ, receptionWidth + .12, .92).layoutId = 'hospital-reception-counter';
+      box(interior, .62, .42, .10, materials.metal, 0, 1.30, receptionZ - .10).name = 'hospital-reception-monitor';
+      box(interior, .50, .28, .045, materials.hospitalTeal, 0, 1.31, receptionZ - .035).name = 'hospital-reception-screen';
+      box(interior, .56, .06, .26, materials.metal, 0, 1.07, receptionZ - .02).name = 'hospital-reception-keyboard';
+
+      for (const side of [-1, 1]) {
+        const seatSide = side < 0 ? 'left' : 'right';
+        for (let seatIndex = 0; seatIndex < 2; seatIndex += 1) {
+          const seatX = side * 3.55;
+          const seatZ = innerFront - 1.18 - seatIndex * 1.42;
+          const seatGroup = new THREE.Group();
+          seatGroup.name = `hospital-waiting-seat-${seatSide}-${seatIndex + 1}`;
+          seatGroup.position.set(seatX, 0, seatZ);
+          interior.add(seatGroup);
+          box(seatGroup, 1.18, .16, .68, materials.hospitalTeal, 0, .49, 0).name = 'waiting-seat-cushion';
+          box(seatGroup, 1.18, .68, .14, materials.metal, 0, .81, -.27).name = 'waiting-seat-back';
+          for (const armX of [-.58, .58]) box(seatGroup, .10, .24, .70, materials.metal, armX, .65, .02).name = 'waiting-seat-arm';
+          for (const legX of [-.48, .48]) box(seatGroup, .09, .42, .09, materials.metal, legX, .22, 0).name = 'waiting-seat-leg';
+          addLocalCollider(building, seatX, seatZ, 1.28, .78).layoutId = seatGroup.name;
+        }
+      }
+
+      const wheelchair = new THREE.Group();
+      wheelchair.name = 'hospital-wheelchair';
+      wheelchair.position.set(-width / 2 + 1.35, 0, innerFront - 1.60);
+      interior.add(wheelchair);
+      box(wheelchair, .68, .13, .62, materials.hospitalTeal, 0, .51, 0).name = 'wheelchair-seat';
+      box(wheelchair, .68, .66, .13, materials.metal, 0, .86, -.25).name = 'wheelchair-back';
+      for (const wheelSide of [-1, 1]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.40, .40, .075, 16), materials.metal);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wheelSide * .48, .42, .04);
+        wheel.name = `wheelchair-wheel-${wheelSide}`;
+        wheelchair.add(wheel);
+        box(wheelchair, .06, .62, .06, materials.metal, wheelSide * .31, .53, .34).name = `wheelchair-frame-${wheelSide}`;
+      }
+      box(wheelchair, .82, .07, .07, materials.metal, 0, .72, .37).name = 'wheelchair-foot-rest';
+      addLocalCollider(building, wheelchair.position.x, wheelchair.position.z, 1.18, 1.12).layoutId = 'hospital-wheelchair';
+
+      const pharmacyX = width / 2 - wallThickness - .72;
+      const pharmacyZ = innerFront - 3.18;
+      const pharmacy = new THREE.Group();
+      pharmacy.name = 'hospital-pharmacy-rack';
+      pharmacy.position.set(pharmacyX, 0, pharmacyZ);
+      interior.add(pharmacy);
+      box(pharmacy, .26, 1.78, 1.72, materials.rack, 0, .91, 0).name = 'pharmacy-back';
+      for (const level of [.42, .92, 1.42]) {
+        box(pharmacy, .62, .09, 1.72, materials.cream, -.18, level, 0).name = `pharmacy-shelf-${level}`;
+        for (let item = 0; item < 4; item += 1) {
+          const colors = [materials.hospitalTeal, materials.accent, materials.productA, materials.productB];
+          box(pharmacy, .24, .26 + (item % 2) * .08, .24, colors[item], -.25, level + .16, -.62 + item * .40).name = `pharmacy-box-${level}-${item}`;
+        }
+      }
+      addLocalCollider(building, pharmacyX, pharmacyZ, .86, 1.82).layoutId = 'hospital-pharmacy-rack';
+      const supplyCartX = -width / 2 + wallThickness + .72;
+      const supplyCartZ = pharmacyZ;
+      const supplyCart = new THREE.Group();
+      supplyCart.name = 'hospital-supply-cart';
+      supplyCart.position.set(supplyCartX, 0, supplyCartZ);
+      interior.add(supplyCart);
+      box(supplyCart, .88, .12, .66, materials.metal, 0, .76, 0).name = 'cart-top';
+      box(supplyCart, .78, .10, .58, materials.cream, 0, .34, 0).name = 'cart-lower-shelf';
+      for (const cartX of [-.36, .36]) for (const cartZ of [-.24, .24]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .07, 8), materials.metal);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(cartX, .12, cartZ);
+        wheel.name = 'cart-wheel';
+        supplyCart.add(wheel);
+      }
+      box(supplyCart, .28, .20, .24, materials.productA, -.18, .94, -.10).name = 'cart-supply-box';
+      box(supplyCart, .25, .22, .22, materials.hospitalTeal, .18, .95, .10).name = 'cart-supply-bottle';
+      addLocalCollider(building, supplyCartX, supplyCartZ, 1.02, .82).layoutId = 'hospital-supply-cart';
+
+      const wardCenterX = partitionX + (width / 2 - wallThickness - partitionX) / 2;
+      const beds = [];
+      const curtains = [];
+      const curtainMaterial = new THREE.MeshStandardMaterial({ color: 0x9bc9cc, roughness: .92, transparent: true, opacity: .78, side: THREE.DoubleSide, depthWrite: false });
+      for (const side of [-1, 1]) {
+        for (let index = 0; index < 2; index += 1) {
+          const x = side * wardCenterX;
+          const z = index === 0 ? -1.55 : -4.65;
+          const bed = new THREE.Group();
+          bed.name = `hospital-bed-${side < 0 ? 'left' : 'right'}-${index + 1}`;
+          bed.position.set(x, 0, z);
+          interior.add(bed);
+          box(bed, 1.52, .18, 2.28, materials.metal, 0, .25, 0).name = 'bed-frame';
+          box(bed, 1.38, .18, 2.12, materials.cream, 0, .42, 0).name = 'bed-mattress';
+          box(bed, 1.25, .08, 1.12, materials.fabric, 0, .54, .30).name = 'bed-blanket';
+          box(bed, .84, .12, .42, materials.cream, 0, .56, -.72).name = 'bed-pillow';
+          box(bed, 1.48, .62, .10, materials.trim, 0, .53, -1.13).name = 'bed-headboard';
+          box(bed, 1.48, .40, .10, materials.trim, 0, .42, 1.13).name = 'bed-footboard';
+          for (const railSide of [-1, 1]) {
+            box(bed, .08, .32, 1.38, materials.metal, railSide * .77, .67, -.02).name = `bed-safety-rail-${railSide}`;
+            for (const railZ of [-.55, .48]) box(bed, .10, .30, .10, materials.metal, railSide * .77, .15, railZ).name = `bed-leg-${railSide}-${railZ}`;
+          }
+          addLocalCollider(building, x, z, 1.76, 2.48).layoutId = bed.name;
+          beds.push({ id: bed.name, side: side < 0 ? 'left' : 'right', x, z, width: 1.76, depth: 2.48 });
+
+          const tableX = x + side * 1.25;
+          const tableZ = z + .35;
+          const bedsideTable = box(interior, .58, .68, .54, materials.wood, tableX, .36, tableZ);
+          bedsideTable.name = `hospital-bedside-${side}-${index + 1}`;
+          box(interior, .62, .10, .58, materials.cream, tableX, .73, tableZ).name = `hospital-bedside-top-${side}-${index + 1}`;
+          addLocalCollider(building, tableX, tableZ, .68, .66).layoutId = `hospital-bedside-${side}-${index + 1}`;
+
+          const ivX = x + side * 1.02;
+          const ivZ = z - .82;
+          const ivPole = new THREE.Mesh(new THREE.CylinderGeometry(.035, .045, 1.72, 8), materials.metal);
+          ivPole.position.set(ivX, .86, ivZ);
+          ivPole.name = `hospital-iv-pole-${side}-${index + 1}`;
+          interior.add(ivPole);
+          box(interior, .28, .32, .10, materials.glass, ivX, 1.55, ivZ).name = `hospital-iv-bag-${side}-${index + 1}`;
+
+          const monitorX = x - side * .98;
+          const monitorZ = z - .86;
+          const monitorStand = new THREE.Mesh(new THREE.CylinderGeometry(.045, .07, .88, 8), materials.metal);
+          monitorStand.position.set(monitorX, .58, monitorZ);
+          monitorStand.name = `hospital-monitor-stand-${side}-${index + 1}`;
+          interior.add(monitorStand);
+          box(interior, .56, .44, .12, materials.metal, monitorX, 1.12, monitorZ).name = `hospital-bed-monitor-${side}-${index + 1}`;
+          box(interior, .44, .30, .035, materials.hospitalTeal, monitorX, 1.13, monitorZ + .075).name = `hospital-monitor-screen-${side}-${index + 1}`;
+          box(interior, .10, .22, .06, materials.accent, x - side * .90, 1.12, z - .30).name = `hospital-call-button-${side}-${index + 1}`;
+
+          const curtainInnerX = x - side * 1.24;
+          const curtainOuterX = side * (width / 2 - .58);
+          const curtainFootZ = z + 1.43;
+          for (const [railX, railLabel] of [[curtainInnerX, 'inner'], [curtainOuterX, 'outer']]) {
+            box(interior, .045, .055, 2.78, materials.metal, railX, 2.30, z - .02).name = `hospital-curtain-rail-${side}-${index + 1}-${railLabel}`;
+            const panel = box(interior, .055, 1.96, 2.62, curtainMaterial, railX, 1.25, z - .02);
+            panel.name = `hospital-curtain-${side}-${index + 1}-${railLabel}`;
+            curtains.push(panel.name);
+          }
+          box(interior, 2.78, .055, .045, materials.metal, side * (curtainInnerX * side + (curtainOuterX * side - curtainInnerX * side) / 2), 2.30, curtainFootZ).name = `hospital-curtain-rail-${side}-${index + 1}-foot`;
+          const footPanel = box(interior, 2.62, 1.96, .055, curtainMaterial, side * (curtainInnerX * side + (curtainOuterX * side - curtainInnerX * side) / 2), 1.25, curtainFootZ);
+          footPanel.name = `hospital-curtain-${side}-${index + 1}-foot`;
+          curtains.push(footPanel.name);
+        }
+      }
+      building.hospitalInteriorLayout = {
+        corridorWidth: partitionX * 2,
+        reception: { x: 0, z: receptionZ, width: receptionWidth, depth: .92 },
+        openings: building.hospitalInteriorOpenings,
+        beds,
+        curtains,
+        waitingSeats: 4,
+        pharmacy: { x: pharmacyX, z: pharmacyZ },
+        supplyCart: { x: supplyCartX, z: supplyCartZ },
+      };
       return;
     }
 
@@ -503,7 +686,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     scene.add(root);
     building.root = root;
 
-    const plaster = new THREE.MeshStandardMaterial({ color: building.color, roughness: 0.9, side: THREE.DoubleSide });
+    const plaster = new THREE.MeshStandardMaterial({ color: building.kind === 'hospital' ? 0xf0eee5 : building.color, roughness: 0.9, side: THREE.DoubleSide });
     const innerWall = new THREE.MeshStandardMaterial({ color: 0xd8d0bf, roughness: 0.96 });
     const arch = building.architecture || building.architecturalStyle || building.kind;
     const floor = new THREE.MeshStandardMaterial({ color: ['home','rowhouse','townhouse','apartment','courtyard-house'].includes(building.kind) ? 0x8e775e : (['hospital','police-station','fire-station','prison'].includes(building.kind) ? 0xd5d1c5 : 0x8f8b7b), roughness: 0.96 });
@@ -520,11 +703,13 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
     const cream = new THREE.MeshStandardMaterial({ color: 0xf0dfb9, roughness: 0.82 });
     const freezer = new THREE.MeshStandardMaterial({ color: 0x47717b, roughness: 0.5, metalness: 0.16 });
     const fabric = new THREE.MeshStandardMaterial({ color: building.accent, roughness: 0.92 });
-    const materials = { plaster, innerWall, floor, trim, wood, metal, rack, counter, accent, productA, productB, cream, freezer, fabric };
+    const hospitalTeal = new THREE.MeshStandardMaterial({ color: 0x397d83, roughness: 0.68, metalness: 0.08 });
+    const materials = { plaster, innerWall, floor, trim, wood, metal, rack, counter, accent, productA, productB, cream, freezer, fabric, hospitalTeal };
 
     const front = building.depth / 2;
     const leftWidth = (building.width - doorWidth) / 2;
-    box(root, building.width, 0.18, building.depth, floor, 0, -0.09, 0);
+    const buildingFloor = box(root, building.width, 0.18, building.depth, floor, 0, -0.09, 0);
+    if (building.kind === 'hospital') buildingFloor.name = 'hospital-floor';
     box(root, wallThickness, wallHeight, building.depth, plaster, -building.width / 2 + wallThickness / 2, wallHeight / 2, 0);
     box(root, wallThickness, wallHeight, building.depth, plaster, building.width / 2 - wallThickness / 2, wallHeight / 2, 0);
     box(root, building.width, wallHeight, wallThickness, plaster, 0, wallHeight / 2, -front + wallThickness / 2);
@@ -608,7 +793,8 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       }
     }
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(building.width - 1.2, 5.8), 0.58), signMaterial(building.sign, building.accent));
-    sign.position.set(0, 2.92, front + 0.22); root.add(sign);
+    sign.position.set(0, building.kind === 'hospital' ? 3.38 : 2.92, front + (building.kind === 'hospital' ? 0.26 : 0.22)); root.add(sign);
+    if (building.kind === 'hospital') sign.name = 'hospital-sign-text';
     addArchitecturalSilhouette(root,building,materials,arch,front);
 
     if(arch==='cafe'){
@@ -633,13 +819,7 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
         box(chimney,.88,.16,.88,materials.wood,0,1.22,0);
       }
     }
-    if(building.kind==='hospital'){
-      box(root,Math.min(8,building.width-2),.28,1.16,materials.cream,0,3.42,front+.62);
-      box(root,Math.min(7.5,building.width-2.4),.14,1.22,materials.accent,0,3.62,front+.62);
-      for(const side of [-1,1])box(root,.24,2.7,.24,materials.trim,side*Math.min(3.3,building.width*.22),1.35,front+.96);
-    }
-
-    if (building.kind === 'hospital' || building.kind === 'clinic' || building.kind === 'veterinary-clinic') {
+    if (building.kind === 'clinic' || building.kind === 'veterinary-clinic') {
       const crossRed = new THREE.MeshStandardMaterial({ color: 0xc75048, emissive: 0x37110e, roughness: 0.55 });
       box(root, 0.24, 0.78, 0.12, crossRed, 0, 3.55, front + 0.18);
       box(root, 0.78, 0.24, 0.12, crossRed, 0, 3.55, front + 0.18);
@@ -686,11 +866,19 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       box(root, building.width + 0.06, upperHeight, upperDepth, plaster, 0, y, front - upperDepth / 2);
       box(root, upperDepth, upperHeight, building.depth, plaster, -building.width / 2 + upperDepth / 2, y, 0);
       box(root, upperDepth, upperHeight, building.depth, plaster, building.width / 2 - upperDepth / 2, y, 0);
-      for (const winY of [wallHeight + 1.0, wallHeight + 3.9, wallHeight + 6.8]) {
+      const hospitalWindows = building.kind === 'hospital';
+      const windowYs = hospitalWindows
+        ? [wallHeight + 1.0, wallHeight + 3.45, wallHeight + 5.9, wallHeight + 8.35, wallHeight + 10.8]
+        : [wallHeight + 1.0, wallHeight + 3.9, wallHeight + 6.8];
+      const hospitalWindowFrame = hospitalWindows ? new THREE.MeshStandardMaterial({ color: 0x397d83, roughness: 0.68 }) : null;
+      const hospitalWindowGlass = hospitalWindows ? new THREE.MeshStandardMaterial({ color: 0x83b5c0, emissive: 0x1b2c2b, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide }) : null;
+      for (const winY of windowYs) {
         if (winY + 1.3 >= building.h) continue;
-        for (const winX of [-2.25, 0, 2.25]) {
-          const windowMat = new THREE.MeshStandardMaterial({ color: ['hospital','clinic'].includes(building.kind) ? 0x83b5c0 : 0x45616b, emissive: 0x1b2c2b, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide });
-          box(root, 1.12, 1.35, 0.045, windowMat, winX, winY, front + 0.025);
+        const windowXs = hospitalWindows ? [-6, -3, 0, 3, 6] : [-2.25, 0, 2.25];
+        for (const winX of windowXs) {
+          if (hospitalWindows) box(root, 1.62, 1.55, 0.055, hospitalWindowFrame, winX, winY, front + 0.015);
+          const windowMat = hospitalWindows ? hospitalWindowGlass : new THREE.MeshStandardMaterial({ color: building.kind === 'clinic' ? 0x83b5c0 : 0x45616b, emissive: 0x1b2c2b, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide });
+          box(root, hospitalWindows ? 1.42 : 1.12, 1.35, 0.045, windowMat, winX, winY, front + (hospitalWindows ? 0.055 : 0.025));
         }
       }
       box(root, building.width + 0.32, 0.20, building.depth + 0.32, trim, 0, building.h + 0.03, 0);
@@ -714,9 +902,22 @@ export function createEnterableBuildings(THREE, scene, specs, collisionRects) {
       for(const side of [-1,1])box(root,.18,.72,building.depth+.16,materials.accent,side*(building.width/2),building.h+.28,0);
     } else if (['hospital','clinic','veterinary-clinic'].includes(arch) || ['hospital','clinic','veterinary-clinic'].includes(building.kind)) {
       building.roofProfile=arch==='veterinary-clinic'?'veterinary-clinic-pavilion':arch==='clinic'?'clinic-stepped':'hospital-stepped';
-      for(const side of [-1,1]){box(root,building.width*.26,1.15,building.depth*.68,plaster,side*building.width*.31,building.h+.52,-building.depth*.04);box(root,building.width*.29,.18,building.depth*.72,roofMaterial,side*building.width*.31,building.h+1.18,-building.depth*.04);}
-      box(root,building.width*.34,2.0,building.depth*.38,materials.cream,0,building.h+1.0,-building.depth*.08);
-      box(root,.34,1.1,.20,materials.accent,0,building.h+1.15,building.depth*.12);box(root,1.1,.34,.20,materials.accent,0,building.h+1.15,building.depth*.12);
+      if (arch === 'hospital' || building.kind === 'hospital') {
+        const wingWidth = building.width * .30;
+        for (const side of [-1, 1]) {
+          const wing = box(root, wingWidth, 1.45, building.depth * .62, plaster, side * building.width * .32, building.h + .62, -building.depth * .08);
+          wing.name = `hospital-roof-wing-${side}`;
+          box(root, wingWidth + .16, .20, building.depth * .66, roofMaterial, side * building.width * .32, building.h + 1.45, -building.depth * .08);
+          box(root, .20, .42, building.depth * .42, materials.hospitalTeal, side * building.width * .47, building.h + .60, -building.depth * .08);
+        }
+        const centralPavilion = box(root, building.width * .34, 2.05, building.depth * .40, materials.cream, 0, building.h + .98, -building.depth * .08);
+        centralPavilion.name = 'hospital-central-pavilion';
+        box(root, building.width * .38, .20, building.depth * .44, roofMaterial, 0, building.h + 2.05, -building.depth * .08);
+      } else {
+        for(const side of [-1,1]){box(root,building.width*.26,1.15,building.depth*.68,plaster,side*building.width*.31,building.h+.52,-building.depth*.04);box(root,building.width*.29,.18,building.depth*.72,roofMaterial,side*building.width*.31,building.h+1.18,-building.depth*.04);}
+        box(root,building.width*.34,2.0,building.depth*.38,materials.cream,0,building.h+1.0,-building.depth*.08);
+        box(root,.34,1.1,.20,materials.accent,0,building.h+1.15,building.depth*.12);box(root,1.1,.34,.20,materials.accent,0,building.h+1.15,building.depth*.12);
+      }
     } else if (arch==='school') {
       building.roofProfile='school-clock-tower';
       box(root,building.width*.68,.52,building.depth*.75,roofMaterial,0,building.h+.24,0);

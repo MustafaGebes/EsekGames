@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Esek Simulator — Hastane içi 3B önizleme</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#c2cecf;color:#243236;font:14px system-ui,sans-serif}
+canvas{display:block}#panel{position:fixed;z-index:2;left:14px;top:14px;max-width:420px;padding:12px 15px;background:rgba(255,255,255,.94);border:1px solid #d8dedb;border-radius:9px;box-shadow:0 3px 16px #43504a22;line-height:1.5}#panel b{font-size:14px}#panel small{display:block;color:#4b5c5e;margin-top:3px}#tools{position:fixed;z-index:2;right:14px;top:14px;display:flex;gap:8px}button{font:inherit;border:0;border-radius:7px;padding:9px 12px;background:#fff;color:#243236;box-shadow:0 2px 9px #43504a22;cursor:pointer}#help{position:fixed;z-index:2;right:14px;bottom:14px;background:#ffffffd9;border-radius:7px;padding:8px 11px;color:#344448}
+</style>
+</head>
+<body>
+<div id="panel"><b>ESEK SIMULATOR · HASTANE İÇİ</b><small>Brookhaven RP’den esinli düzen: danışma · 4 bekleme koltuğu · tekerlekli sandalye · eczane · perdeli 4 yatak</small></div>
+<div id="tools"><button id="cut">Kesiti aç / dış kabuk</button><button id="reset">Görüşü sıfırla</button></div>
+<div id="help">Döndür: sürükle · Yakınlaştır: tekerlek · Kaydır: sağ tuşla sürükle</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { createEnterableBuildings } from './enterable-buildings.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xc2cecf);scene.fog=new THREE.Fog(0xc2cecf,65,130);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,250);camera.position.set(8,24,23);camera.lookAt(0,.6,0);
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.16;document.body.appendChild(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,.6,0);controls.enableDamping=true;controls.dampingFactor=.07;controls.minDistance=9;controls.maxDistance=46;controls.maxPolarAngle=Math.PI*.49;
+scene.add(new THREE.HemisphereLight(0xf4f3ed,0x66706b,2.15));const sun=new THREE.DirectionalLight(0xffe7c8,3.0);sun.position.set(-14,23,18);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);const fill=new THREE.DirectionalLight(0xc9e7ea,1.25);fill.position.set(16,12,-18);scene.add(fill);
+const specs=[{id:'city-hospital-preview',title:'Şehir Hastanesi',sign:'HASTANE',kind:'hospital',architecture:'hospital',accent:0xc75048,awning:0xe2d9c8,w:16.5,d:16.5,h:16,x:0,z:0,color:0x87a981,trim:0x674638,face:0,seed:192}];
+const collisions=[];const world=createEnterableBuildings(THREE,scene,specs,collisions);const hospital=world.buildings[0];
+const dividerWalls=hospital.interiorRoot.children.filter(child=>child.name.startsWith('hospital-divider-'));
+const dividerOriginals=dividerWalls.map(child=>({child,y:child.position.y,scaleY:child.scale.y}));
+function setCutaway(value){for(const child of hospital.root.children)child.visible=value?(child.name==='hospital-floor'||child===hospital.interiorRoot):true;for(const item of dividerOriginals){item.child.scale.y=value ? .52 : item.scaleY;item.child.position.y=value?item.y*.52:item.y;}for(const child of hospital.interiorRoot.children)if(child.name.startsWith('hospital-open-arch-'))child.visible=!value;}
+let cutaway=true;setCutaway(cutaway);document.querySelector('#cut').addEventListener('click',()=>{cutaway=!cutaway;setCutaway(cutaway);});
+document.querySelector('#reset').addEventListener('click',()=>{camera.position.set(8,24,23);controls.target.set(0,.6,0);controls.update();});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+function animate(){controls.update();renderer.render(scene,camera);requestAnimationFrame(animate)}animate();
+</script>
+</body>
+</html>
