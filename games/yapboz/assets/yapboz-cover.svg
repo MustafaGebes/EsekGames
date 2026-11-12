@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Yapboz Oyunu</title>
+<desc id="desc">Renkli yapboz parçalarından oluşan sakin bir manzara ve oyun başlığı</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eff0df"/><stop offset="1" stop-color="#b7d6bf"/></linearGradient>
+  <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#9bd4d2"/><stop offset="1" stop-color="#f4e8b7"/></linearGradient>
+  <linearGradient id="hill" x2="0" y2="1"><stop stop-color="#70a77a"/><stop offset="1" stop-color="#28624b"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#244234" flood-opacity=".22"/></filter>
+  <clipPath id="scene"><rect x="56" y="54" width="520" height="492" rx="34"/></clipPath>
+</defs>
+<rect width="1200" height="600" rx="28" fill="url(#bg)"/>
+<circle cx="1040" cy="65" r="230" fill="#fff3c9" opacity=".45"/>
+<g clip-path="url(#scene)">
+  <rect x="56" y="54" width="520" height="492" fill="url(#sky)"/>
+  <circle cx="450" cy="155" r="54" fill="#ffd47d"/>
+  <path d="M56 330 188 178l136 152 98-116 154 146v240H56z" fill="#78998b"/>
+  <path d="m335 328 99-116 78 74 64-59 54 55v264H335z" fill="#5e8275"/>
+  <path d="m168 202 20-24 24 26-24-11zM415 229l19-17 19 20-20-8z" fill="#f8f0d6"/>
+  <path d="M56 370q128-96 270-4t250-8v188H56z" fill="url(#hill)"/>
+  <path d="M56 465q130-63 254 0t266-4v85H56z" fill="#3e7956"/>
+  <path d="M138 365h94v92h-94z" fill="#f3cf98"/><path d="m124 371 61-52 63 52z" fill="#c87358"/>
+  <path d="M176 408h22v49h-22z" fill="#805d48"/><rect x="149" y="385" width="19" height="20" rx="3" fill="#9bc9c1"/>
+  <path d="M460 442v-86" stroke="#75553d" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="460" cy="334" r="46" fill="#477c54"/><circle cx="432" cy="349" r="29" fill="#5d925d"/><circle cx="488" cy="352" r="30" fill="#3f714c"/>
+  <g fill="none" stroke="#fffdf8" stroke-width="8" opacity=".94">
+    <path d="M229 54v112c-18-18-48-5-48 18s30 36 48 18v128"/>
+    <path d="M403 54v112c-18-18-48-5-48 18s30 36 48 18v128"/>
+    <path d="M56 300h156c-18-18-5-48 18-48s36 30 18 48h156"/>
+    <path d="M404 300h172"/>
+    <path d="M56 454h156c-18-18-5-48 18-48s36 30 18 48h156"/>
+    <path d="M404 454h172"/>
+  </g>
+</g>
+<g filter="url(#shadow)">
+  <rect x="644" y="142" width="492" height="316" rx="34" fill="#fffdf8" fill-opacity=".76" stroke="#fff" stroke-opacity=".8" stroke-width="3"/>
+  <path d="M686 246h96a34 34 0 1 1 62 0h88v80h-96a34 34 0 1 0-62 0h-88z" fill="#2f6d54"/>
+  <path d="M1015 326h80v42a30 30 0 1 1-54 0h-26z" fill="#e8896d"/>
+</g>
+<text x="890" y="372" text-anchor="middle" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="46" font-weight="900" letter-spacing="2" fill="#23523f">YAPBOZ OYUNU</text>
+<text x="890" y="415" text-anchor="middle" font-family="Trebuchet MS, Segoe UI, sans-serif" font-size="20" font-weight="700" letter-spacing="4" fill="#718078">MİNİK PARÇALAR</text>
+</svg>
