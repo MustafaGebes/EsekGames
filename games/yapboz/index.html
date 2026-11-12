@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f0e7">
+  <title>Minik Parçalar - Yapboz Oyunu</title>
+  <link rel="icon" type="image/svg+xml" href="assets/yapboz-icon.svg?v=1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <main>
+    <section class="screen menu-screen" id="menuScreen" aria-labelledby="menuTitle">
+      <div class="menu-card">
+        <div>
+          <p class="eyebrow">Küçük bir mola</p>
+          <h1 id="menuTitle">Minik <span>Parçalar</span></h1>
+          <p class="intro">Parçaları bir araya getir, bu küçük manzaranın sırrını ortaya çıkar. Hazır olduğunda
+            başlayalım!</p>
+          <div class="menu-actions">
+            <button class="primary-button" id="playButton" type="button">Oyuna başla <span aria-hidden="true">→</span></button>
+            <a class="exit-button" id="exitButton" href="/" aria-label="Yapbozdan çık ve EsekGames ana sayfasına dön">Oyundan çık</a>
+          </div>
+        </div>
+        <div class="menu-art" aria-hidden="true">
+          <div class="art-glow"></div>
+          <div class="sample-puzzle" id="samplePuzzle"></div>
+          <div class="sound-controls menu-sound-controls" aria-label="Menü ses ayarları">
+            <button class="sound-toggle" id="menuMusicToggle" type="button" aria-pressed="true">♫ Menü müziği:
+              Açık</button>
+            <button class="sound-toggle" id="menuEffectsToggle" type="button" aria-pressed="true">♪ Menü efektleri:
+              Açık</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen game-screen hidden" id="gameScreen" aria-labelledby="gameTitle">
+      <header class="game-header">
+        <button class="back-button" id="menuButton" type="button">← Menü</button>
+        <h1 class="game-title" id="gameTitle">Seviye 1</h1>
+        <div class="sound-controls game-sound-controls" aria-label="Oyun ses ayarları">
+          <button class="sound-toggle" id="gameMusicToggle" type="button" aria-pressed="true">♫ Oyun müziği:
+            Açık</button>
+          <button class="sound-toggle" id="gameEffectsToggle" type="button" aria-pressed="true">♪ Oyun efektleri:
+            Açık</button>
+        </div>
+      </header>
+      <div class="game-card">
+        <div class="game-info">
+          <p class="game-instructions">Parçaları sürükle veya seçip doğru yerine dokun.</p>
+          <div class="move-counter" id="moveCounter" aria-live="polite">Hamle: 0</div>
+        </div>
+        <div class="game-stage">
+          <div class="board" id="board" aria-label="3'e 3 yapboz tahtası"></div>
+          <aside class="piece-tray" aria-label="Yapboz parça tepsisi">
+            <h2 class="tray-title">Parçaların</h2>
+            <p class="tray-hint">Sürükle ya da parçayı seçip tahtadaki yerine dokun.</p>
+            <div class="tray-pieces" id="trayPieces"></div>
+          </aside>
+        </div>
+        <p class="game-status" id="gameStatus" aria-live="polite">Doğru resmi oluşturmak için parçaları eşleştir.</p>
+        <div class="game-footer">
+          <button class="secondary-button" id="shuffleButton" type="button">Karıştır</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="completion-screen hidden" id="completionScreen" role="dialog" aria-modal="true"
+      aria-labelledby="completionTitle" aria-describedby="completionMessage">
+      <div class="completion-card">
+        <div class="completion-icon" aria-hidden="true">✓</div>
+        <p class="eyebrow">Harika iş çıkardın!</p>
+        <h2 id="completionTitle">Seviye tamamlandı!</h2>
+        <p class="completion-message" id="completionMessage"></p>
+        <div class="completion-actions">
+          <button class="primary-button" id="continueButton" type="button">Devam et →</button>
+          <button class="secondary-button" id="replayButton" type="button">Tekrar oyna</button>
+          <button class="secondary-button" id="completionMenuButton" type="button">Menüye dön</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="completion-screen reset-confirmation hidden" id="resetConfirmation" role="dialog" aria-modal="true"
+      aria-labelledby="resetTitle" aria-describedby="resetMessage">
+      <div class="completion-card">
+        <div class="completion-icon" aria-hidden="true">?</div>
+        <p class="eyebrow">İlerlemeni sıfırlama</p>
+        <h2 id="resetTitle">Emin misin?</h2>
+        <p class="completion-message" id="resetMessage">Menüye dönersen seviye ilerlemen sıfırlanacak. Oyuna devam etmek
+          ister misin?</p>
+        <div class="completion-actions">
+          <button class="primary-button" id="confirmResetButton" type="button">Evet, sıfırla</button>
+          <button class="secondary-button" id="cancelResetButton" type="button">Hayır, oyuna dön</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="game.js" defer></script>
+</body>
+
+</html>
