@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EsekGames</title>
+    <link rel="icon" type="image/jpeg" href="/esek.jpg?v=1">
 
     <style>
         * {
@@ -590,6 +591,32 @@
             transform: translateY(-1px);
         }
 
+
+        .game-image.kelime-game-cover {
+            isolation: isolate;
+            background: #08152b;
+        }
+
+        .game-image.kelime-game-cover::before {
+            content: "";
+            position: absolute;
+            inset: -14px;
+            z-index: 0;
+            background: url("/games/kelimeustasi/assets/kelime-ustasi-icon.svg?v=5") center / cover no-repeat;
+            filter: blur(18px) brightness(0.72);
+            transform: scale(1.06);
+        }
+
+        .game-image.kelime-game-cover img {
+            position: relative;
+            z-index: 1;
+            object-fit: contain;
+        }
+
+        .game-image.kelime-game-cover::after {
+            z-index: 2;
+        }
+
         /* ===== OYUNLAR BİTİŞ ===== */
 
 
@@ -939,9 +966,8 @@
             <!-- ===== KELİME USTASI BAŞLANGIÇ ===== -->
 
             <div class="game-card">
-
-                <div class="game-image">
-                    <img src="/games/kelimeustasi/assets/kelime-ustasi-icon.svg?v=4" alt="Kelime Ustası simgesi" loading="lazy" style="object-fit: contain; background: #08152b;">
+                <div class="game-image kelime-game-cover">
+                    <img src="/games/kelimeustasi/assets/kelime-ustasi-icon.svg?v=5" alt="Kelime Ustası simgesi" loading="lazy">
                 </div>
 
                 <div class="game-content">

@@ -1025,3 +1025,40 @@ body {
         animation: none;
     }
 }
+
+.menu-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    margin: 0 auto;
+    transform: translateY(-7px);
+}
+
+.exit-game-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 300px;
+    min-height: 48px;
+    margin: 0;
+    border: 1px solid rgba(255, 205, 205, 0.28);
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    box-shadow: 0 8px 18px rgba(185, 28, 28, 0.28);
+    color: white;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    text-decoration: none;
+}
+
+.exit-game-btn:hover {
+    background: linear-gradient(135deg, #f87171, #dc2626);
+    box-shadow: 0 10px 22px rgba(185, 28, 28, 0.36);
+}
+
+.exit-game-btn:focus-visible {
+    outline: 3px solid #fecaca;
+    outline-offset: 4px;
+}
