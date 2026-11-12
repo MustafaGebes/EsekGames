@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelime Ustası</title>
+    <link rel="icon" type="image/svg+xml" href="assets/kelime-ustasi-icon.svg?v=3">
+    <link rel="alternate icon" type="image/png" sizes="192x192" href="assets/kelime-ustasi-icon.png?v=3">
+    <link rel="apple-touch-icon" href="assets/kelime-ustasi-icon.png?v=3">
+    <meta name="theme-color" content="#0b0f19">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- SAĞ ÜST SES BUTONU -->
+    <button id="sound-toggle-btn" class="sound-btn" onclick="toggleSound()" title="Sesi Aç/Kapat">🔊</button>
+
+    <!-- BİLDİRİM MESAJI -->
+    <div id="toast">Mesaj</div>
+
+    <!-- 1. ANA MENÜ EKRANI -->
+    <div id="menu-screen" class="screen active">
+        <!-- Sol Üst Sözlük Butonu (Sadece Menüde Görünür) -->
+        <button class="dict-corner-btn" onclick="openDictionary()" title="Kelime Listesi" aria-label="Kelime arşivini aç">📖</button>
+
+        <main class="menu-panel">
+            <div class="menu-eyebrow"><span class="menu-eyebrow-dot"></span> TÜRKÇE KELİME BULMACASI</div>
+
+            <div class="menu-logo-boxes" aria-hidden="true">
+                <div class="demo-tile correct" style="--tile-order: 0;">K</div>
+                <div class="demo-tile present" style="--tile-order: 1;">E</div>
+                <div class="demo-tile correct" style="--tile-order: 2;">L</div>
+                <div class="demo-tile absent" style="--tile-order: 3;">İ</div>
+                <div class="demo-tile present" style="--tile-order: 4;">M</div>
+                <div class="demo-tile correct" style="--tile-order: 5;">E</div>
+            </div>
+
+            <h1 class="title menu-title">KELİME<br><span>USTASI</span></h1>
+            <p class="menu-description">Gizli kelimeyi bul, harflerin izini sür ve ustalığını göster.</p>
+
+            <button class="btn play-hero-btn" onclick="startGame()"><span aria-hidden="true">▶</span> OYUNA BAŞLA</button>
+
+            <div class="menu-highlights" aria-label="Oyun özellikleri">
+                <div class="menu-highlight"><strong>8</strong><span>BÖLÜM</span></div>
+                <div class="menu-highlight-divider"></div>
+                <div class="menu-highlight"><strong>3–10</strong><span>HARF</span></div>
+                <div class="menu-highlight-divider"></div>
+                <div class="menu-highlight"><strong>∞</strong><span>EĞLENCE</span></div>
+            </div>
+        </main>
+
+        <div class="menu-footer">Her tahmin yeni bir ipucu.</div>
+    </div>
+
+    <!-- 1.5 SÖZLÜK / KELİME LİSTESİ EKRANI -->
+    <div id="dict-screen" class="screen">
+        <div class="dict-header">
+            <h2>Kelime Arşivi</h2>
+            <button class="menu-mini-btn" onclick="closeDictionary()">✕ Kapat</button>
+        </div>
+
+        <label class="dict-search-wrap">
+            <span aria-hidden="true">⌕</span>
+            <input id="dict-search" type="search" placeholder="Kelime ara…" autocomplete="off" oninput="dictionaryPage = 0; renderDictionaryWords(activeDictionaryLength)">
+        </label>
+        <div id="dict-tabs" class="dict-tabs"></div>
+        <div id="dict-count-info" class="dict-count-info"></div>
+        <div id="dict-word-grid" class="dict-word-grid"></div>
+        <div id="dict-pagination" class="dict-pagination" aria-label="Kelime listesi sayfaları"></div>
+        <p class="dict-source-note">Kelime verisi toplulukça derlenmiştir; resmî veya eksiksiz TDK listesi değildir. <a href="https://github.com/bilalozdemir/tr-word-list" target="_blank" rel="noopener noreferrer">Kaynak</a> · <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a></p>
+    </div>
+
+    <!-- 2. OYUN EKRANI -->
+    <div id="game-screen" class="screen">
+        <div class="header">
+            <div class="header-info">
+                <span class="level-badge" id="level-display">Bölüm 1 / 8 (3 Harf)</span>
+                <span class="score-text" id="score-display">Puan: 0</span>
+            </div>
+            <div class="timer-badge" id="timer-display">⏱️ 00:00</div>
+            <button class="menu-mini-btn" onclick="returnToMenu()">Ana Menü</button>
+        </div>
+
+        <div id="board-container"></div>
+
+        <div id="keyboard"></div>
+    </div>
+
+    <!-- 2.5 BÖLÜM KAZANMA / ÖZET EKRANI -->
+    <div id="level-win-screen" class="screen">
+        <div class="title" style="font-size:2.4rem;">AFERİN!</div>
+        <div class="subtitle" id="win-subtitle">Kelimeyi başarıyla buldunuz!</div>
+
+        <div class="stats-box">
+            <p id="win-word-info"></p>
+            <p id="win-attempt-info"></p>
+            <p id="win-time-info"></p>
+            <div id="win-history-board" class="history-board"></div>
+        </div>
+
+        <button class="btn" id="next-level-btn" onclick="goToNextLevel()">SONRAKİ BÖLÜM</button>
+        <button class="btn btn-secondary" onclick="startGame()">TEKRAR OYNA</button>
+        <button class="btn btn-secondary" onclick="returnToMenu()">MENÜYE DÖN</button>
+    </div>
+
+    <!-- 3. OYUN SONU EKRANI -->
+    <div id="end-screen" class="screen">
+        <div class="title" id="end-title">BİLEMEDİN!</div>
+        <div class="subtitle" id="end-subtitle">Tahmin hakkınız doldu.</div>
+
+        <div class="stats-box">
+            <p id="end-word-info"></p>
+            <p id="end-level-info"></p>
+            <p id="end-time-info"></p>
+            <p id="end-score-info" style="color:#10b981; font-weight:bold; font-size:1.3rem;"></p>
+            <div id="end-history-board" class="history-board"></div>
+        </div>
+
+        <button class="btn" onclick="startGame()">TEKRAR OYNA</button>
+        <button class="btn btn-secondary" onclick="returnToMenu()">MENÜYE DÖN</button>
+    </div>
+
+    <script src="sound.js"></script>
+    <script src="dictionary-extra.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
