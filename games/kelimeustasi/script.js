@@ -177,6 +177,15 @@ function showScreen(screenId) {
     document.getElementById(screenId).classList.add("active");
 }
 
+function exitToHub(event) {
+    if (event) event.preventDefault();
+    if (typeof SoundEngine !== "undefined") {
+        SoundEngine.playStartClick();
+    }
+    window.setTimeout(function () {
+        window.location.assign("/");
+    }, 500);
+}
 function returnToMenu() {
     stopTimer();
     if (typeof SoundEngine !== "undefined") {
