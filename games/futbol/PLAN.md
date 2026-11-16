@@ -127,7 +127,7 @@ online-futbol/
 | **M2** | Ağ omurgası | `ws` sunucu, oda kodu, join/leave, isim listesi | İki sekme aynı odaya girip birbirini görüyor |
 | **M3** | Sunucu otoritesi | Fizik sunucuya taşınır, input gönderimi, 30 Hz sim, 20 Hz snapshot | Sekmeler birebir aynı simülasyonu görüyor (desync yok) |
 | **M4** | Gecikme | Prediction + interpolation + ping göstergesi | 80 ms ping'de oyuncu titremiyor |
-| **M5** | Maç akışı | Devre, kickoff, gol animasyonu/efekti, final, "tekrar oyna" | 2 devre + final doğru işliyor |
+| **M5** | Maç akışı | Tek devre + altın gol, kickoff, gol efekti, final, "tekrar oyna" | Süre sonu + altın gol doğru işliyor |
 | **M6** | Deploy | GitHub push, Render Blueprint, soğuk başlangıç ekranı, hata durumları | `onrender.com` adresinden iki cihazla oynanıyor |
 
 **M1'i atlamayın.** Gecikme yüzünden oyuncu hissi test edilmeden ağ katmanına geçmek, en sık yapılan hatadır.
@@ -225,9 +225,14 @@ Kaynaklar: [render.com/docs/free](https://render.com/docs/free), [Render changel
 ---
 
 ## 11. V2'ye bırakılanlar (şimdi yapma)
-- İki takım için farklı renk/kıyafet, oyuncu isimleri
-- Skill sistemi (şut gücü, sprint, kalecilik) — sunucu tarafı sayaç
+Bu turda **tamamlananlar** (Aniball güncellemesiyle): takım renkleri + oyuncu isimleri ve
+avatar rozetleri, emote sistemi (1-6 tuş + alt butonlar + balon), depar (kayma) hareketi
+ve bekleme sayacı, mobil joystick + VUR/DEPAR/PAS butonları, 1v1-5v5 mod seçimi,
+kendi kaleye gol tespiti, gol atanlar tablosu, kamera uzak/yakın geçişi.
+
+Kalanlar:
+- Skill sistemi (şut gücü, kalecilik) — sunucu tarafı sayaç
 - Skor tablosu (Render Postgres yerine **Supabase** free tier veya KV)
-- Sese/emoji emote, maç tekrarı (replay) kaydı
+- Maç tekrarı (replay) kaydı
 - Özel sunucu/oda şifresi, moderatör kontrolleri
-- Mobil için tam ekran joystick + "pas ver" butonu
+- Delta (dif) tabanlı snapshot (bantgenişliği)
