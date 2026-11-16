@@ -1,0 +1,11 @@
+{
+  "name": "esekgames-futbol",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "EsekGames icinde calisan online 2B futbol oyunu (Node.js + WebSocket)",
+  "scripts": {
+    "start": "node server/standalone.js",
+    "test": "node test/game-test.mjs"
+  }
+}

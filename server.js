@@ -13,15 +13,28 @@ const WebSocket = require("ws");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { pathToFileURL } = require("url");
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
 
+// Online Futbol modulu (games/futbol) ESM oldugu icin dinamik yuklenir.
+// Yuklenene kadar WebSocket upgrade istekleri 503 doner.
+let futbol = null;
+
 server.on("upgrade", (req, socket, head) => {
     const requestPath = String(req.url || "").split("?")[0];
     if (requestPath === "/games/esekus" || requestPath.startsWith("/games/esekus/")) {
         socket.end("HTTP/1.1 410 Gone\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        return;
+    }
+    if (requestPath === "/games/futbol/ws" || requestPath.startsWith("/games/futbol/ws/")) {
+        if (!futbol) {
+            socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+            return;
+        }
+        futbol.handleUpgrade(req, socket, head);
         return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
@@ -715,6 +728,10 @@ const PLAYER_PETS_FILE = path.join(DATA_DIR, "player-pets.json");
 const MAIN_INDEX = path.join(ROOT, "index.html");
 const SIMULATOR_INDEX = path.join(ROOT, "games", "eseksimulator", "index.html");
 const ESEKCRAFT_DIST = path.join(ROOT, "games", "esekcraft", "dist");
+const FUTBOL_DIR = path.join(ROOT, "games", "futbol");
+const FUTBOL_PUBLIC = path.join(FUTBOL_DIR, "public");
+const FUTBOL_SHARED = path.join(FUTBOL_DIR, "shared");
+const FUTBOL_ENTRY = path.join(FUTBOL_DIR, "server", "football.js");
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -752,6 +769,17 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/games/esekcraft/source", (_req, res) => res.sendStatus(404));
 app.use("/games/esekcraft", express.static(ESEKCRAFT_DIST));
 app.use("/games/esekus", (_req, res) => res.sendStatus(404));
+
+// Online Futbol (games/futbol) - API + statik dosyalar
+app.get("/games/futbol/api/rooms", (_req, res) => {
+    res.json({ rooms: futbol ? futbol.listRooms() : [] });
+});
+app.get("/games/futbol/health", (_req, res) => {
+    res.json({ ok: true, loaded: Boolean(futbol), rooms: futbol ? futbol.manager.rooms.size : 0 });
+});
+app.use("/games/futbol/shared", express.static(FUTBOL_SHARED));
+app.use("/games/futbol", express.static(FUTBOL_PUBLIC));
+
 app.use(express.static(ROOT));
 
 app.get("/", (req, res) => {
@@ -3239,6 +3267,21 @@ setInterval(() => {
 }, 30000);
 
 // ============================================================
+// ONLINE FUTBOL MODULU (games/futbol)
+// ============================================================
+
+// Futbol oyunu ESM modulu; kok sunucu CommonJS oldugu icin dinamik yuklenir.
+(async () => {
+    try {
+        const mod = await import(pathToFileURL(FUTBOL_ENTRY).href);
+        futbol = mod.createFootball({ mountPath: "/games/futbol" });
+        console.log("Online Futbol modulu yuklendi: /games/futbol");
+    } catch (err) {
+        console.error("Online Futbol modulu yuklenemedi:", err && err.message ? err.message : err);
+    }
+})();
+
+// ============================================================
 // SERVER
 // ============================================================
 
@@ -3250,6 +3293,7 @@ server.listen(PORT, () => {
     console.log(`Port: ${PORT}`);
     console.log(`Ana site: /`);
     console.log(`Simulator: /games/eseksimulator`);
+    console.log(`Online Futbol: /games/futbol`);
     console.log(`WebSocket: aktif`);
     console.log("==========================================");
     console.log("");
