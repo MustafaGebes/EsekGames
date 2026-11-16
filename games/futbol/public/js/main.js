@@ -240,6 +240,7 @@ function registerHandlers(n) {
     hud.center(`Odaya katıldın: ${m.room}`, 2200);
     if (window.matchMedia('(pointer: coarse)').matches) {
       els.touch.classList.remove('hidden');
+      document.body.classList.add('touch-mode');
       input.bindTouch(els.joystick, els.stick);
     }
     if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
