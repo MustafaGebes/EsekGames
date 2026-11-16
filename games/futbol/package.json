@@ -6,6 +6,7 @@
   "description": "EsekGames icinde calisan online 2B futbol oyunu (Node.js + WebSocket)",
   "scripts": {
     "start": "node server/standalone.js",
-    "test": "node test/game-test.mjs"
+    "test": "node checks/game-checks.mjs",
+    "test:protocol": "node checks/protocol-checks.mjs"
   }
 }

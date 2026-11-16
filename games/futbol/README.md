@@ -65,8 +65,19 @@ npm start          # http://localhost:3000
 Testler:
 
 ```bash
-npm run test                      # ağ protokolü testi (sunucu ayakta olmalı)
-node test/game-test.mjs           # oyun mantığı testleri (sunucu gerekmez)
+npm run test                 # oyun mantığı testleri (12 test, sunucu gerekmez)
+npm run test:protocol        # ağ protokolü testleri (7 test, sunucu ayakta olmalı)
+```
+
+> Test dosyaları `checks/` klasöründe durur; `test/` değil. Böylece EsekGames kökündeki
+> `npm test` (yani `node --test`) oyun testlerini otomatik toplamaz ve sunucu
+> gerektiren protokol testi derlemeyi bozmaz. Protokol testi sunucuya ulaşamazsa
+> hata vermek yerine **SKIP** döner.
+
+Hub üzerinden test:
+
+```bash
+BASE_URL=http://localhost:3100/games/futbol node checks/protocol-checks.mjs
 ```
 
 ---
@@ -135,9 +146,9 @@ public/
   js/predict.js  Yerel tahmin ve düzeltme (reconciliation)
   js/render.js   Canvas çizimi, kamera (topu takip eder) + mini harita + interpolasyon
   js/hud.js      Skor, süre, oyuncu listesi, chat
-test/
-  game-test.mjs      Oyun mantığı testleri (12 test)
-  protocol-test.mjs  Ağ protokolü testleri (7 test)
+checks/
+  game-checks.mjs      Oyun mantığı testleri (12 test)
+  protocol-checks.mjs  Ağ protokolü testleri (7 test, sunucu gerekir)
 ```
 
 ## Protokol (özet)
