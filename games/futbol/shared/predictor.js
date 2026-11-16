@@ -61,6 +61,10 @@ export class Predictor {
       this.state.y = p.y;
       this.offX = 0;
       this.offY = 0;
+      // Buyuk hata genelde bir oyun olayi (gol sonrasi kickoff sifirlamasi):
+      // sunucu depar durumunu da sifirladi, yerel depar da sifirlanir.
+      // Aksi halde istemci sunucu durmamis deparla birkac kare kayar.
+      this.state.dashLeft = 0;
     } else {
       // Kucuk hata: mantiksal durum kademeli duzeltilir, fark gorsel
       // ofset olarak devralinir -> ekranda anlik ziplama olmaz.

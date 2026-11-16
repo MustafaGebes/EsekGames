@@ -324,5 +324,15 @@ check('buyuk konum hatasinda aninda duzeltme (snap) yapilir', () => {
   assert.equal(pr.renderX, 400, 'buyuk hata duzeltilmedi');
 });
 
+check('kickoff sifirlamasinda yerel depar durumu da sifirlanir', () => {
+  const pr = new Predictor();
+  pr.reset({ x: 100, y: 100, vx: 0, vy: 0, fx: 0 });
+  // Oyuncu depar yaparken gol yendi: sunucu herkesi kickoff noktasina aldi.
+  pr.state.dashLeft = 0.3;
+  pr.reconcile({ x: 400, y: 100, vx: 0, vy: 0, fx: 0, dsh: 1 });
+  assert.equal(pr.state.dashLeft, 0, 'yerel depar durumu bayat kaldi');
+  assert.equal(pr.state.dashCd, 0, 'depar bekleme suresi sifirlanmadi');
+});
+
 console.log(`\n${passed} test geçti.`);
 if (process.exitCode) console.log('BAŞARISIZ TEST VAR');
