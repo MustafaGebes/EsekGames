@@ -3,7 +3,7 @@
 Tarayıcıda oynanan **gerçek zamanlı çok oyunculu 2D futbol** oyunu.
 HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + Render ile tek tık deploy.
 
-> **EsekGames üzerinde canlı:** https://eskgame.onrender.com/games/futbol/
+> **EsekGames üzerinde canlı:** https://esekgame.onrender.com/games/futbol/
 > (EsekGames hub'ının içine gömülü; kaynak kod `games/futbol/` klasöründe)
 
 - 1v1 – 5v5 formatı, iki takım, **botlarla otomatik tamamlanır** (tek başına da oynanır)
@@ -88,10 +88,10 @@ gh repo create online-futbol --public --source=. --push --description "Tarayıc�
 
 - Dashboard → **New → Blueprint** → repo'yu seç → `render.yaml` otomatik okunur → **Apply**
 - Region: **Frankfurt (eu-central)** → Türkiye'ye gecik en düşük
-- Sonuç: `https://eskgame.onrender.com/games/futbol/` (oyun EsekGames hub'ının içinde yayınlanır)
+- Sonuç: `https://esekgame.onrender.com/games/futbol/` (oyun EsekGames hub'ının içinde yayınlanır)
 
 > Not: Bu klasör EsekGames hub'ının `games/futbol/` parçasıdır; canlı adres
-> `eskgame.onrender.com` üzerinden **hub sunucusu** tarafından sunulur.
+> `esekgame.onrender.com` üzerinden **hub sunucusu** tarafından sunulur.
 > Ayrı bir servis istiyorsan aşağıdaki "Tek başına deploy" bölümüne bak.
 
 İleri / Manuel kurulum istersen: **New → Web Service** →

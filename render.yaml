@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: eskgame
+    name: esekgame
     runtime: node
     plan: free
     buildCommand: npm install
