@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:futbol": "node games/futbol/checks/game-checks.mjs",
+    "test:futbol:protocol": "node games/futbol/checks/protocol-checks.mjs"
   },
   "dependencies": {
     "express": "^4.19.2",
