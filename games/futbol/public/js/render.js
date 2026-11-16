@@ -31,8 +31,6 @@ export class Renderer {
     const worldW = PITCH.w + MARGIN * 2;
     const worldH = PITCH.h + MARGIN * 2;
     this.scale = Math.min(this.canvas.width / worldW, this.canvas.height / worldH);
-    this.viewW = this.canvas.width / this.scale;
-    this.viewH = this.canvas.height / this.scale;
 
     // Kamera daima saha merkezine sabitlenir.
     this.cam.x = PITCH.w / 2;
@@ -89,7 +87,7 @@ export class Renderer {
 
   // Kamera sabittir: gorsunum alani degismez, top nereye giderse gitsin
   // tum saha ekranda gorunur kalir.
-  draw(now, myId, predicted, dt = 0.016) {
+  draw(now, myId, predicted) {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     // Masa zemini: sahanin etrafini tamamen kaplar (Aniball tarzi).

@@ -262,7 +262,7 @@ function loop(now) {
     pendingPass = false;
   }
 
-  renderer?.draw(now, myId, predicted, dt);
+  renderer?.draw(now, myId, predicted);
 }
 
 window.addEventListener('resize', () => renderer?.resize());
