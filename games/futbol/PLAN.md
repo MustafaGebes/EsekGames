@@ -111,6 +111,7 @@ online-futbol/
    ├─ css/style.css
    └─ js/
       ├─ main.js          # bootstrap, ekran geçişleri
+      ├─ lobby.js         # menü, duyurular, sunucu listesi ve lobi ekranı
       ├─ net.js           # WS bağlantısı + reconnect (exponential backoff)
       ├─ input.js         # klavye/touch → input paketi
       ├─ render.js        # canvas çizimi, sabit kamera (tüm saha ekranda), interpolasyon

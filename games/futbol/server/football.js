@@ -7,6 +7,13 @@
 //
 // Modul hem EsekGames kok sunucusuna (games/futbol) hem de tek basina
 // (server/standalone.js) calisabilir.
+//
+// Protokol (yeni):
+//   Client -> Server : join (nm, md, room?, create?) · input · chat · again · ping
+//                      · startnow (oda sahibi erken baslatir) · leave (lobiden cikar)
+//   Server -> Client : welcome · roomstate (lobi durumu) · start (mac basladi)
+//                      · rooms (canli sunucu listesi) · announcements · roster
+//                      · snapshot · event · chat · pong
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -16,7 +23,7 @@ import {
   safeJson, sanitizeName, sanitizeChat, sanitizeRoom, sanitizeInput,
   sanitizeMode,
 } from './net.js';
-import { TICK } from '../shared/constants.js';
+import { TICK, ANNOUNCEMENTS, LOBBY } from '../shared/constants.js';
 
 export function createFootball({ mountPath = '' } = {}) {
   const manager = new RoomManager();
@@ -53,10 +60,26 @@ export function createFootball({ mountPath = '' } = {}) {
     broadcast(room, { t: 'roster', players: room.roster() });
   }
 
+  function pushRoomState(room) {
+    broadcast(room, { t: 'roomstate', ...room.roomState() });
+  }
+
+  // Canli sunucu listesini butun bagli istemcilere gonder (menu ekrani).
+  function pushRooms() {
+    const s = JSON.stringify({ t: 'rooms', rooms: manager.list() });
+    for (const ws of wss.clients) {
+      if (ws.readyState === 1) ws.send(s);
+    }
+  }
+
   // ---------------------------------------------------------------- baglanti
 
   wss.on('connection', (ws) => {
     ws.meta = { id: null, room: null, alive: true };
+
+    // Menude gosterilen duyurular.
+    send(ws, { t: 'announcements', items: ANNOUNCEMENTS });
+    send(ws, { t: 'rooms', rooms: manager.list() });
 
     ws.on('message', (raw) => {
       const msg = safeJson(raw.toString());
@@ -75,11 +98,25 @@ export function createFootball({ mountPath = '' } = {}) {
         if (ws.meta.room) return;
         const name = sanitizeName(msg.nm);
         const mode = sanitizeMode(msg.md);
-        const code = sanitizeRoom(msg.room) || manager.randomCode();
-        const room = manager.ensure(code, mode);
 
-        if (room.humanCount() >= room.capacity()) {
-          send(ws, { t: 'error', msg: 'Oda dolu, baska bir oda kodu dene.' });
+        // Oda secimi:
+        //  - create:true  -> her zaman yeni oda kur
+        //  - room kodu    -> o kodla odaya katil (yoksa kur)
+        //  - hicbiri      -> hizli eslesme: uygun acik oda, yoksa yeni oda
+        let room;
+        if (msg.create) {
+          room = manager.create(mode);
+        } else {
+          const code = sanitizeRoom(msg.room);
+          if (code) {
+            room = manager.ensure(code, mode);
+          } else {
+            room = manager.findOpen(mode) || manager.create(mode);
+          }
+        }
+
+        if (room.humanCount() >= room.capacity() || room.started) {
+          send(ws, { t: 'error', msg: 'Oda dolu, baska bir oda sec.' });
           return;
         }
 
@@ -96,18 +133,21 @@ export function createFootball({ mountPath = '' } = {}) {
         send(ws, {
           t: 'welcome', id: p.id, room: room.code, team: p.team,
           tickHz: TICK.hz, snapHz: TICK.snapHz,
-          size: room.teamSize,
+          size: room.teamSize, host: room.hostId === p.id,
         });
         send(ws, { t: 'roster', players: room.roster() });
-        send(ws, room.snapshot());
+        send(ws, { t: 'roomstate', ...room.roomState() });
         broadcast(room, { t: 'event', kind: 'join', nm: p.name, i: p.id });
         pushRoster(room);
+        pushRoomState(room);
+        pushRooms();
         break;
       }
 
       case 'input': {
         const room = roomOf(ws);
         if (!room) return;
+        if (!room.started) return;   // lobi sirasinda girdi yok sayilir
         const p = room.players.get(ws.meta.id);
         if (!p) return;
         p.input = sanitizeInput(msg);
@@ -123,6 +163,38 @@ export function createFootball({ mountPath = '' } = {}) {
         const text = sanitizeChat(msg.msg);
         if (!p || !text) return;
         broadcast(room, { t: 'chat', nm: p.name, msg: text });
+        break;
+      }
+
+      case 'startnow': {
+        // Oda sahibi beklemeden maci baslatabilir.
+        const room = roomOf(ws);
+        if (!room) return;
+        if (room.hostId !== ws.meta.id) return;
+        room.lobbyLeft = 0;
+        room.startMatch();
+        break;
+      }
+
+      case 'leave': {
+        // Lobiden cik: oyuncu menuye doner.
+        const room = roomOf(ws);
+        if (!room) {
+          send(ws, { t: 'left' });
+          return;
+        }
+        const p = room.players.get(ws.meta.id);
+        room.clients.delete(ws);
+        if (p) {
+          room.removeHuman(p.id);
+          broadcast(room, { t: 'event', kind: 'leave', nm: p.name, i: p.id });
+          pushRoster(room);
+          pushRoomState(room);
+        }
+        ws.meta.room = null;
+        ws.meta.id = null;
+        send(ws, { t: 'left' });
+        pushRooms();
         break;
       }
 
@@ -153,15 +225,18 @@ export function createFootball({ mountPath = '' } = {}) {
       room.removeHuman(p.id);
       broadcast(room, { t: 'event', kind: 'leave', nm: p.name, i: p.id });
       pushRoster(room);
+      pushRoomState(room);
     }
     ws.meta.room = null;
     ws.meta.id = null;
+    pushRooms();
   }
 
   // ---------------------------------------------------------------- oyun dongusu
 
   let last = Date.now();
   let acc = 0;
+  let roomsAcc = 0;
 
   const loop = setInterval(() => {
     const now = Date.now();
@@ -177,8 +252,30 @@ export function createFootball({ mountPath = '' } = {}) {
       acc -= stepDt;
     }
 
+    // Olayler aninda yayinlanir (mac baslama bildirimi gecikmesin).
+    let startedChanged = false;
+    for (const room of manager.rooms.values()) {
+      if (!room.events.length) continue;
+      for (const ev of room.events) {
+        broadcast(room, { t: 'event', ...ev });
+        if (ev.kind === 'start' || ev.kind === 'restart') startedChanged = true;
+      }
+      room.events.length = 0;
+    }
+    if (startedChanged) pushRooms();
+
+    // Lobi durumu: baslamamis odalarda geri sayim bilgisi.
+    for (const room of manager.rooms.values()) {
+      if (room.started) continue;
+      room.stateAcc += dt;
+      if (room.stateAcc < 0.25) continue;
+      room.stateAcc = 0;
+      pushRoomState(room);
+    }
+
     const snapEvery = 1 / TICK.snapHz;
     for (const room of manager.rooms.values()) {
+      if (!room.started) continue;   // lobi sirasinda snapshot gonderilmez
       room.snapAcc += dt;
       if (room.snapAcc < snapEvery) continue;
       room.snapAcc = 0;
@@ -188,11 +285,13 @@ export function createFootball({ mountPath = '' } = {}) {
       for (const ws of room.clients) {
         if (ws.readyState === 1) ws.send(s);
       }
+    }
 
-      if (room.events.length) {
-        for (const ev of room.events) broadcast(room, { t: 'event', ...ev });
-        room.events.length = 0;
-      }
+    // Canli sunucu listesi (menu ekrani).
+    roomsAcc += dt;
+    if (roomsAcc >= LOBBY.roomListHz) {
+      roomsAcc = 0;
+      pushRooms();
     }
   }, 1000 / 60);
 

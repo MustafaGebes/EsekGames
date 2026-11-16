@@ -80,6 +80,36 @@ export const PHASE = {
   end: 'end',
 };
 
+// Lobi (oda bekleme) ayarları.
+export const LOBBY = {
+  waitSeconds: 10,   // odaya girince maç otomatik başlamadan önceki bekleme
+  roomListHz: 2,     // sunucu listesinin sunucudan gönderilme sıklığı (saniye)
+};
+
+// Menüde gösterilen duyurular. Sunucu tarafında tanımlanır, istemciye gönderilir.
+export const ANNOUNCEMENTS = [
+  {
+    title: 'Yeni lobi ekranı',
+    body: 'Artık menüden "Oyna" ile hızlı maça başlayabilir, "+" ile kendi lobini kurabilirsin. Lobin sunucu listesinde görünür, oyuncular bekler ve maç otomatik başlar.',
+    date: '16.11.2026',
+  },
+  {
+    title: 'Akıcı depar',
+    body: 'Shift (depar) artık anlık hız atlamıyor; ivme rampasıyla yumuşakça hızlanıyor ve yavaşlıyor.',
+    date: '16.11.2026',
+  },
+  {
+    title: 'Sadece renk',
+    body: 'Oyuncularda avatar ve ifade kaldırıldı. Her oyuncu artık takım renginde bir daire.',
+    date: '16.11.2026',
+  },
+  {
+    title: '1v1 - 5v5 modları',
+    body: 'Maç modunu menüden seç, oda büyüklüğü ona göre ayarlansın. Eksik oyuncuları botlar tamamlar.',
+    date: '15.11.2026',
+  },
+];
+
 export const TEAM_COLORS = {
   0: { main: '#38bdf8', dark: '#0ea5e9', name: 'Mavi' },
   1: { main: '#f87171', dark: '#dc2626', name: 'Kırmızı' },

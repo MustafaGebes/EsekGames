@@ -1,23 +1,40 @@
-// Ana akış: lobby -> oyun, WebSocket bağlantısı, oyun döngüsü.
+// Ana akış: menü -> lobi -> oyun, WebSocket bağlantısı, oyun döngüsü.
+//
+// Akış:
+//   Menü açılır. "Oyna" hızlı maç için uygun odaya katılır (yoksa yeni açar),
+//   "+" yeni bir lobi kurar. Sunucu listesi canlı gelir; lobi kurulan oda da
+//   listede görünür. Lobide oyuncular bekler, geri sayım bitince maç başlar.
 
 import { Net } from './net.js';
 import { Input } from './input.js';
 import { Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Predictor } from '../shared/predictor.js';
+import { Lobby } from './lobby.js';
 import { TEAM_COLORS, PITCH } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
 const els = {
-  lobby: $('lobby'),
+  menu: $('menu'),
+  room: $('room'),
   game: $('game'),
   name: $('nameInput'),
-  room: $('roomInput'),
   mode: $('modeSelect'),
   play: $('playBtn'),
   newRoom: $('newRoomBtn'),
-  status: $('lobbyStatus'),
+  status: $('menuStatus'),
+  announcements: $('announcementList'),
+  servers: $('serverList'),
+  codeInput: $('codeInput'),
+  joinCode: $('joinCodeBtn'),
+  roomCode: $('roomCode'),
+  roomInfo: $('roomInfo'),
+  roomPlayers: $('roomPlayers'),
+  roomCountdown: $('roomCountdown'),
+  countdownLabel: $('countdownLabel'),
+  startNow: $('startBtn'),
+  leaveRoom: $('leaveRoomBtn'),
   canvas: $('pitch'),
   chatForm: $('chatForm'),
   chatInput: $('chatInput'),
@@ -29,12 +46,12 @@ const els = {
   btnDash: $('btnDash'),
   zoomBtn: $('zoomBtn'),
   again: $('againBtn'),
-  roomList: $('roomList'),
 };
 
 const hud = new Hud();
 const input = new Input();
 const predictor = new Predictor();
+const lobby = new Lobby(els);
 input.bind();
 
 let net = null;
@@ -42,6 +59,8 @@ let renderer = null;
 let myId = null;
 let myTeam = 0;
 let pendingJoin = null;
+let joinedRoom = null;
+let lastRoster = [];
 let predicted = null;
 let loopStarted = false;
 let zoom = localStorage.getItem('futbol.zoom') === 'near' ? 'near' : 'far';
@@ -62,17 +81,10 @@ function wsUrl() {
   return `${proto}//${location.host}${BASE_PATH}ws`;
 }
 
-function randomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
 // ------------------------------------------------------------------ baglanti
 
 els.name.value = localStorage.getItem('futbol.name') || '';
-els.newRoom.addEventListener('click', () => { els.room.value = randomCode(); });
 
-// Baglanti sayfa acilinca kurulur; boylece lobby durumu gercek durumu yansitir.
 function ensureNet() {
   if (net) return net;
   net = new Net(wsUrl());
@@ -85,19 +97,47 @@ function ensureNet() {
 
 ensureNet();
 
-els.play.addEventListener('click', () => {
+// ------------------------------------------------------------------ menu eylemleri
+
+function playerName() {
   const nm = (els.name.value || 'Oyuncu').trim().slice(0, 16) || 'Oyuncu';
   localStorage.setItem('futbol.name', nm);
-  const room = (els.room.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-  const mode = Number(els.mode?.value) || 5;
+  return nm;
+}
 
+function selectedMode() {
+  return Number(els.mode?.value) || 5;
+}
+
+// Hizli mac: uygun acik odaya katilir, yoksa sunucu yeni oda acar.
+lobby.onJoin = () => {
   ensureNet();
-  pendingJoin = { nm, room, md: mode };
-  if (net.status === 'online') {
-    net.send({ t: 'join', ...pendingJoin });
+  sendJoin({ nm: playerName(), md: selectedMode() });
+};
+
+// "+" : yeni lobi kur, sonra lobi ekranina gec.
+lobby.onCreate = () => {
+  ensureNet();
+  sendJoin({ nm: playerName(), md: selectedMode(), create: true });
+};
+
+// Listeden veya kodla odaya katil.
+lobby.onJoinCode = (code) => {
+  ensureNet();
+  sendJoin({ nm: playerName(), md: selectedMode(), room: code });
+};
+
+lobby.onStartNow = () => net?.send({ t: 'startnow' });
+lobby.onLeave = () => net?.send({ t: 'leave' });
+
+function sendJoin(payload) {
+  if (net?.status === 'online') {
+    net.send({ t: 'join', ...payload });
     pendingJoin = null;
+  } else {
+    pendingJoin = payload;
   }
-});
+}
 
 els.again.addEventListener('click', () => {
   net?.send({ t: 'again' });
@@ -110,51 +150,6 @@ els.zoomBtn.addEventListener('click', () => {
   renderer?.setZoom(zoom);
   hud.setZoomLabel(zoom);
 });
-
-// Aktif odalari listele; koda tiklayinca oda kutusuna yazilir.
-async function refreshRooms() {
-  try {
-    const res = await fetch(`${BASE_PATH}api/rooms`, { cache: 'no-store' });
-    const data = await res.json();
-    renderRooms(data.rooms || []);
-  } catch {
-    /* sunucu su an kapali olabilir */
-  }
-}
-
-function renderRooms(rooms) {
-  const list = els.roomList;
-  if (!list) return;
-  list.innerHTML = '';
-  const open = rooms.filter((r) => r.humans > 0);
-  if (!open.length) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = 'Şu an açık oda yok — yeni oda açabilirsin.';
-    list.appendChild(li);
-    return;
-  }
-  for (const r of open) {
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.append(document.createTextNode(r.code));
-    const count = document.createElement('span');
-    count.className = 'count';
-    count.textContent = `${r.size || 5}v${r.size || 5} · ${r.humans} kişi`;
-    btn.append(count);
-    btn.addEventListener('click', () => {
-      els.room.value = r.code;
-      if (r.size) els.mode.value = String(r.size);
-      els.room.focus();
-    });
-    li.append(btn);
-    list.appendChild(li);
-  }
-}
-
-refreshRooms();
-setInterval(refreshRooms, 5000);
 
 els.chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -171,15 +166,19 @@ els.btnDash.addEventListener('touchstart', (e) => { input.dash = true; e.prevent
 function setStatus(s) {
   const map = {
     connecting: 'Sunucuya bağlanılıyor…',
-    online: 'Bağlandı! Oyna düğmesine bas.',
+    online: 'Bağlandı!',
     offline: 'Bağlantı koptu, yeniden deneniyor…',
   };
   if (s === 'online') {
-    els.status.textContent = 'Sunucu bağlantısı hazır.';
+    els.status.textContent = pendingJoin ? 'Odaya giriliyor…' : 'Hazır — Oyna\'ya bas.';
     els.status.className = 'status ok';
     if (pendingJoin) {
       net.send({ t: 'join', ...pendingJoin });
       pendingJoin = null;
+    }
+    // Yeniden baglandigimizde lobideysek ayni odaya geri don.
+    if (joinedRoom && !pendingJoin && !renderer) {
+      net.send({ t: 'join', nm: playerName(), md: selectedMode(), room: joinedRoom });
     }
   } else {
     els.status.textContent = map[s] || s;
@@ -192,32 +191,41 @@ function teamName(t) {
   return TEAM_COLORS[t]?.name || 'Takım';
 }
 
+// ------------------------------------------------------------------ mesajlar
+
 function registerHandlers(n) {
   n.on('welcome', (m) => {
     myId = m.id;
     myTeam = m.team;
-    els.lobby.classList.add('hidden');
-    els.game.classList.remove('hidden');
-    input.enabled = true;
-    renderer = new Renderer(els.canvas);
-    renderer.setZoom(zoom);
-    hud.setZoomLabel(zoom);
-    predicted = { x: PITCH_CENTER.x, y: PITCH_CENTER.y, vx: 0, vy: 0, fx: 0, tm: myTeam };
-    hud.center(`Odaya katıldın: ${m.room}`, 2200);
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      els.touch.classList.remove('hidden');
-      document.body.classList.add('touch-mode');
-      input.bindTouch(els.joystick, els.stick);
-    }
-    if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
+    joinedRoom = m.room;
+    lobby.setMyId(myId);
+    // Oyun baslamadiysa lobi ekranindayiz.
+    if (!renderer) lobby.showRoom();
   });
 
+  n.on('roomstate', (m) => lobby.setRoom(m));
+
+  n.on('rooms', (m) => lobby.setServers(m.rooms));
+
+  n.on('announcements', (m) => lobby.setAnnouncements(m.items));
+
+  n.on('left', () => {
+    joinedRoom = null;
+    lobby.showMenu();
+    els.status.textContent = 'Lobiden çıktın.';
+    els.status.className = 'status';
+  });
+
+  n.on('start', () => startGame());
+
   n.on('roster', (m) => {
-    renderer?.setRoster(m.players);
-    hud.setRoster(m.players, myId);
+    lastRoster = m.players || [];
+    renderer?.setRoster(lastRoster);
+    hud.setRoster(lastRoster, myId);
   });
 
   n.on('snapshot', (m) => {
+    if (!renderer) return;
     renderer?.push(m);
     const me = m.players.find((p) => p.i === myId);
     if (me) {
@@ -235,7 +243,10 @@ function registerHandlers(n) {
   });
 
   n.on('event', (m) => {
-    if (m.kind === 'goal') {
+    if (m.kind === 'start') {
+      // Lobi bitti, mac basliyor: oyun ekranina gec.
+      startGame();
+    } else if (m.kind === 'goal') {
       if (m.own) {
         hud.center('Kendi kaleye gol!', 2600);
       } else if (m.golden) {
@@ -270,7 +281,34 @@ function registerHandlers(n) {
   n.on('error', (m) => {
     els.status.textContent = m.msg;
     els.status.className = 'status err';
+    // Oyun baslamadiysa menuye don.
+    if (!renderer) lobby.showMenu();
   });
+}
+
+// ------------------------------------------------------------------ oyun ekrani
+
+function startGame() {
+  lobby.showGame();
+  input.enabled = true;
+
+  if (!renderer) {
+    renderer = new Renderer(els.canvas);
+    renderer.setZoom(zoom);
+    hud.setZoomLabel(zoom);
+    if (lastRoster.length) renderer.setRoster(lastRoster);
+    if (lastRoster.length) hud.setRoster(lastRoster, myId);
+  }
+
+  predicted = { x: PITCH_CENTER.x, y: PITCH_CENTER.y, vx: 0, vy: 0, fx: 0, tm: myTeam };
+  predictor.reset({ x: predicted.x, y: predicted.y, vx: 0, vy: 0, fx: 0 });
+
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    els.touch.classList.remove('hidden');
+    document.body.classList.add('touch-mode');
+    input.bindTouch(els.joystick, els.stick);
+  }
+  if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
 }
 
 const PITCH_CENTER = { x: PITCH.w / 2, y: PITCH.h / 2 };

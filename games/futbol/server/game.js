@@ -3,7 +3,7 @@
 
 import {
   PITCH, GOAL, PLAYER, BALL, MATCH, TEAM_SIZE, MIN_TEAM_SIZE, FORMATIONS,
-  PHASE, BOT_NAMES,
+  PHASE, BOT_NAMES, LOBBY,
 } from '../shared/constants.js';
 import { applyInput } from '../shared/movement.js';
 
@@ -31,6 +31,11 @@ export class Room {
     this.phase = PHASE.kickoff;
     this.phaseTimer = MATCH.kickoffDelay;
     this.tick = 0;
+    // Lobi durumu: maç başlamadan önce oyuncular bekler.
+    this.started = false;       // maç başladı mı
+    this.lobbyLeft = 0;         // maç başlamasına kalan saniye
+    this.hostId = null;         // odayı kuran oyuncu (erken başlatabilir)
+    this.stateAcc = 0;
     this.lastTouch = -1;        // son top teması yapan takım
     this.lastTouchId = -1;      // son top teması yapan oyuncu
     this.events = [];
@@ -149,6 +154,15 @@ export class Room {
     this.players.set(p.id, p);
     this.slots[team][slot] = p.id;
     this.lastHumanAt = Date.now();
+
+    if (!this.started) {
+      // İlk insan odayı kurar; geri sayım başlar.
+      if (this.hostId === null) this.hostId = p.id;
+      if (this.lobbyLeft <= 0) this.lobbyLeft = LOBBY.waitSeconds;
+      // Oda tamamen dolduysa beklemeden başla.
+      if (this.humanCount() >= this.capacity()) this.lobbyLeft = 0;
+    }
+
     this.resetKickoff();
     return p;
   }
@@ -165,8 +179,43 @@ export class Room {
     });
     this.players.set(bot.id, bot);
     this.slots[p.team][p.slot] = bot.id;
+
+    if (this.hostId === id) {
+      // Host ayrıldı: sıradaki insana devredilir.
+      const next = [...this.players.values()].find((x) => !x.bot);
+      this.hostId = next ? next.id : null;
+    }
+
     this.resetKickoff();
     return p;
+  }
+
+  // ---------------------------------------------------------------- lobi durumu
+
+  // Maçı başlat: lobi biter, kickoff fazına geçilir.
+  startMatch() {
+    if (this.started) return false;
+    this.started = true;
+    this.lobbyLeft = 0;
+    this.phase = PHASE.kickoff;
+    this.phaseTimer = MATCH.kickoffDelay;
+    this.resetKickoff();
+    this.events.push({ kind: 'start' });
+    return true;
+  }
+
+  // Oda durumu (istemci lobi ekranında gösterir).
+  roomState() {
+    return {
+      code: this.code,
+      size: this.teamSize,
+      humans: this.humanCount(),
+      capacity: this.capacity(),
+      started: this.started,
+      countdown: Math.max(0, Math.ceil(this.lobbyLeft)),
+      host: this.hostId,
+      players: this.roster(),
+    };
   }
 
   // ---------------------------------------------------------------- maç akışı
@@ -208,6 +257,8 @@ export class Room {
     this.phaseTimer = MATCH.kickoffDelay;
     this.lastTouch = -1;
     this.lastTouchId = -1;
+    this.started = true;   // tekrar oynama lobi beklemeden başlar
+    this.lobbyLeft = 0;
     for (const p of this.players.values()) p.goals = 0;
     this.resetKickoff();
     this.events.push({ kind: 'restart' });
@@ -246,7 +297,7 @@ export class Room {
       this.phaseTimer -= dt;
       if (this.phaseTimer <= 0) {
         this.phase = PHASE.play;
-        this.events.push({ kind: 'start' });
+        this.events.push({ kind: 'play' });
       }
     } else if (this.phase === PHASE.play) {
       this.timeLeft -= dt;
@@ -277,6 +328,15 @@ export class Room {
 
   step(dt) {
     this.tick++;
+
+    // Maç başlamadıysa oyuncular lobide bekler: fizik yok, sadece geri sayım.
+    if (!this.started) {
+      // Kimse yoksa geri sayım işlemez (botlarla boş oda simüle edilmez).
+      if (this.humanCount() === 0) return;
+      this.lobbyLeft = Math.max(0, this.lobbyLeft - dt);
+      if (this.lobbyLeft <= 0) this.startMatch();
+      return;
+    }
 
     for (const p of this.players.values()) {
       p.kickCd = Math.max(0, p.kickCd - dt);

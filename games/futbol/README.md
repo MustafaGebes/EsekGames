@@ -1,4 +1,4 @@
-# ⚽ Online Futbol
+# Online Futbol
 
 Tarayıcıda oynanan **gerçek zamanlı çok oyunculu 2D futbol** oyunu.
 HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + Render ile tek tık deploy.

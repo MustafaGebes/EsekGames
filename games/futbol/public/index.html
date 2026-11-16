@@ -7,47 +7,84 @@
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <!-- ------------------------------------------------------- LOBBY -->
-  <section id="lobby" class="screen lobby">
-    <div class="card">
-      <h1>⚽ Online Futbol</h1>
-      <p class="sub">2D · hızlı · gerçek zamanlı çok oyunculu</p>
+  <!-- ------------------------------------------------------- MENÜ -->
+  <section id="menu" class="screen menu">
+    <div class="menu-wrap">
+      <header class="menu-head">
+        <h1>Online Futbol</h1>
+        <p class="sub">2D · hızlı · gerçek zamanlı çok oyunculu</p>
+      </header>
 
-      <label for="nameInput">Takma ad</label>
-      <input id="nameInput" maxlength="16" placeholder="Oyuncu" autocomplete="nickname" />
+      <div class="menu-grid">
+        <!-- Duyurular -->
+        <section class="card menu-card">
+          <h4>Duyurular</h4>
+          <ul id="announcementList" class="ann-list"></ul>
+        </section>
 
-      <label for="modeSelect">Maç modu</label>
-      <select id="modeSelect">
-        <option value="1">1v1</option>
-        <option value="2">2v2</option>
-        <option value="3">3v3</option>
-        <option value="4">4v4</option>
-        <option value="5" selected>5v5</option>
-      </select>
+        <!-- Sunucular -->
+        <section class="card menu-card">
+          <h4>Sunucular</h4>
+          <ul id="serverList" class="server-list"></ul>
+          <div class="join-row">
+            <input id="codeInput" maxlength="8" placeholder="Oda kodu" autocomplete="off" />
+            <button id="joinCodeBtn" class="ghost" type="button">Katıl</button>
+          </div>
+        </section>
 
-      <label for="roomInput">Oda kodu</label>
-      <div class="row">
-        <input id="roomInput" maxlength="8" placeholder="Boş bırak = yeni oda" autocomplete="off" />
-        <button id="newRoomBtn" class="ghost" type="button">Rastgele</button>
+        <!-- Oyna -->
+        <section class="card menu-card play-card">
+          <label for="nameInput">Takma ad</label>
+          <input id="nameInput" maxlength="16" placeholder="Oyuncu" autocomplete="nickname" />
+
+          <label for="modeSelect">Maç modu</label>
+          <select id="modeSelect">
+            <option value="1">1v1</option>
+            <option value="2">2v2</option>
+            <option value="3">3v3</option>
+            <option value="4">4v4</option>
+            <option value="5" selected>5v5</option>
+          </select>
+
+          <div class="play-row">
+            <button id="playBtn" class="primary" type="button">Oyna</button>
+            <button id="newRoomBtn" class="plus" type="button" title="Yeni lobi kur">+</button>
+          </div>
+
+          <p id="menuStatus" class="status">Sunucuya bağlanılıyor…</p>
+
+          <div class="legend">
+            <span><b>WASD / Oklar</b> hareket</span>
+            <span><b>Boşluk</b> vur</span>
+            <span><b>Shift</b> depar</span>
+            <span><b>E</b> pas</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- LOBİ (bekleme) -->
+  <section id="room" class="screen room hidden">
+    <div class="card room-card">
+      <h2>Lobi</h2>
+      <p class="sub" id="roomInfo">Odaya katılınıyor…</p>
+
+      <div class="room-code-box">
+        <span class="room-code-label">Oda kodu</span>
+        <span class="room-code" id="roomCode">—</span>
       </div>
 
-      <button id="playBtn" class="primary" type="button">Oyuna gir</button>
-      <p id="lobbyStatus" class="status">Sunucuya bağlanılıyor…</p>
+      <div class="countdown" id="roomCountdown">—</div>
+      <p class="countdown-label" id="countdownLabel">Oyuncular bekleniyor…</p>
 
-      <div class="rooms">
-        <h4>Aktif odalar</h4>
-        <ul id="roomList" class="room-list">
-          <li class="empty">Bağlanılıyor…</li>
-        </ul>
-      </div>
+      <h4 class="room-players-head">Oyuncular</h4>
+      <ul id="roomPlayers" class="roster"></ul>
 
-      <div class="legend">
-        <span><b>WASD / Oklar</b> hareket</span>
-        <span><b>Boşluk</b> vur</span>
-        <span><b>Shift</b> depar</span>
-        <span><b>E</b> pas</span>
+      <div class="row room-actions">
+        <button id="startBtn" class="primary hidden" type="button">Hemen başlat</button>
+        <button id="leaveRoomBtn" class="ghost" type="button">Çıkış</button>
       </div>
-      <p class="sub small">Süre bitince önde olan kazanır, beraberlikte altın gol oynanır.</p>
     </div>
   </section>
 
