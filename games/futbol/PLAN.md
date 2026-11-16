@@ -112,7 +112,7 @@ online-futbol/
       ├─ net.js           # WS bağlantısı + reconnect (exponential backoff)
       ├─ input.js         # klavye/touch → input paketi
       ├─ predict.js       # yerel prediction + reconciliation
-      ├─ render.js        # canvas çizimi, kamera, interpolasyon
+      ├─ render.js        # canvas çizimi, sabit kamera (tüm saha ekranda), interpolasyon
       └─ hud.js          # skor, süre, ping, oyuncu listesi
 ```
 
