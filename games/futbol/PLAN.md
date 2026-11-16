@@ -103,7 +103,9 @@ online-futbol/
 │  ├─ game.js             # oyun döngüsü, fizik, olaylar
 │  └─ net.js              # mesaj parse/serialize doğrulaması
 ├─ shared/
-│  └─ constants.js        # pitch, hız, tick, sabitler (ortak)
+│  ├─ constants.js        # pitch, hız, tick, sabitler (ortak)
+│  ├─ movement.js        # oyuncu hareketi (ortak fonksiyon)
+│  └─ predictor.js       # yerel prediction + görsel hata sönümleme
 └─ public/
    ├─ index.html          # lobby + oyun ekranı, HUD
    ├─ css/style.css
@@ -111,7 +113,6 @@ online-futbol/
       ├─ main.js          # bootstrap, ekran geçişleri
       ├─ net.js           # WS bağlantısı + reconnect (exponential backoff)
       ├─ input.js         # klavye/touch → input paketi
-      ├─ predict.js       # yerel prediction + reconciliation
       ├─ render.js        # canvas çizimi, sabit kamera (tüm saha ekranda), interpolasyon
       └─ hud.js          # skor, süre, ping, oyuncu listesi
 ```

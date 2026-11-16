@@ -119,16 +119,16 @@ server/
 shared/
   constants.js  Saha, fizik ve maç sabitleri (sunucu + istemci ortak)
   movement.js   Oyuncu hareketi (sunucu + istemci aynı fonksiyonu kullanır → prediction tutarlı)
+  predictor.js  Yerel tahmin + görsel hata sönümleme (reconciliation)
 public/
   index.html, css/style.css
   js/main.js     Lobby → oyun akışı, oyun döngüsü
   js/net.js      WebSocket istemcisi, otomatik yeniden bağlanma, ping
   js/input.js    Klavye + dokunmatik joystick
-  js/predict.js  Yerel tahmin ve düzeltme (reconciliation)
   js/render.js   Canvas çizimi, sabit kamera (tüm saha ekranda) + interpolasyon
   js/hud.js      Skor, süre, oyuncu listesi, chat
 checks/
-  game-checks.mjs      Oyun mantığı testleri (22 test)
+  game-checks.mjs      Oyun mantığı testleri (25 test)
   protocol-checks.mjs  Ağ protokolü testleri (10 test, sunucu gerekir)
 ```
 
