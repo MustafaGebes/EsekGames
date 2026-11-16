@@ -1,39 +1,19 @@
 # ⚽ Online Futbol
 
 Tarayıcıda oynanan **gerçek zamanlı çok oyunculu 2D futbol** oyunu.
-HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu.
+HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + Render ile tek tık deploy.
 
-> **Canlı adres:** https://eskgame.onrender.com/games/futbol/
->
-> **EsekGames içindeki yerleşim:** bu klasör EsekGames hub'ının bir parçasıdır.
-> Oyun ana sitede **`/games/futbol/`** adresinde yayınlanır ve aynı Node sunucusu
-> tarafından sunulur (`/games/futbol/ws` WebSocket kanalı).
-> Ayrı bir Render servisi istiyorsan aşağıdaki "Tek başına deploy" bölümüne bak.
+> **EsekGames üzerinde canlı:** https://eskgame.onrender.com/games/futbol/
+> (EsekGames hub'ının içine gömülü; kaynak kod `games/futbol/` klasöründe)
 
-- 5'li format, iki takım, **botlarla otomatik tamamlanır** (tek başına da oynanır)
+- 1v1 – 5v5 formatı, iki takım, **botlarla otomatik tamamlanır** (tek başına da oynanır)
 - Sunucu **otoriter**: konum istemcide değil sunucuda hesaplanır (hile yok)
 - 30 Hz fizik, 20 Hz snapshot, yerel tahmin (prediction) + interpolasyon
 - **Sabit kamera**: tüm saha tek ekranda görünür (kaydırma yok, Aniball tarzı), sahanın etrafında masa çerçevesi
-- 2 devre × 90 saniye, gol/ devre arası/ maç sonu akışı
+- Tek devre 90 saniye: süre bitince **önde olan kazanır**, beraberlikte **altın gol** oynanır
+- **Depar** (Shift), **ifadeler** (1-6), **8 karakter** seçimi, takım avatar şeritleri, gol atanlar tablosu
+- Kamera: uzak (tüm saha) / yakın (oyuncu takipli) geçişi
 - Sohbet, oyuncu listesi, ping göstergesi, mobil joystick desteği
-
----
-
-## EsekGames hub'ına bağlı nasıl çalışıyor
-
-| Parça | Yeri |
-|---|---|
-| Oyun istemcisi (statik) | `games/futbol/public/` → `/games/futbol/` |
-| Paylaşılan fizik sabitleri | `games/futbol/shared/` → `/games/futbol/shared/` |
-| WebSocket oyun kanalı | `/games/futbol/ws` |
-| Oda listesi API'si | `/games/futbol/api/rooms` |
-| Sunucu modülü | `games/futbol/server/football.js` → `createFootball()` fabrikası |
-| Kök sunucu bağlantısı | `server.js` → dinamik `import()` + `upgrade` delegasyonu |
-
-Kök `server.js` CommonJS, oyun modülü ESM olduğu için modül çalışma anında
-`import()` ile yüklenir; WebSocket `upgrade` istekleri `/games/futbol/ws` yoluna
-yönlendirilir. Oyun klasörü kendi `package.json` dosyasında `"type": "module"`
-bildirir, bu yüzden ESM dosyaları doğru yorumlanır.
 
 ---
 
@@ -42,16 +22,18 @@ bildirir, bu yüzden ESM dosyaları doğru yorumlanır.
 | Tuş | İşlev |
 |---|---|
 | `W A S D` / ok tuşları | Hareket |
-| `Boşluk` | Şut |
-| `Shift` | Koş (sprint) |
+| `Boşluk` | Vur (şut) |
+| `Shift` / `C` | Depar (kayma, 2,5 sn bekleme) |
 | `E` | Pas (en uygun arkadaşa) |
+| `1` – `6` | İfade gönder (😂 🔥 💪 😭 😡 👋) |
 
-Mobilde ekranın sol altında joystick, sağ altında `ŞUT` / `PAS` düğmeleri çıkar.
+Mobilde ekranın sol altında joystick, sağ altında `VUR` / `DEPAR` / `PAS` düğmeleri çıkar.
 
 ## Oynanış
 
 1. Tarayıcıda adresi aç.
-2. **Takma ad** yaz, **Oda kodu** gir (boş bırakırsan yeni oda açılır) veya **Rastgele**'ye bas.
+2. **Takma ad** yaz, **Maç modu** seç (1v1 – 5v5), **Karakter** seç, **Oda kodu** gir
+   (boş bırakırsan yeni oda açılır) veya **Rastgele**'ye bas.
    Lobideki **Aktif odalar** listesinden açık bir odaya tıklayıp doğrudan katılabilirsin.
 3. **Oyuna gir** → odaya katılırsın. Arkadaşın aynı oda kodunu girip aynı sayfada oynayabilir.
 
@@ -67,55 +49,53 @@ npm start          # http://localhost:3000
 Testler:
 
 ```bash
-npm run test                 # oyun mantığı testleri (12 test, sunucu gerekmez)
-npm run test:protocol        # ağ protokolü testleri (7 test, sunucu ayakta olmalı)
+npm run test                 # oyun mantığı testleri (22 test, sunucu gerekmez)
+npm run test:protocol        # ağ protokolü testleri (10 test, sunucu ayakta olmalı)
 ```
 
-> Test dosyaları `checks/` klasöründe durur; `test/` değil. Böylece EsekGames kökündeki
-> `npm test` (yani `node --test`) oyun testlerini otomatik toplamaz ve sunucu
-> gerektiren protokol testi derlemeyi bozmaz. Protokol testi sunucuya ulaşamazsa
-> hata vermek yerine **SKIP** döner.
-
-Hub üzerinden test:
-
-```bash
-BASE_URL=http://localhost:3100/games/futbol node checks/protocol-checks.mjs
-```
+> Test dosyaları `checks/` klasöründe (Node'un `node --test` otomatik toplayıp
+> sunucusuz ortamda kırılmaması için `test/` değil). Protokol testi sunucuya
+> ulaşamazsa hata vermek yerine **SKIP** döner.
 
 ---
 
-## Deploy
+## Deploy (GitHub → Render)
 
-### EsekGames ile birlikte (varsayılan — zaten aktif)
+### 1. GitHub'a gönder
 
-Oyun `games/futbol/` altında EsekGames reposunda duruyor ve kök `server.js` tarafından
-sunuluyor. GitHub'a `main` branch'ine push yaptığında Render otomatik deploy eder;
-kurulum gerektiren ek bir servis yok.
+**En kolay yol — hazır script:**
 
 ```powershell
+.\deploy-push.ps1                          # yeni repo (online-futbol)
+.\deploy-push.ps1 -Repo esekgames -Existing   # mevcut repo
+```
+
+Script testleri çalıştırır, `gh` ile repo'yu oluşturur (gh oturumluysa) ve push eder.
+`gh` oturumun yoksa önce bir terminalde `gh auth login` çalıştır.
+
+**Manuel:**
+
+```bash
+git init
 git add .
-git commit -m "Online Futbol guncellemesi"
-git push origin main
+git commit -m "Online futbol v1"
+gh repo create online-futbol --public --source=. --push --description "Tarayıcıda oynanan online 2D futbol oyunu"
 ```
 
-Yerel deneme:
+(`gh` kurulu değilse: <https://cli.github.com> — ya da GitHub'da boş repo açıp `git push`)
 
-```powershell
-cd D:\Projelerim\EsekGames
-npm install
-$env:PORT = 3100
-node server.js      # ana site: http://localhost:3100  |  oyun: http://localhost:3100/games/futbol/
-```
+### 2. Render'da servis oluştur
 
-### Tek başına deploy (ayrı Render servisi istersen)
+- Dashboard → **New → Blueprint** → repo'yu seç → `render.yaml` otomatik okunur → **Apply**
+- Region: **Frankfurt (eu-central)** → Türkiye'ye gecik en düşük
+- Sonuç: `https://eskgame.onrender.com/games/futbol/` (oyun EsekGames hub'ının içinde yayınlanır)
 
-Oyun klasörü kendi sunucusunu da içerir (`server/standalone.js`), bu yüzden ayrı bir
-Render servesi olarak da yayınlanabilir:
+> Not: Bu klasör EsekGames hub'ının `games/futbol/` parçasıdır; canlı adres
+> `eskgame.onrender.com` üzerinden **hub sunucusu** tarafından sunulur.
+> Ayrı bir servis istiyorsan aşağıdaki "Tek başına deploy" bölümüne bak.
 
-- Dashboard → **New → Web Service** → repo: `MustafaGebes/EsekGames`
-- **Root Directory**: `games/futbol`
-- Build Command `npm install`, Start Command `npm start`, Health Check Path `/health`
-- Region: **Frankfurt (eu-central)**, Plan **Free**
+İleri / Manuel kurulum istersen: **New → Web Service** →
+Build Command `npm install`, Start Command `npm start`, Health Check Path `/health`, Plan **Free**.
 
 ### 3. Bilmen gereken sınırlar (ücretsiz plan)
 
@@ -149,13 +129,13 @@ public/
   js/render.js   Canvas çizimi, sabit kamera (tüm saha ekranda) + interpolasyon
   js/hud.js      Skor, süre, oyuncu listesi, chat
 checks/
-  game-checks.mjs      Oyun mantığı testleri (12 test)
-  protocol-checks.mjs  Ağ protokolü testleri (7 test, sunucu gerekir)
+  game-checks.mjs      Oyun mantığı testleri (22 test)
+  protocol-checks.mjs  Ağ protokolü testleri (10 test, sunucu gerekir)
 ```
 
 ## Protokol (özet)
 
-**Client → Server:** `join` · `input` · `chat` · `again` · `ping`
+**Client → Server:** `join` · `input` · `emote` · `chat` · `again` · `ping`
 **Server → Client:** `welcome` · `snapshot` · `roster` · `event` · `chat` · `pong`
 
 Fizik ve sabitler `shared/` altında olduğu için sunucu ile tarayıcı **her zaman aynı sayıları** kullanır.

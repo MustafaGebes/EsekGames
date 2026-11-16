@@ -10,9 +10,9 @@ Dağıtım: GitHub → Render Web Service → `https://<site>.onrender.com` üze
 | Konu | Karar | Gerekçe |
 |---|---|---|
 | Tür | 2D, top-down (Canvas) | HTML/JS ile 1-2 haftada oynanabilir; 3D (three.js) riski çok yüksek |
-| Format | 5'li futbol (kale + 2 kaleci) | 11'li 3B yerine 5'li 2D en sağlam yol |
+| Format | 1v1 – 5v5 futbol (esnek diziliş) | 11'li 3B yerine 2D en sağlam yol |
 | Oyuncu sayısı | 2-10 gerçek oyuncu, eksik kadro **bot** ile tamamlanır | Tek oyuncu bile girip oynayabilsin |
-| Oyun süresi | 2 x 90 sn devre + uzatma yok | Sunucu tarafı sayaç, hızlı test |
+| Oyun süresi | Tek devre 90 sn; beraberlikte **altın gol** | Sunucu tarafı sayaç, hızlı test |
 | Maç tipi | 1v1 / 2v2 / 5v5 (oda koduyla) | Lobby + oda yönetimi |
 | Kimlik | İsim + emoji renk (hesap yok) | Login/auth yok, hızlı |
 

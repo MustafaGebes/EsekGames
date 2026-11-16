@@ -1,5 +1,7 @@
 // Gelen mesajların doğrulanması ve temizlenmesi (güvenlik sınırı).
 
+import { AVATAR_COUNT, MIN_TEAM_SIZE, TEAM_SIZE } from '../shared/constants.js';
+
 export function sanitizeName(n) {
   if (typeof n !== 'string') return 'Oyuncu';
   const s = n
@@ -19,8 +21,25 @@ export function sanitizeRoom(c) {
   return c.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 }
 
+// Karakter (avatar) indeksi: 0..AVATAR_COUNT-1
+export function sanitizeChar(c) {
+  const n = Math.round(Number(c));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n > AVATAR_COUNT - 1 ? AVATAR_COUNT - 1 : n;
+}
+
+// Maç modu (takım başına oyuncu sayısı): 1..TEAM_SIZE
+export function sanitizeMode(m) {
+  const n = Math.round(Number(m));
+  if (!Number.isFinite(n)) return TEAM_SIZE;
+  if (n < MIN_TEAM_SIZE) return MIN_TEAM_SIZE;
+  return n > TEAM_SIZE ? TEAM_SIZE : n;
+}
+
 export function sanitizeInput(i) {
-  if (!i || typeof i !== 'object') return { mx: 0, my: 0, sp: false, k: false, p: false };
+  if (!i || typeof i !== 'object') {
+    return { mx: 0, my: 0, sp: false, k: false, p: false, d: false };
+  }
   let mx = Number(i.mx) || 0;
   let my = Number(i.my) || 0;
   const len = Math.hypot(mx, my);
@@ -34,6 +53,7 @@ export function sanitizeInput(i) {
     sp: !!i.sp,
     k: !!i.k,
     p: !!i.p,
+    d: !!i.d,
   };
 }
 

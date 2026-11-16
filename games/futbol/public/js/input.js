@@ -7,21 +7,30 @@ const KEYMAP = {
   KeyD: [1, 0], ArrowRight: [1, 0],
 };
 
+// 1-6 tuşları ifade (emote) gönderir.
+const EMOTE_KEYS = {
+  Digit1: 0, Digit2: 1, Digit3: 2,
+  Digit4: 3, Digit5: 4, Digit6: 5,
+  Numpad1: 0, Numpad2: 1, Numpad3: 2,
+  Numpad4: 3, Numpad5: 4, Numpad6: 5,
+};
+
 export class Input {
-  constructor() {
+  constructor(onEmote) {
     this.keys = new Set();
     this.touch = { x: 0, y: 0 };
     this.shot = false;
     this.pass = false;
-    this.sprint = false;
+    this.dash = false;
     this.enabled = false;
+    this.onEmote = typeof onEmote === 'function' ? onEmote : () => {};
   }
 
   bind() {
     window.addEventListener('keydown', (e) => {
       if (!this.enabled) return;
       const tag = e.target?.tagName || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (KEYMAP[e.code]) {
         this.keys.add(e.code);
         e.preventDefault();
@@ -30,14 +39,18 @@ export class Input {
         e.preventDefault();
       } else if (e.code === 'KeyE') {
         this.pass = true;
-      } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-        this.sprint = true;
+      } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyC') {
+        // Depar (kayma) - Aniball'daki gibi Shift.
+        this.dash = true;
+        e.preventDefault();
+      } else if (EMOTE_KEYS[e.code] !== undefined) {
+        this.onEmote(EMOTE_KEYS[e.code]);
+        e.preventDefault();
       }
     });
 
     window.addEventListener('keyup', (e) => {
       if (KEYMAP[e.code]) this.keys.delete(e.code);
-      else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.sprint = false;
     });
 
     window.addEventListener('blur', () => this.reset());
@@ -45,7 +58,7 @@ export class Input {
 
   reset() {
     this.keys.clear();
-    this.sprint = false;
+    this.dash = false;
     this.touch.x = 0;
     this.touch.y = 0;
   }
@@ -57,7 +70,6 @@ export class Input {
     const radius = 48;
 
     const move = (e) => {
-      const rect = joystick.getBoundingClientRect();
       const t = e.touches?.[0] || e;
       const cx = originX;
       const cy = originY;
@@ -110,9 +122,10 @@ export class Input {
     const len = Math.hypot(mx, my);
     if (len > 1) { mx /= len; my /= len; }
 
-    const out = { mx, my, sp: this.sprint, k: this.shot, p: this.pass };
+    const out = { mx, my, sp: false, k: this.shot, p: this.pass, d: this.dash };
     this.shot = false;
     this.pass = false;
+    this.dash = false;
     return out;
   }
 }

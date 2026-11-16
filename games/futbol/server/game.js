@@ -2,33 +2,37 @@
 // Sunucu OTORİTERDİR: istemci konum göndermez, sadece input gönderir.
 
 import {
-  PITCH, GOAL, PLAYER, BALL, MATCH, TEAM_SIZE, PHASE, BOT_NAMES,
+  PITCH, GOAL, PLAYER, BALL, MATCH, TEAM_SIZE, MIN_TEAM_SIZE, FORMATIONS,
+  PHASE, BOT_NAMES, EMOTES, EMOTE_MS,
 } from '../shared/constants.js';
 import { applyInput } from '../shared/movement.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const r1 = (v) => Math.round(v * 10) / 10;
-
-const ROLE_X = [0.08, 0.28, 0.36, 0.52, 0.68];
-const ROLE_Y = [0.5, 0.34, 0.66, 0.5, 0.58];
-const ROLES = ['GK', 'DEF', 'DEF', 'MID', 'FWD'];
+const clampInt = (v, a, b) => {
+  const n = Math.round(Number(v) || 0);
+  return n < a ? a : n > b ? b : n;
+};
 
 let nextPlayerId = 1;
 
 export class Room {
-  constructor(code) {
+  constructor(code, teamSize = TEAM_SIZE) {
     this.code = code;
+    this.teamSize = clampInt(teamSize, MIN_TEAM_SIZE, TEAM_SIZE);
     this.players = new Map();
     this.slots = [[], []]; // takım -> slot -> player id
     this.clients = new Set(); // bağlı WebSocket'ler
     this.ball = { x: PITCH.w / 2, y: PITCH.h / 2, vx: 0, vy: 0 };
     this.score = [0, 0];
-    this.half = 1;
-    this.timeLeft = MATCH.halfSeconds;
+    this.timeLeft = MATCH.seconds;
+    this.golden = false;        // altın gol fazı
+    this.goldenLeft = 0;        // altın gol kalan süresi
     this.phase = PHASE.kickoff;
     this.phaseTimer = MATCH.kickoffDelay;
     this.tick = 0;
-    this.lastTouch = -1;
+    this.lastTouch = -1;        // son top teması yapan takım
+    this.lastTouchId = -1;      // son top teması yapan oyuncu
     this.events = [];
     this.snapAcc = 0;
     this.createdAt = Date.now();
@@ -36,7 +40,7 @@ export class Room {
     this.botSeq = 0;
     this.usedNames = new Set();
 
-    for (let t = 0; t < 2; t++) this.slots[t] = new Array(TEAM_SIZE).fill(null);
+    for (let t = 0; t < 2; t++) this.slots[t] = new Array(this.teamSize).fill(null);
 
     this.fillWithBots();
     this.resetKickoff();
@@ -55,9 +59,13 @@ export class Room {
     return c[0] + c[1];
   }
 
+  capacity() {
+    return this.teamSize * 2;
+  }
+
   fillWithBots() {
     for (let t = 0; t < 2; t++) {
-      for (let i = 0; i < TEAM_SIZE; i++) {
+      for (let i = 0; i < this.teamSize; i++) {
         if (this.slots[t][i]) continue;
         const bot = this.makePlayer({
           name: this.nextBotName(),
@@ -83,7 +91,7 @@ export class Room {
     return name;
   }
 
-  makePlayer({ name, team, slot, bot }) {
+  makePlayer({ name, team, slot, bot, char = 0 }) {
     const sp = this.spots(team)[slot];
     return {
       id: nextPlayerId++,
@@ -92,36 +100,40 @@ export class Room {
       slot,
       bot,
       role: sp.role,
+      char: clampInt(char, 0, 7),
       x: sp.x, y: sp.y, vx: 0, vy: 0,
       fx: team === 0 ? 0 : Math.PI,
       kickCd: 0,
-      input: { mx: 0, my: 0, sp: false, k: false, p: false },
+      dashCd: 0,
+      dashLeft: 0,
+      emote: -1,
+      emoteUntil: 0,
+      goals: 0,
+      input: { mx: 0, my: 0, sp: false, k: false, p: false, d: false },
+      dashQueued: false,
       target: { x: sp.x, y: sp.y },
       think: Math.random() * 0.2,
+      emoteAt: Date.now() + 6000 + Math.random() * 14000,
       anim: Math.random() * 6,
     };
   }
 
   spots(team) {
     const dir = this.attackDir(team);
-    const arr = [];
-    for (let i = 0; i < TEAM_SIZE; i++) {
-      const fx = ROLE_X[i];
-      arr.push({
-        x: dir === 1 ? fx * PITCH.w : (1 - fx) * PITCH.w,
-        y: ROLE_Y[i] * PITCH.h,
-        role: ROLES[i],
-      });
-    }
-    return arr;
+    const formation = FORMATIONS[this.teamSize] || FORMATIONS[TEAM_SIZE];
+    return formation.map((f) => ({
+      x: dir === 1 ? f.x * PITCH.w : (1 - f.x) * PITCH.w,
+      y: f.y * PITCH.h,
+      role: f.role,
+    }));
   }
 
-  addHuman(name) {
+  addHuman(name, char = 0) {
     const counts = this.humanCounts();
     const team = counts[0] <= counts[1] ? 0 : 1;
     // Once saha slotlarini tercih et; kaleci slotu en sona kalir.
     let slot = -1;
-    for (let i = 1; i < TEAM_SIZE; i++) {
+    for (let i = 1; i < this.teamSize; i++) {
       const id = this.slots[team][i];
       if (id && this.players.get(id)?.bot) { slot = i; break; }
     }
@@ -134,7 +146,7 @@ export class Room {
     const botId = this.slots[team][slot];
     this.players.delete(botId);
 
-    const p = this.makePlayer({ name, team, slot, bot: false });
+    const p = this.makePlayer({ name, team, slot, bot: false, char });
     this.players.set(p.id, p);
     this.slots[team][slot] = p.id;
     this.lastHumanAt = Date.now();
@@ -158,11 +170,20 @@ export class Room {
     return p;
   }
 
+  // ---------------------------------------------------------------- ifadeler
+
+  setEmote(player, index) {
+    const e = Math.round(Number(index));
+    if (!Number.isFinite(e) || e < 0 || e >= EMOTES.length) return false;
+    player.emote = e;
+    player.emoteUntil = Date.now() + EMOTE_MS;
+    return true;
+  }
+
   // ---------------------------------------------------------------- maç akışı
 
   attackDir(team) {
-    const base = team === 0 ? 1 : -1;
-    return this.half === 2 ? -base : base;
+    return team === 0 ? 1 : -1;
   }
 
   teamAttacking(dir) {
@@ -179,27 +200,53 @@ export class Room {
       p.x = sp.x; p.y = sp.y;
       p.vx = 0; p.vy = 0;
       p.kickCd = 0;
-      p.input.mx = 0; p.input.my = 0; p.input.k = false; p.input.p = false;
+      p.dashCd = 0;
+      p.dashLeft = 0;
+      p.input.mx = 0; p.input.my = 0; p.input.k = false; p.input.p = false; p.input.d = false;
+      p.dashQueued = false;
       p.target.x = sp.x; p.target.y = sp.y;
     }
   }
 
   resetMatch() {
     this.score = [0, 0];
-    this.half = 1;
-    this.timeLeft = MATCH.halfSeconds;
+    this.timeLeft = MATCH.seconds;
+    this.golden = false;
+    this.goldenLeft = 0;
     this.phase = PHASE.kickoff;
     this.phaseTimer = MATCH.kickoffDelay;
     this.lastTouch = -1;
+    this.lastTouchId = -1;
+    for (const p of this.players.values()) p.goals = 0;
     this.resetKickoff();
     this.events.push({ kind: 'restart' });
   }
 
   onGoal(team) {
+    const scorer = this.lastTouchId >= 0 ? this.players.get(this.lastTouchId) : null;
+    const own = !!(scorer && scorer.team !== team);
     this.score[team]++;
-    this.phase = PHASE.kickoff;
-    this.phaseTimer = MATCH.kickoffDelay;
-    this.events.push({ kind: 'goal', team });
+    if (scorer && !own) scorer.goals++;
+
+    const wasGolden = this.golden;
+    const ev = {
+      kind: 'goal',
+      team,
+      by: scorer ? scorer.name : '',
+      i: scorer ? scorer.id : -1,
+      own,
+      golden: wasGolden,
+    };
+    this.events.push(ev);
+
+    if (wasGolden) {
+      // Altın gol: golü atan kazanır, maç biter.
+      this.phase = PHASE.end;
+      this.events.push({ kind: 'end', winner: team });
+    } else {
+      this.phase = PHASE.kickoff;
+      this.phaseTimer = MATCH.kickoffDelay;
+    }
     this.resetKickoff();
   }
 
@@ -213,24 +260,24 @@ export class Room {
     } else if (this.phase === PHASE.play) {
       this.timeLeft -= dt;
       if (this.timeLeft <= 0) {
-        if (this.half === 1) {
-          this.half = 2;
-          this.timeLeft = MATCH.halfSeconds;
-          this.phase = PHASE.halftime;
-          this.phaseTimer = MATCH.halftimeDelay;
-          this.resetKickoff();
-          this.events.push({ kind: 'halftime' });
+        this.timeLeft = 0;
+        if (this.score[0] === this.score[1]) {
+          // Beraberlik: altın gol oynanır, ilk gol kazanır.
+          this.golden = true;
+          this.goldenLeft = MATCH.goldenSeconds;
+          this.phase = PHASE.golden;
+          this.events.push({ kind: 'golden' });
         } else {
           this.phase = PHASE.end;
-          this.events.push({ kind: 'end' });
+          this.events.push({ kind: 'end', winner: this.score[0] > this.score[1] ? 0 : 1 });
         }
       }
-    } else if (this.phase === PHASE.halftime) {
-      this.phaseTimer -= dt;
-      if (this.phaseTimer <= 0) {
-        this.phase = PHASE.kickoff;
-        this.phaseTimer = MATCH.kickoffDelay;
-        this.resetKickoff();
+    } else if (this.phase === PHASE.golden) {
+      this.goldenLeft -= dt;
+      if (this.goldenLeft <= 0) {
+        this.goldenLeft = 0;
+        this.phase = PHASE.end;
+        this.events.push({ kind: 'end', winner: -1 });
       }
     }
   }
@@ -243,7 +290,12 @@ export class Room {
     for (const p of this.players.values()) {
       p.kickCd = Math.max(0, p.kickCd - dt);
       if (p.bot) this.botThink(p, dt);
+      if (p.dashQueued) {
+        p.input.d = true;
+        p.dashQueued = false;
+      }
       applyInput(p, p.input, dt);
+      p.input.d = false;
       p.x = clamp(p.x, PLAYER.r, PITCH.w - PLAYER.r);
       p.y = clamp(p.y, PLAYER.r, PITCH.h - PLAYER.r);
       p.anim += Math.hypot(p.vx, p.vy) * dt * 0.06;
@@ -281,6 +333,7 @@ export class Room {
       b.vy = dirY * speed + p.vy * 0.4;
       p.kickCd = PLAYER.kickCd;
       this.lastTouch = p.team;
+      this.lastTouchId = p.id;
       this.events.push({ kind: 'kick', i: p.id });
     }
     for (const p of this.players.values()) p.input.p = false;
@@ -338,6 +391,7 @@ export class Room {
           b.vx -= rel * nx * 1.05;
           b.vy -= rel * ny * 1.05;
           this.lastTouch = p.team;
+          this.lastTouchId = p.id;
         }
       }
     }
@@ -388,7 +442,20 @@ export class Room {
 
     const b = this.ball;
     const bd = Math.hypot(b.x - p.x, b.y - p.y);
-    if (this.phase === PHASE.play && bd < PLAYER.r + BALL.r + 10) {
+
+    // Topa yaklaşırken ara sıra depar (kayma).
+    if (bd < 150 && bd > 40 && p.dashCd <= 0 && Math.random() < 0.02) {
+      p.input.d = true;
+    }
+
+    // Ara sıra ifade gönder.
+    if (Date.now() > p.emoteAt) {
+      p.emoteAt = Date.now() + 9000 + Math.random() * 16000;
+      this.setEmote(p, Math.floor(Math.random() * EMOTES.length));
+    }
+
+    if ((this.phase === PHASE.play || this.phase === PHASE.golden)
+        && bd < PLAYER.r + BALL.r + 10) {
       const dir = this.attackDir(p.team);
       const goalX = dir === 1 ? PITCH.w + 60 : -60;
       const goalY = PITCH.h / 2 + (Math.random() - 0.5) * 70;
@@ -411,7 +478,7 @@ export class Room {
 
     if (this.lastTouch !== p.team) {
       // Her bot topun farkli bir tarafina gider, hepsi tek noktaya yigilmaz.
-      const ang = (p.slot / TEAM_SIZE) * Math.PI * 2;
+      const ang = (p.slot / this.teamSize) * Math.PI * 2;
       p.target.x = b.x - dir * 6 + Math.cos(ang) * 26;
       p.target.y = b.y + Math.sin(ang) * 26;
       return;
@@ -427,24 +494,33 @@ export class Room {
   roster() {
     return [...this.players.values()].map((p) => ({
       i: p.id, nm: p.name, tm: p.team, bot: p.bot, role: p.role,
+      ch: p.char, g: p.goals,
     }));
   }
 
   snapshot() {
+    const now = Date.now();
     const players = [];
     for (const p of this.players.values()) {
       players.push({
         i: p.id, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy),
         tm: p.team, fx: r1(p.fx), an: r1(p.anim), sl: p.slot,
+        ch: p.char,
+        em: p.emote,
+        eml: Math.max(0, p.emoteUntil - now),
+        dsh: Math.max(0, 1 - p.dashCd / PLAYER.dashCd),
       });
     }
     return {
       t: 'snapshot',
       tick: this.tick,
-      srv: Date.now(),
+      srv: now,
       phase: this.phase,
       tl: r1(this.timeLeft),
-      half: this.half,
+      half: 1,
+      golden: this.golden,
+      goldenLeft: r1(this.goldenLeft),
+      size: this.teamSize,
       score: this.score,
       ball: {
         x: r1(this.ball.x), y: r1(this.ball.y),

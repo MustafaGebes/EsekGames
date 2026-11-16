@@ -1,6 +1,7 @@
 // Yerel tahmin (prediction) + uzaktan oyuncular için interpolasyon desteği.
 
 import { applyInput } from '../shared/movement.js';
+import { PLAYER } from '../shared/constants.js';
 
 export class Predictor {
   constructor() {
@@ -10,6 +11,7 @@ export class Predictor {
   reset(p) {
     this.state = {
       x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, fx: p.fx || 0, tm: p.tm,
+      dashCd: 0, dashLeft: 0,
     };
   }
 
@@ -35,5 +37,9 @@ export class Predictor {
     this.state.vx = p.vx;
     this.state.vy = p.vy;
     this.state.tm = p.tm;
+    // Depar bekleme suresi sunucudan gelen barla esitlenir.
+    if (typeof p.dsh === 'number') {
+      this.state.dashCd = Math.max(0, Math.min(PLAYER.dashCd, (1 - p.dsh) * PLAYER.dashCd));
+    }
   }
 }

@@ -11,16 +11,28 @@
   <section id="lobby" class="screen lobby">
     <div class="card">
       <h1>⚽ Online Futbol</h1>
-      <p class="sub">2D · 5'li · gerçek zamanlı çok oyunculu</p>
+      <p class="sub">2D · hızlı · gerçek zamanlı çok oyunculu</p>
 
       <label for="nameInput">Takma ad</label>
       <input id="nameInput" maxlength="16" placeholder="Oyuncu" autocomplete="nickname" />
+
+      <label for="modeSelect">Maç modu</label>
+      <select id="modeSelect">
+        <option value="1">1v1</option>
+        <option value="2">2v2</option>
+        <option value="3">3v3</option>
+        <option value="4">4v4</option>
+        <option value="5" selected>5v5</option>
+      </select>
 
       <label for="roomInput">Oda kodu</label>
       <div class="row">
         <input id="roomInput" maxlength="8" placeholder="Boş bırak = yeni oda" autocomplete="off" />
         <button id="newRoomBtn" class="ghost" type="button">Rastgele</button>
       </div>
+
+      <label>Karakter</label>
+      <div id="avatarPick" class="avatar-pick"></div>
 
       <button id="playBtn" class="primary" type="button">Oyuna gir</button>
       <p id="lobbyStatus" class="status">Sunucuya bağlanılıyor…</p>
@@ -34,37 +46,47 @@
 
       <div class="legend">
         <span><b>WASD / Oklar</b> hareket</span>
-        <span><b>Boşluk</b> şut</span>
-        <span><b>Shift</b> koş</span>
+        <span><b>Boşluk</b> vur</span>
+        <span><b>Shift</b> depar</span>
         <span><b>E</b> pas</span>
+        <span><b>1-6</b> ifade</span>
       </div>
+      <p class="sub small">Süre bitince önde olan kazanır, beraberlikte altın gol oynanır.</p>
     </div>
   </section>
 
   <!-- ------------------------------------------------------- OYUN -->
   <section id="game" class="screen game hidden">
     <header class="hud-top">
-      <div class="team t0"><span class="tname">Mavi</span><span class="score" id="score0">0</span></div>
+      <div class="team t0"><span class="score" id="score0">0</span><span class="tname">Mavi</span></div>
       <div class="mid">
         <span id="timeLabel">1:30</span>
-        <span id="halfLabel">1. Devre</span>
+        <span id="halfLabel">Maç</span>
       </div>
-      <div class="team t1"><span class="score" id="score1">0</span><span class="tname">Kırmızı</span></div>
+      <div class="team t1"><span class="tname">Kırmızı</span><span class="score" id="score1">0</span></div>
+      <button id="zoomBtn" class="chip" type="button">Kamera: Uzak</button>
     </header>
 
     <div class="canvas-wrap">
       <canvas id="pitch"></canvas>
+      <div class="strip strip-top" id="strip0"></div>
+      <div class="strip strip-bottom" id="strip1"></div>
       <div id="centerMsg" class="center-msg hidden">
         <div id="centerText"></div>
         <button id="againBtn" class="primary hidden" type="button">Yeniden oyna</button>
       </div>
       <div id="toast" class="toast hidden"></div>
+      <div class="emote-bar" id="emoteBar"></div>
     </div>
 
     <aside class="side">
       <div class="panel">
         <h3>Oyuncular</h3>
         <ul id="rosterList" class="roster"></ul>
+      </div>
+      <div class="panel">
+        <h3>Gol atanlar</h3>
+        <ul id="scorerList" class="roster"></ul>
       </div>
       <div class="panel">
         <h3>Chat</h3>
@@ -84,7 +106,8 @@
       <div id="joystick" class="joystick"><div id="stick" class="stick"></div></div>
       <div class="touch-buttons">
         <button id="btnPass" class="tbtn" type="button">PAS</button>
-        <button id="btnShoot" class="tbtn big" type="button">ŞUT</button>
+        <button id="btnDash" class="tbtn dash" type="button">DEPAR</button>
+        <button id="btnShoot" class="tbtn big" type="button">VUR</button>
       </div>
     </div>
   </section>

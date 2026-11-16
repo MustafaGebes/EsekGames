@@ -20,10 +20,10 @@ export class RoomManager {
     return code;
   }
 
-  ensure(code) {
+  ensure(code, teamSize) {
     let room = this.rooms.get(code);
     if (!room) {
-      room = new Room(code);
+      room = new Room(code, teamSize);
       this.rooms.set(code, room);
     }
     return room;
@@ -39,6 +39,7 @@ export class RoomManager {
       humans: r.humanCount(),
       phase: r.phase,
       score: r.score,
+      size: r.teamSize,
     }));
   }
 

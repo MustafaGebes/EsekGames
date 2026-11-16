@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { Room } from '../server/game.js';
-import { PITCH, GOAL, PHASE, TEAM_SIZE } from '../shared/constants.js';
+import { PITCH, GOAL, PHASE, TEAM_SIZE, PLAYER } from '../shared/constants.js';
 
 let passed = 0;
 function check(name, fn) {
@@ -46,6 +46,13 @@ check('insan çıkınca yerine bot gelir', () => {
   assert.equal(room.humanCounts()[0] + room.humanCounts()[1], 0);
 });
 
+check('1v1 modunda oda 2 oyunculu', () => {
+  const room = new Room('TEST16', 1);
+  assert.equal(room.teamSize, 1);
+  assert.equal(room.players.size, 2);
+  assert.equal(room.capacity(), 2);
+});
+
 check('kickoff sonrası maç başlar', () => {
   const room = new Room('TEST04');
   // Not: botlar bu sürede gol atabilir ve faz tekrar 'kickoff' olabilir;
@@ -78,6 +85,37 @@ check('sol kaleye gol sayılır', () => {
   room.ball.vx = -10;
   room.step(1 / 30);
   assert.equal(room.score[room.teamAttacking(-1)], 1);
+});
+
+check('kendi kaleye gol tespit edilir', () => {
+  const room = new Room('TEST13');
+  room.phase = PHASE.play;
+  const scorer = [...room.players.values()].find((p) => p.team === 0);
+  room.lastTouch = 0;
+  room.lastTouchId = scorer.id;
+  room.ball.x = -5;
+  room.ball.y = PITCH.h / 2;
+  room.ball.vx = -10;
+  room.step(1 / 30);
+  // Top sol kaleye girdi, orada Mavi takım savunma yapıyordu.
+  assert.equal(room.score[1], 1);
+  const goal = room.events.find((e) => e.kind === 'goal');
+  assert.ok(goal, 'gol olayı yok');
+  assert.equal(goal.own, true);
+  assert.equal(goal.by, scorer.name);
+});
+
+check('gol atanın gol sayacı artar', () => {
+  const room = new Room('TEST17');
+  room.phase = PHASE.play;
+  const scorer = [...room.players.values()].find((p) => p.team === 0);
+  room.lastTouch = 0;
+  room.lastTouchId = scorer.id;
+  room.ball.x = PITCH.w + 5;
+  room.ball.y = PITCH.h / 2;
+  room.ball.vx = 10;
+  room.step(1 / 30);
+  assert.equal(scorer.goals, 1);
 });
 
 check('kale dışındaki top kaleci çizgisinde sekerek geri döner', () => {
@@ -134,15 +172,90 @@ check('pas topu arkadaşına doğru gönderir', () => {
   assert.ok(room.ball.vx > 100, `pas topu göndermedi: vx=${room.ball.vx}`);
 });
 
-check('devre sonunda devre arası olur ve yönler değişir', () => {
+check('depar oyuncuyu hızlandırır ve bekleme uygular', () => {
+  const { room, human } = soloRoom('TEST14');
+  room.phase = PHASE.play;
+  human.x = 400; human.y = 300; human.vx = 0; human.vy = 0; human.fx = 0;
+  human.input.d = true;
+  room.step(1 / 30);
+  assert.ok(human.vx > PLAYER.maxSpeed * 1.5, `depar olmadı: vx=${human.vx}`);
+  assert.ok(human.dashCd > 0, 'depar bekleme süresi işlenmedi');
+});
+
+check('depar bekleme süresi dolmadan ikinci depar olmaz', () => {
+  const { room, human } = soloRoom('TEST18');
+  room.phase = PHASE.play;
+  human.x = 400; human.y = 300; human.vx = 0; human.vy = 0; human.fx = 0;
+  human.input.d = true;
+  room.step(1 / 30);
+  const first = human.vx;
+  human.vx = 0; human.vy = 0;
+  human.input.d = true;
+  room.step(1 / 30);
+  assert.ok(human.vx < first * 0.5, `depar tekrar tetiklendi: vx=${human.vx}`);
+});
+
+check('süre bitince beraberlikte altın gol oynanır', () => {
   const room = new Room('TEST10');
   room.phase = PHASE.play;
   room.timeLeft = 0.01;
-  const before = room.attackDir(0);
+  room.score = [0, 0];
   room.step(1 / 30);
-  assert.equal(room.phase, PHASE.halftime);
-  assert.equal(room.half, 2);
-  assert.notEqual(room.attackDir(0), before);
+  assert.equal(room.phase, PHASE.golden);
+  assert.equal(room.golden, true);
+  assert.ok(room.events.some((e) => e.kind === 'golden'), 'altın gol olayı yok');
+});
+
+check('süre bitince farklı skorda maç biter ve kazanan belli olur', () => {
+  const room = new Room('TEST19');
+  room.phase = PHASE.play;
+  room.timeLeft = 0.01;
+  room.score = [2, 1];
+  room.step(1 / 30);
+  assert.equal(room.phase, PHASE.end);
+  const end = room.events.find((e) => e.kind === 'end');
+  assert.ok(end, 'maç sonu olayı yok');
+  assert.equal(end.winner, 0);
+});
+
+check('altın golde atılan gol maçı bitirir', () => {
+  const room = new Room('TEST20');
+  room.phase = PHASE.golden;
+  room.golden = true;
+  room.goldenLeft = 30;
+  room.score = [1, 1];
+  const scorer = [...room.players.values()].find((p) => p.team === 0);
+  room.lastTouch = 0;
+  room.lastTouchId = scorer.id;
+  room.ball.x = PITCH.w + 5;
+  room.ball.y = PITCH.h / 2;
+  room.ball.vx = 10;
+  room.step(1 / 30);
+  assert.equal(room.score[0], 2);
+  assert.equal(room.phase, PHASE.end);
+  const end = room.events.find((e) => e.kind === 'end');
+  assert.equal(end.winner, 0);
+});
+
+check('altın gol süresi biterse maç berabere biter', () => {
+  const room = new Room('TEST21');
+  room.phase = PHASE.golden;
+  room.golden = true;
+  room.goldenLeft = 0.01;
+  room.score = [1, 1];
+  room.step(1 / 30);
+  assert.equal(room.phase, PHASE.end);
+  const end = room.events.find((e) => e.kind === 'end');
+  assert.equal(end.winner, -1);
+});
+
+check('ifade (emote) kaydedilir', () => {
+  const room = new Room('TEST15');
+  const p = [...room.players.values()][0];
+  assert.equal(room.setEmote(p, 2), true);
+  assert.equal(p.emote, 2);
+  assert.ok(p.emoteUntil > Date.now());
+  assert.equal(room.setEmote(p, 99), false);
 });
 
 check('snapshot oyuncu sayısı maç oyuncu sayısıyla eşit', () => {
@@ -150,6 +263,19 @@ check('snapshot oyuncu sayısı maç oyuncu sayısıyla eşit', () => {
   const snap = room.snapshot();
   assert.equal(snap.players.length, room.players.size);
   assert.equal(snap.ball.x, PITCH.w / 2);
+  assert.equal(snap.size, TEAM_SIZE);
+});
+
+check('yeni maç skoru ve süreyi sıfırlar', () => {
+  const room = new Room('TEST22');
+  room.score = [3, 2];
+  room.golden = true;
+  room.timeLeft = 12;
+  room.resetMatch();
+  assert.deepEqual(room.score, [0, 0]);
+  assert.equal(room.golden, false);
+  assert.equal(room.timeLeft, 90);
+  assert.equal(room.phase, PHASE.kickoff);
 });
 
 console.log(`\n${passed} test geçti.`);

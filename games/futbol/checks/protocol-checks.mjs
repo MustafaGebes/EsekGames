@@ -8,20 +8,21 @@ import WebSocket from 'ws';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const WS_URL = BASE.replace(/^http/, 'ws') + '/ws';
 
-function connect(name, room) {
+function connect(name, room, md, ch) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
     const c = {
       ws, id: null, room: null, team: null, snapshots: 0, roster: null,
-      events: [], chats: [], last: null, errors: [],
+      events: [], chats: [], last: null, errors: [], size: null, char: null,
     };
     const timer = setTimeout(() => reject(new Error(`${name}: welcome gelmedi`)), 8000);
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', nm: name, room })));
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', nm: name, room, md, ch })));
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
       if (m.t === 'welcome') {
         clearTimeout(timer);
         c.id = m.id; c.room = m.room; c.team = m.team;
+        c.size = m.size; c.char = m.char;
         resolve(c);
       } else if (m.t === 'snapshot') { c.snapshots++; c.last = m; } else if (m.t === 'roster') { c.roster = m.players; } else if (m.t === 'event') { c.events.push(m); } else if (m.t === 'chat') { c.chats.push(m); } else if (m.t === 'error') { c.errors.push(m); }
     });
@@ -45,15 +46,14 @@ async function check(name, fn) {
 
 console.log('Ağ protokolü testleri');
 
-// Sunucu ayakta değilse testi atla; Render/CI gibi sunucusuz ortamlarda
-// kök "npm test" komutunu kırmamak için hata vermek yerine SKIP döner.
+// Sunucu ayakta değilse testi atla; CI gibi sunucusuz ortamlarda
+// hata vermek yerine SKIP döner.
 try {
   const ping = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(5000) });
   if (!ping.ok) throw new Error(`HTTP ${ping.status}`);
 } catch (err) {
   console.log(`SKIP  Sunucuya ulasilamadi (${BASE}): ${err.message}`);
-  console.log('      Once sunucuyu baslat: node server/standalone.js');
-  console.log('      Ya da hub icinde: BASE_URL=http://localhost:3100/games/futbol node checks/protocol-checks.mjs');
+  console.log('      Once sunucuyu baslat: npm start');
   process.exit(0);
 }
 
@@ -129,12 +129,47 @@ await check('ayrılınca roster güncellenir', async () => {
   b.ws.close();
 });
 
+await check('ifade (emote) mesajı diğer istemciye ulaşır', async () => {
+  const a = await connect('Ifadeci', 'TESTEMOTE');
+  const b = await connect('Izleyici', 'TESTEMOTE');
+  await sleep(400);
+  a.ws.send(JSON.stringify({ t: 'emote', e: 3 }));
+  await sleep(500);
+  const ev = b.events.find((e) => e.kind === 'emote');
+  assert.ok(ev, 'emote olayı ulaşmadı');
+  assert.equal(ev.e, 3);
+  const me = (b.last?.players || []).find((p) => p.i === a.id);
+  assert.equal(me.em, 3, 'snapshot emote alanı yanlış');
+  a.ws.close();
+  b.ws.close();
+});
+
+await check('maç modu (1v1) oda boyutunu belirler', async () => {
+  const a = await connect('Birebir', 'TESTMODE', 1);
+  await sleep(500);
+  assert.equal(a.size, 1);
+  assert.equal(a.last.players.length, 2, '1v1 odada 2 oyuncu olmalı');
+  a.ws.close();
+});
+
+await check('karakter (avatar) seçimi aktarılır', async () => {
+  const a = await connect('Kaplı', 'TESTCHAR', 5, 4);
+  await sleep(300);
+  assert.equal(a.char, 4);
+  const roster = a.roster || [];
+  const me = roster.find((p) => p.i === a.id);
+  assert.ok(me, 'rosterde oyuncu yok');
+  assert.equal(me.ch, 4);
+  a.ws.close();
+});
+
 await check('istek gövdesi bozuksa sunucu çökmez', async () => {
   const ws = new WebSocket(WS_URL);
   await new Promise((res) => ws.on('open', res));
   ws.send('bu json degil {{{');
   ws.send(JSON.stringify({ t: 'input', mx: 9999, my: -9999 }));
   ws.send(JSON.stringify({ t: 'bilinmeyen' }));
+  ws.send(JSON.stringify({ t: 'emote', e: 999 }));
   await sleep(300);
   assert.equal(ws.readyState, WebSocket.OPEN, 'bağlantı kapandı');
   ws.close();

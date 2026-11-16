@@ -5,6 +5,7 @@ import { Input } from './input.js';
 import { Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Predictor } from './predict.js';
+import { AVATARS, AVATAR_COUNT, TEAM_COLORS } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,6 +14,8 @@ const els = {
   game: $('game'),
   name: $('nameInput'),
   room: $('roomInput'),
+  mode: $('modeSelect'),
+  avatarPick: $('avatarPick'),
   play: $('playBtn'),
   newRoom: $('newRoomBtn'),
   status: $('lobbyStatus'),
@@ -24,14 +27,17 @@ const els = {
   stick: $('stick'),
   btnShoot: $('btnShoot'),
   btnPass: $('btnPass'),
+  btnDash: $('btnDash'),
+  zoomBtn: $('zoomBtn'),
   again: $('againBtn'),
   roomList: $('roomList'),
 };
 
 const hud = new Hud();
-const input = new Input();
+const input = new Input((i) => sendEmote(i));
 const predictor = new Predictor();
 input.bind();
+hud.buildEmoteBar((i) => sendEmote(i));
 
 let net = null;
 let renderer = null;
@@ -40,6 +46,8 @@ let myTeam = 0;
 let pendingJoin = null;
 let predicted = null;
 let loopStarted = false;
+let zoom = localStorage.getItem('futbol.zoom') === 'near' ? 'near' : 'far';
+let myChar = Math.min(AVATAR_COUNT - 1, Math.max(0, Number(localStorage.getItem('futbol.char')) || 0));
 
 // Oyun EsekGames icinde /games/futbol/ altinda ya da tek basina (kok dizinde)
 // calisabilir. WebSocket ve API yollari sayfanin konumundan turetilir.
@@ -62,6 +70,39 @@ function randomCode() {
   return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+// ------------------------------------------------------------------ karakter secimi
+
+function buildAvatarPicker() {
+  const wrap = els.avatarPick;
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (let i = 0; i < AVATAR_COUNT; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'avatar-btn';
+    if (i === myChar) btn.classList.add('sel');
+    btn.textContent = AVATARS[i];
+    btn.addEventListener('click', () => {
+      myChar = i;
+      localStorage.setItem('futbol.char', String(myChar));
+      for (const b of wrap.children) b.classList.remove('sel');
+      btn.classList.add('sel');
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+buildAvatarPicker();
+
+// ------------------------------------------------------------------ ifade gonderimi
+
+function sendEmote(index) {
+  if (index === undefined || index === null) return;
+  net?.send({ t: 'emote', e: index });
+}
+
+// ------------------------------------------------------------------ baglanti
+
 els.name.value = localStorage.getItem('futbol.name') || '';
 els.newRoom.addEventListener('click', () => { els.room.value = randomCode(); });
 
@@ -82,9 +123,10 @@ els.play.addEventListener('click', () => {
   const nm = (els.name.value || 'Oyuncu').trim().slice(0, 16) || 'Oyuncu';
   localStorage.setItem('futbol.name', nm);
   const room = (els.room.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  const mode = Number(els.mode?.value) || 5;
 
   ensureNet();
-  pendingJoin = { nm, room };
+  pendingJoin = { nm, room, md: mode, ch: myChar };
   if (net.status === 'online') {
     net.send({ t: 'join', ...pendingJoin });
     pendingJoin = null;
@@ -94,6 +136,13 @@ els.play.addEventListener('click', () => {
 els.again.addEventListener('click', () => {
   net?.send({ t: 'again' });
   hud.hideAgain();
+});
+
+els.zoomBtn.addEventListener('click', () => {
+  zoom = zoom === 'near' ? 'far' : 'near';
+  localStorage.setItem('futbol.zoom', zoom);
+  renderer?.setZoom(zoom);
+  hud.setZoomLabel(zoom);
 });
 
 // Aktif odalari listele; koda tiklayinca oda kutusuna yazilir.
@@ -123,16 +172,17 @@ function renderRooms(rooms) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.appendChild(document.createTextNode(r.code));
+    btn.append(document.createTextNode(r.code));
     const count = document.createElement('span');
     count.className = 'count';
-    count.textContent = `${r.humans} kişi`;
-    btn.appendChild(count);
+    count.textContent = `${r.size || 5}v${r.size || 5} · ${r.humans} kişi`;
+    btn.append(count);
     btn.addEventListener('click', () => {
       els.room.value = r.code;
+      if (r.size) els.mode.value = String(r.size);
       els.room.focus();
     });
-    li.appendChild(btn);
+    li.append(btn);
     list.appendChild(li);
   }
 }
@@ -150,6 +200,7 @@ els.chatForm.addEventListener('submit', (e) => {
 
 els.btnShoot.addEventListener('touchstart', (e) => { input.shot = true; e.preventDefault(); }, { passive: false });
 els.btnPass.addEventListener('touchstart', (e) => { input.pass = true; e.preventDefault(); }, { passive: false });
+els.btnDash.addEventListener('touchstart', (e) => { input.dash = true; e.preventDefault(); }, { passive: false });
 
 function setStatus(s) {
   const map = {
@@ -171,6 +222,10 @@ function setStatus(s) {
   hud.setConn(s === 'online' ? 'Bağlı' : s === 'connecting' ? 'Bağlanıyor' : 'Koptu');
 }
 
+function teamName(t) {
+  return TEAM_COLORS[t]?.name || 'Takım';
+}
+
 function registerHandlers(n) {
   n.on('welcome', (m) => {
     myId = m.id;
@@ -179,6 +234,8 @@ function registerHandlers(n) {
     els.game.classList.remove('hidden');
     input.enabled = true;
     renderer = new Renderer(els.canvas);
+    renderer.setZoom(zoom);
+    hud.setZoomLabel(zoom);
     predicted = { x: PITCH_CENTER.x, y: PITCH_CENTER.y, vx: 0, vy: 0, fx: 0, tm: myTeam };
     hud.center(`Odaya katıldın: ${m.room}`, 2200);
     if (window.matchMedia('(pointer: coarse)').matches) {
@@ -198,18 +255,39 @@ function registerHandlers(n) {
     const me = m.players.find((p) => p.i === myId);
     if (me) {
       predictor.reconcile(me);
-      predicted = { ...predictor.state, tm: me.tm, sl: me.sl };
+      predicted = {
+        ...predictor.state,
+        tm: me.tm,
+        sl: me.sl,
+        ch: me.ch,
+        em: me.em,
+        eml: me.eml,
+        dsh: me.dsh,
+      };
     }
-    hud.setScore(m.score, m.tl, m.half, m.phase);
+    hud.setScore(m.score, m.tl, m.phase, m.golden, m.goldenLeft);
   });
 
   n.on('event', (m) => {
     if (m.kind === 'goal') {
-      hud.center(`⚽ GOL! ${m.team === 0 ? 'Mavi' : 'Kırmızı'} takımı`, 2500);
-    } else if (m.kind === 'halftime') {
-      hud.center('Devre arası — yönler değişiyor', 3200);
+      if (m.own) {
+        hud.center('😬 Kendi kaleye gol!', 2600);
+      } else if (m.golden) {
+        hud.center(`🏆 ALTIN GOL! ${m.by || teamName(m.team)}`, 3200);
+      } else {
+        hud.center(`⚽ GOL! ${m.by ? `${m.by} — ` : ''}${teamName(m.team)}`, 2400);
+      }
+    } else if (m.kind === 'golden') {
+      hud.center('⚡ ALTIN GOL — İlk golü atan kazanır', 4000);
     } else if (m.kind === 'end') {
-      hud.center('Maç bitti!', 8000);
+      const w = m.winner;
+      if (w === -1 || w === undefined || w === null) {
+        hud.center('Maç berabere', 8000);
+      } else if (w === myTeam) {
+        hud.center('🏆 Kazandın!', 8000);
+      } else {
+        hud.center('😞 Kaybettin', 8000);
+      }
       hud.showAgain();
     } else if (m.kind === 'restart') {
       hud.center('Yeni maç başlıyor', 2000);
@@ -235,6 +313,7 @@ let lastFrame = performance.now();
 let sendAcc = 0;
 let pendingShot = false;
 let pendingPass = false;
+let pendingDash = false;
 
 function loop(now) {
   requestAnimationFrame(loop);
@@ -244,6 +323,7 @@ function loop(now) {
   const inp = input.sample();
   pendingShot = pendingShot || inp.k;
   pendingPass = pendingPass || inp.p;
+  pendingDash = pendingDash || inp.d;
 
   predictor.step(dt, inp);
   if (predicted && predictor.state) {
@@ -256,10 +336,12 @@ function loop(now) {
   if (sendAcc >= 0.05) {
     sendAcc = 0;
     net?.send({
-      t: 'input', mx: inp.mx, my: inp.my, sp: inp.sp, k: pendingShot, p: pendingPass,
+      t: 'input', mx: inp.mx, my: inp.my, sp: inp.sp,
+      k: pendingShot, p: pendingPass, d: pendingDash,
     });
     pendingShot = false;
     pendingPass = false;
+    pendingDash = false;
   }
 
   renderer?.draw(now, myId, predicted);
