@@ -160,10 +160,34 @@ export class Renderer {
     ctx.strokeRect(0, (PITCH.h - gh) / 2, gd, gh);
     ctx.strokeRect(PITCH.w - gd, (PITCH.h - gh) / 2, gd, gh);
 
+    // Kale aglari: saha disina tasan kutu + ince ag cizgileri.
     const mh = GOAL.height;
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx.fillRect(-32, (PITCH.h - mh) / 2, 32, mh);
-    ctx.fillRect(PITCH.w, (PITCH.h - mh) / 2, 32, mh);
+    const md = 32;
+    const my = (PITCH.h - mh) / 2;
+    for (const side of [-1, 1]) {
+      const x = side < 0 ? -md : PITCH.w;
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      ctx.fillRect(x, my, md, mh);
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, my, md, mh);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 5; i++) {
+        const gx = x + (md / 5) * i;
+        ctx.beginPath();
+        ctx.moveTo(gx, my);
+        ctx.lineTo(gx, my + mh);
+        ctx.stroke();
+      }
+      for (let i = 1; i < 4; i++) {
+        const gy = my + (mh / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, gy);
+        ctx.lineTo(x + md, gy);
+        ctx.stroke();
+      }
+    }
   }
 
   drawPlayer(ctx, p, isMe) {
