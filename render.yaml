@@ -5,3 +5,12 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
+    autoDeploy: true
+    # Saglik kontrolu ana sayfa uzerinden yapilir (hub sunucusu PORT ortam degiskenini okur).
+    healthCheckPath: /
+    # Node surumu sabitlenir: Render'in varsayilani degisse sunucu bozulmasin.
+    envVars:
+      - key: NODE_VERSION
+        value: 22.x
+      - key: NODE_ENV
+        value: production
