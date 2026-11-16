@@ -5,7 +5,7 @@ import { Input } from './input.js';
 import { Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Predictor } from './predict.js';
-import { AVATARS, AVATAR_COUNT, TEAM_COLORS } from '../shared/constants.js';
+import { AVATARS, AVATAR_COUNT, TEAM_COLORS, PITCH } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -307,7 +307,7 @@ function registerHandlers(n) {
   });
 }
 
-const PITCH_CENTER = { x: 480, y: 300 };
+const PITCH_CENTER = { x: PITCH.w / 2, y: PITCH.h / 2 };
 
 let lastFrame = performance.now();
 let sendAcc = 0;

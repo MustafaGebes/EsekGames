@@ -5,7 +5,7 @@ import { PITCH, GOAL, PLAYER, BALL, TEAM_COLORS, AVATARS, EMOTES } from '../shar
 
 const INTERP_MS = 110;
 // Sahanın etrafındaki boşluk (kale arkası + masa çerçevesi) dünya biriminde.
-const MARGIN = 42;
+const MARGIN = 28;
 // Yakın kamerada kullanılan yakınlaştırma katsayısı.
 const ZOOM_NEAR = 1.45;
 
@@ -162,7 +162,7 @@ export class Renderer {
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(PITCH.w / 2, PITCH.h / 2, 90, 0, Math.PI * 2);
+    ctx.arc(PITCH.w / 2, PITCH.h / 2, PITCH.h * 0.165, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -170,19 +170,20 @@ export class Renderer {
     ctx.arc(PITCH.w / 2, PITCH.h / 2, 4, 0, Math.PI * 2);
     ctx.fill();
 
-    const pd = 150;
-    const ph = 320;
+    // Ceza sahasi ve kale sahasi: saha oranina gore olceklenir.
+    const pd = PITCH.w * 0.16;
+    const ph = PITCH.h * 0.54;
     ctx.strokeRect(0, (PITCH.h - ph) / 2, pd, ph);
     ctx.strokeRect(PITCH.w - pd, (PITCH.h - ph) / 2, pd, ph);
 
-    const gd = 55;
-    const gh = 220;
+    const gd = PITCH.w * 0.06;
+    const gh = PITCH.h * 0.41;
     ctx.strokeRect(0, (PITCH.h - gh) / 2, gd, gh);
     ctx.strokeRect(PITCH.w - gd, (PITCH.h - gh) / 2, gd, gh);
 
     // Kale aglari: saha disina tasan kutu + ince ag cizgileri.
     const mh = GOAL.height;
-    const md = 32;
+    const md = 30;
     const my = (PITCH.h - mh) / 2;
     for (const side of [-1, 1]) {
       const x = side < 0 ? -md : PITCH.w;

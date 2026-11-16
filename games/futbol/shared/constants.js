@@ -1,13 +1,13 @@
 // Sunucu ve istemci tarafından ortak kullanılan sabitler.
 // Bu dosya saf ESM olmalı (tarayıcıda da doğrudan import edilir).
 
-export const PITCH = { w: 960, h: 600 };
+export const PITCH = { w: 880, h: 540 };
 
 // Kale ağzı: dikeyde ortada, yükseklik GOAL.height
-export const GOAL = { height: 150 };
+export const GOAL = { height: 130 };
 
 export const PLAYER = {
-  r: 16,           // oyuncu yarıçapı
+  r: 19,           // oyuncu yarıçapı
   accel: 900,      // ivme (birim/s^2)
   maxSpeed: 190,   // temel maksimum hız
   friction: 0.88,  // tick başına hız çarpanı
@@ -19,7 +19,7 @@ export const PLAYER = {
 };
 
 export const BALL = {
-  r: 10,
+  r: 12,
   friction: 0.995,
   kickSpeed: 420,
   passSpeed: 320,
