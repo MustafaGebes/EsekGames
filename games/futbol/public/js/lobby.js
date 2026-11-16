@@ -24,7 +24,8 @@ export class Lobby {
       if (code) this.onJoinCode(code);
     });
     e.startNow?.addEventListener('click', () => this.onStartNow());
-    e.leave?.addEventListener('click', () => this.onLeave());
+    // Cikis butonu main.js icinde "leaveRoom" adiyla baglanir.
+    (e.leaveRoom ?? e.leave)?.addEventListener('click', () => this.onLeave());
   }
 
   // ---------------------------------------------------------------- menü
