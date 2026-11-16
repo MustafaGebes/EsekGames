@@ -31,9 +31,6 @@
         <button id="newRoomBtn" class="ghost" type="button">Rastgele</button>
       </div>
 
-      <label>Karakter</label>
-      <div id="avatarPick" class="avatar-pick"></div>
-
       <button id="playBtn" class="primary" type="button">Oyuna gir</button>
       <p id="lobbyStatus" class="status">Sunucuya bağlanılıyor…</p>
 
@@ -49,7 +46,6 @@
         <span><b>Boşluk</b> vur</span>
         <span><b>Shift</b> depar</span>
         <span><b>E</b> pas</span>
-        <span><b>1-6</b> ifade</span>
       </div>
       <p class="sub small">Süre bitince önde olan kazanır, beraberlikte altın gol oynanır.</p>
     </div>
@@ -58,13 +54,22 @@
   <!-- ------------------------------------------------------- OYUN -->
   <section id="game" class="screen game hidden">
     <header class="hud-top">
-      <div class="team t0"><span class="score" id="score0">0</span><span class="tname">Mavi</span></div>
-      <div class="mid">
-        <span id="timeLabel">1:30</span>
-        <span id="halfLabel">Maç</span>
+      <div class="team t0"><span class="tname">Mavi</span></div>
+      <div class="scorebox">
+        <div class="scoreline">
+          <span class="score s0" id="score0">0</span>
+          <span class="scoredash">-</span>
+          <span class="score s1" id="score1">0</span>
+        </div>
+        <div class="mid">
+          <span id="timeLabel">1:30</span>
+          <span id="halfLabel">Maç</span>
+        </div>
       </div>
-      <div class="team t1"><span class="tname">Kırmızı</span><span class="score" id="score1">0</span></div>
-      <button id="zoomBtn" class="chip" type="button">Kamera: Uzak</button>
+      <div class="hud-right">
+        <div class="team t1"><span class="tname">Kırmızı</span></div>
+        <button id="zoomBtn" class="chip" type="button">Kamera: Uzak</button>
+      </div>
     </header>
 
     <div class="canvas-wrap">
@@ -76,7 +81,6 @@
         <button id="againBtn" class="primary hidden" type="button">Yeniden oyna</button>
       </div>
       <div id="toast" class="toast hidden"></div>
-      <div class="emote-bar" id="emoteBar"></div>
     </div>
 
     <aside class="side">

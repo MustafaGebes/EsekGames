@@ -4,8 +4,8 @@ import { Net } from './net.js';
 import { Input } from './input.js';
 import { Renderer } from './render.js';
 import { Hud } from './hud.js';
-import { Predictor } from './predict.js';
-import { AVATARS, AVATAR_COUNT, TEAM_COLORS, PITCH } from '../shared/constants.js';
+import { Predictor } from '../shared/predictor.js';
+import { TEAM_COLORS, PITCH } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,7 +15,6 @@ const els = {
   name: $('nameInput'),
   room: $('roomInput'),
   mode: $('modeSelect'),
-  avatarPick: $('avatarPick'),
   play: $('playBtn'),
   newRoom: $('newRoomBtn'),
   status: $('lobbyStatus'),
@@ -34,10 +33,9 @@ const els = {
 };
 
 const hud = new Hud();
-const input = new Input((i) => sendEmote(i));
+const input = new Input();
 const predictor = new Predictor();
 input.bind();
-hud.buildEmoteBar((i) => sendEmote(i));
 
 let net = null;
 let renderer = null;
@@ -47,7 +45,6 @@ let pendingJoin = null;
 let predicted = null;
 let loopStarted = false;
 let zoom = localStorage.getItem('futbol.zoom') === 'near' ? 'near' : 'far';
-let myChar = Math.min(AVATAR_COUNT - 1, Math.max(0, Number(localStorage.getItem('futbol.char')) || 0));
 
 // Oyun EsekGames icinde /games/futbol/ altinda ya da tek basina (kok dizinde)
 // calisabilir. WebSocket ve API yollari sayfanin konumundan turetilir.
@@ -68,37 +65,6 @@ function wsUrl() {
 function randomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
-// ------------------------------------------------------------------ karakter secimi
-
-function buildAvatarPicker() {
-  const wrap = els.avatarPick;
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  for (let i = 0; i < AVATAR_COUNT; i++) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'avatar-btn';
-    if (i === myChar) btn.classList.add('sel');
-    btn.textContent = AVATARS[i];
-    btn.addEventListener('click', () => {
-      myChar = i;
-      localStorage.setItem('futbol.char', String(myChar));
-      for (const b of wrap.children) b.classList.remove('sel');
-      btn.classList.add('sel');
-    });
-    wrap.appendChild(btn);
-  }
-}
-
-buildAvatarPicker();
-
-// ------------------------------------------------------------------ ifade gonderimi
-
-function sendEmote(index) {
-  if (index === undefined || index === null) return;
-  net?.send({ t: 'emote', e: index });
 }
 
 // ------------------------------------------------------------------ baglanti
@@ -126,7 +92,7 @@ els.play.addEventListener('click', () => {
   const mode = Number(els.mode?.value) || 5;
 
   ensureNet();
-  pendingJoin = { nm, room, md: mode, ch: myChar };
+  pendingJoin = { nm, room, md: mode };
   if (net.status === 'online') {
     net.send({ t: 'join', ...pendingJoin });
     pendingJoin = null;
@@ -258,11 +224,10 @@ function registerHandlers(n) {
       predictor.reconcile(me);
       predicted = {
         ...predictor.state,
+        x: predictor.renderX,
+        y: predictor.renderY,
         tm: me.tm,
         sl: me.sl,
-        ch: me.ch,
-        em: me.em,
-        eml: me.eml,
         dsh: me.dsh,
       };
     }
@@ -272,22 +237,22 @@ function registerHandlers(n) {
   n.on('event', (m) => {
     if (m.kind === 'goal') {
       if (m.own) {
-        hud.center('😬 Kendi kaleye gol!', 2600);
+        hud.center('Kendi kaleye gol!', 2600);
       } else if (m.golden) {
-        hud.center(`🏆 ALTIN GOL! ${m.by || teamName(m.team)}`, 3200);
+        hud.center(`ALTIN GOL! ${m.by || teamName(m.team)}`, 3200);
       } else {
-        hud.center(`⚽ GOL! ${m.by ? `${m.by} — ` : ''}${teamName(m.team)}`, 2400);
+        hud.center(`GOL! ${m.by ? `${m.by} — ` : ''}${teamName(m.team)}`, 2400);
       }
     } else if (m.kind === 'golden') {
-      hud.center('⚡ ALTIN GOL — İlk golü atan kazanır', 4000);
+      hud.center('ALTIN GOL — İlk golü atan kazanır', 4000);
     } else if (m.kind === 'end') {
       const w = m.winner;
       if (w === -1 || w === undefined || w === null) {
         hud.center('Maç berabere', 8000);
       } else if (w === myTeam) {
-        hud.center('🏆 Kazandın!', 8000);
+        hud.center('Kazandın!', 8000);
       } else {
-        hud.center('😞 Kaybettin', 8000);
+        hud.center('Kaybettin', 8000);
       }
       hud.showAgain();
     } else if (m.kind === 'restart') {
@@ -328,13 +293,16 @@ function loop(now) {
 
   predictor.step(dt, inp);
   if (predicted && predictor.state) {
-    predicted.x = predictor.state.x;
-    predicted.y = predictor.state.y;
+    // Ekranda cizilen konum: mantiksal konum + yumusak gorsel ofset.
+    predicted.x = predictor.renderX;
+    predicted.y = predictor.renderY;
     predicted.fx = predictor.state.fx;
   }
 
   sendAcc += dt;
-  if (sendAcc >= 0.05) {
+  // Depar istegi beklemeden gonderilir: sunucu ile istemci arasindaki
+  // gecikme kucultulur, depar daha akici baslar.
+  if (sendAcc >= 0.05 || pendingDash) {
     sendAcc = 0;
     net?.send({
       t: 'input', mx: inp.mx, my: inp.my, sp: inp.sp,

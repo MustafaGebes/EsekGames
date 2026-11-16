@@ -14,9 +14,9 @@ import { WebSocketServer } from 'ws';
 import { RoomManager } from './rooms.js';
 import {
   safeJson, sanitizeName, sanitizeChat, sanitizeRoom, sanitizeInput,
-  sanitizeChar, sanitizeMode,
+  sanitizeMode,
 } from './net.js';
-import { TICK, EMOTES } from '../shared/constants.js';
+import { TICK } from '../shared/constants.js';
 
 export function createFootball({ mountPath = '' } = {}) {
   const manager = new RoomManager();
@@ -74,7 +74,6 @@ export function createFootball({ mountPath = '' } = {}) {
       case 'join': {
         if (ws.meta.room) return;
         const name = sanitizeName(msg.nm);
-        const char = sanitizeChar(msg.ch);
         const mode = sanitizeMode(msg.md);
         const code = sanitizeRoom(msg.room) || manager.randomCode();
         const room = manager.ensure(code, mode);
@@ -84,7 +83,7 @@ export function createFootball({ mountPath = '' } = {}) {
           return;
         }
 
-        const p = room.addHuman(name, char);
+        const p = room.addHuman(name);
         if (!p) {
           send(ws, { t: 'error', msg: 'Odaya alinamadi.' });
           return;
@@ -97,7 +96,7 @@ export function createFootball({ mountPath = '' } = {}) {
         send(ws, {
           t: 'welcome', id: p.id, room: room.code, team: p.team,
           tickHz: TICK.hz, snapHz: TICK.snapHz,
-          size: room.teamSize, char: p.char,
+          size: room.teamSize,
         });
         send(ws, { t: 'roster', players: room.roster() });
         send(ws, room.snapshot());
@@ -114,16 +113,6 @@ export function createFootball({ mountPath = '' } = {}) {
         p.input = sanitizeInput(msg);
         // Depar (kayma) istegi: tick'e kadar kaybolmaması için ayrica isaretlenir.
         if (p.input.d) p.dashQueued = true;
-        break;
-      }
-
-      case 'emote': {
-        const room = roomOf(ws);
-        if (!room) return;
-        const p = room.players.get(ws.meta.id);
-        if (!p) return;
-        if (!room.setEmote(p, msg.e)) return;
-        broadcast(room, { t: 'event', kind: 'emote', i: p.id, e: p.emote });
         break;
       }
 

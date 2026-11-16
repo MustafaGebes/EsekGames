@@ -3,6 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { Room } from '../server/game.js';
+import { Predictor } from '../shared/predictor.js';
 import { PITCH, GOAL, PHASE, TEAM_SIZE, PLAYER } from '../shared/constants.js';
 
 let passed = 0;
@@ -172,27 +173,49 @@ check('pas topu arkadaşına doğru gönderir', () => {
   assert.ok(room.ball.vx > 100, `pas topu göndermedi: vx=${room.ball.vx}`);
 });
 
-check('depar oyuncuyu hızlandırır ve bekleme uygular', () => {
+check('depar hizi ANLIK atanmaz, ivme rampasiyla artar', () => {
   const { room, human } = soloRoom('TEST14');
   room.phase = PHASE.play;
   human.x = 400; human.y = 300; human.vx = 0; human.vy = 0; human.fx = 0;
   human.input.d = true;
   room.step(1 / 30);
-  assert.ok(human.vx > PLAYER.maxSpeed * 1.5, `depar olmadı: vx=${human.vx}`);
-  assert.ok(human.dashCd > 0, 'depar bekleme süresi işlenmedi');
+  // Ilk karede hiz anlika dashSpeed olmamali (takilma yapmaz).
+  assert.ok(human.vx > 0, 'depar baslamadi');
+  assert.ok(human.vx < PLAYER.dashSpeed * 0.5, `hiz anlik atandi: vx=${human.vx}`);
+  assert.ok(human.dashCd > 0, 'depar bekleme suresi islenmedi');
+  // Rampa devam eder: birkac karede yuksek hiza ulasir.
+  for (let i = 0; i < 6; i++) room.step(1 / 30);
+  assert.ok(human.vx > PLAYER.maxSpeed * 1.5, `depar hizi artmadi: vx=${human.vx}`);
+  assert.ok(human.vx <= PLAYER.dashSpeed + 1, `hiz siniri asildi: vx=${human.vx}`);
 });
 
-check('depar bekleme süresi dolmadan ikinci depar olmaz', () => {
+check('depar bittikten sonra hiz yumusak yavaslar (sert kesme yok)', () => {
+  const { room, human } = soloRoom('TEST23');
+  room.phase = PHASE.play;
+  human.x = 400; human.y = 300; human.vx = 0; human.vy = 0; human.fx = 0;
+  human.input.d = true;
+  const dashFrames = Math.ceil(PLAYER.dashTime * 30);
+  for (let i = 0; i < dashFrames; i++) room.step(1 / 30);
+  const peak = Math.hypot(human.vx, human.vy);
+  assert.ok(peak > PLAYER.maxSpeed * 1.5, `depar hizi dusuk: ${peak}`);
+  room.step(1 / 30);
+  const after = Math.hypot(human.vx, human.vy);
+  assert.ok(after < peak, `hiz artmamali: ${peak} -> ${after}`);
+  assert.ok(after > PLAYER.maxSpeed, `hiz sert kesildi: ${peak} -> ${after}`);
+});
+
+check('depar bekleme suresi dolmadan ikinci depar olmaz', () => {
   const { room, human } = soloRoom('TEST18');
   room.phase = PHASE.play;
   human.x = 400; human.y = 300; human.vx = 0; human.vy = 0; human.fx = 0;
   human.input.d = true;
   room.step(1 / 30);
-  const first = human.vx;
-  human.vx = 0; human.vy = 0;
+  const cdAfterFirst = human.dashCd;
+  assert.ok(cdAfterFirst > 0, 'depar bekleme suresi islenmedi');
+  // Ikinci depar denemesi bekleme suresini yeniden baslatmamali.
   human.input.d = true;
   room.step(1 / 30);
-  assert.ok(human.vx < first * 0.5, `depar tekrar tetiklendi: vx=${human.vx}`);
+  assert.ok(human.dashCd < cdAfterFirst, `bekleme suresi yeniden basladi: ${human.dashCd} >= ${cdAfterFirst}`);
 });
 
 check('süre bitince beraberlikte altın gol oynanır', () => {
@@ -249,13 +272,16 @@ check('altın gol süresi biterse maç berabere biter', () => {
   assert.equal(end.winner, -1);
 });
 
-check('ifade (emote) kaydedilir', () => {
+check('roster ve snapshot emote/avatar alani icermez', () => {
   const room = new Room('TEST15');
-  const p = [...room.players.values()][0];
-  assert.equal(room.setEmote(p, 2), true);
-  assert.equal(p.emote, 2);
-  assert.ok(p.emoteUntil > Date.now());
-  assert.equal(room.setEmote(p, 99), false);
+  const r = room.roster()[0];
+  assert.equal(r.ch, undefined, 'rosterda avatar alani var');
+  assert.equal(r.em, undefined, 'rosterda emote alani var');
+  const s = room.snapshot().players[0];
+  assert.equal(s.ch, undefined, 'snapshotta avatar alani var');
+  assert.equal(s.em, undefined, 'snapshotta emote alani var');
+  assert.equal(s.eml, undefined, 'snapshotta emote sure alani var');
+  assert.equal(typeof s.dsh, 'number', 'depar bar alani korunmali');
 });
 
 check('snapshot oyuncu sayısı maç oyuncu sayısıyla eşit', () => {
@@ -276,6 +302,26 @@ check('yeni maç skoru ve süreyi sıfırlar', () => {
   assert.equal(room.golden, false);
   assert.equal(room.timeLeft, 90);
   assert.equal(room.phase, PHASE.kickoff);
+});
+
+check('tahmin duzeltmesi anlik ziplama yapmaz (gorsel ofset)', () => {
+  const pr = new Predictor();
+  pr.reset({ x: 100, y: 100, vx: 0, vy: 0, fx: 0 });
+  const beforeX = pr.renderX;
+  // Sunucu 10 px ileride bildiriyor.
+  pr.reconcile({ x: 110, y: 100, vx: 0, vy: 0, fx: 0 });
+  assert.equal(pr.renderX, beforeX, 'gorsel konum anlik degismemeli');
+  assert.ok(pr.state.x > 100, 'mantiksal konum duzeltilmedi');
+  // Ofset sonumlenir: gorsel konum mantiksal konuma yaklasir.
+  for (let i = 0; i < 30; i++) pr.step(1 / 60, { mx: 0, my: 0 });
+  assert.ok(Math.abs(pr.renderX - pr.state.x) < 1, 'gorsel ofset sonumlenmedi');
+});
+
+check('buyuk konum hatasinda aninda duzeltme (snap) yapilir', () => {
+  const pr = new Predictor();
+  pr.reset({ x: 100, y: 100, vx: 0, vy: 0, fx: 0 });
+  pr.reconcile({ x: 400, y: 100, vx: 0, vy: 0, fx: 0 });
+  assert.equal(pr.renderX, 400, 'buyuk hata duzeltilmedi');
 });
 
 console.log(`\n${passed} test geçti.`);

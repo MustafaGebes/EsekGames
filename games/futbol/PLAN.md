@@ -225,10 +225,11 @@ Kaynaklar: [render.com/docs/free](https://render.com/docs/free), [Render changel
 ---
 
 ## 11. V2'ye bırakılanlar (şimdi yapma)
-Bu turda **tamamlananlar** (Aniball güncellemesiyle): takım renkleri + oyuncu isimleri ve
-avatar rozetleri, emote sistemi (1-6 tuş + alt butonlar + balon), depar (kayma) hareketi
-ve bekleme sayacı, mobil joystick + VUR/DEPAR/PAS butonları, 1v1-5v5 mod seçimi,
-kendi kaleye gol tespiti, gol atanlar tablosu, kamera uzak/yakın geçişi.
+Bu turda **tamamlananlar** (Aniball güncellemesiyle): takım renkleri + oyuncu isimleri,
+depar (kayma) hareketi ve bekleme sayacı, mobil joystick + VUR/DEPAR/PAS butonları,
+1v1-5v5 mod seçimi, kendi kaleye gol tespiti, gol atanlar tablosu, kamera uzak/yakın geçişi.
+Sonraki turda avatar rozetleri ve emote sistemi (1-6 tuş + alt butonlar + balon) **kaldırıldı**:
+oyuncular artık sadece mavi/kırmızı renkli daire, skor paneli ortada.
 
 Kalanlar:
 - Skill sistemi (şut gücü, kalecilik) — sunucu tarafı sayaç

@@ -3,7 +3,7 @@
 
 import {
   PITCH, GOAL, PLAYER, BALL, MATCH, TEAM_SIZE, MIN_TEAM_SIZE, FORMATIONS,
-  PHASE, BOT_NAMES, EMOTES, EMOTE_MS,
+  PHASE, BOT_NAMES,
 } from '../shared/constants.js';
 import { applyInput } from '../shared/movement.js';
 
@@ -91,8 +91,9 @@ export class Room {
     return name;
   }
 
-  makePlayer({ name, team, slot, bot, char = 0 }) {
+  makePlayer({ name, team, slot, bot }) {
     const sp = this.spots(team)[slot];
+    const fx = team === 0 ? 0 : Math.PI;
     return {
       id: nextPlayerId++,
       name,
@@ -100,20 +101,18 @@ export class Room {
       slot,
       bot,
       role: sp.role,
-      char: clampInt(char, 0, 7),
       x: sp.x, y: sp.y, vx: 0, vy: 0,
-      fx: team === 0 ? 0 : Math.PI,
+      fx,
       kickCd: 0,
       dashCd: 0,
       dashLeft: 0,
-      emote: -1,
-      emoteUntil: 0,
+      dashDirX: Math.cos(fx),
+      dashDirY: Math.sin(fx),
       goals: 0,
       input: { mx: 0, my: 0, sp: false, k: false, p: false, d: false },
       dashQueued: false,
       target: { x: sp.x, y: sp.y },
       think: Math.random() * 0.2,
-      emoteAt: Date.now() + 6000 + Math.random() * 14000,
       anim: Math.random() * 6,
     };
   }
@@ -128,7 +127,7 @@ export class Room {
     }));
   }
 
-  addHuman(name, char = 0) {
+  addHuman(name) {
     const counts = this.humanCounts();
     const team = counts[0] <= counts[1] ? 0 : 1;
     // Once saha slotlarini tercih et; kaleci slotu en sona kalir.
@@ -146,7 +145,7 @@ export class Room {
     const botId = this.slots[team][slot];
     this.players.delete(botId);
 
-    const p = this.makePlayer({ name, team, slot, bot: false, char });
+    const p = this.makePlayer({ name, team, slot, bot: false });
     this.players.set(p.id, p);
     this.slots[team][slot] = p.id;
     this.lastHumanAt = Date.now();
@@ -168,16 +167,6 @@ export class Room {
     this.slots[p.team][p.slot] = bot.id;
     this.resetKickoff();
     return p;
-  }
-
-  // ---------------------------------------------------------------- ifadeler
-
-  setEmote(player, index) {
-    const e = Math.round(Number(index));
-    if (!Number.isFinite(e) || e < 0 || e >= EMOTES.length) return false;
-    player.emote = e;
-    player.emoteUntil = Date.now() + EMOTE_MS;
-    return true;
   }
 
   // ---------------------------------------------------------------- maç akışı
@@ -202,6 +191,8 @@ export class Room {
       p.kickCd = 0;
       p.dashCd = 0;
       p.dashLeft = 0;
+      p.dashDirX = Math.cos(p.fx || 0);
+      p.dashDirY = Math.sin(p.fx || 0);
       p.input.mx = 0; p.input.my = 0; p.input.k = false; p.input.p = false; p.input.d = false;
       p.dashQueued = false;
       p.target.x = sp.x; p.target.y = sp.y;
@@ -449,11 +440,6 @@ export class Room {
     }
 
     // Ara sıra ifade gönder.
-    if (Date.now() > p.emoteAt) {
-      p.emoteAt = Date.now() + 9000 + Math.random() * 16000;
-      this.setEmote(p, Math.floor(Math.random() * EMOTES.length));
-    }
-
     if ((this.phase === PHASE.play || this.phase === PHASE.golden)
         && bd < PLAYER.r + BALL.r + 10) {
       const dir = this.attackDir(p.team);
@@ -494,7 +480,7 @@ export class Room {
   roster() {
     return [...this.players.values()].map((p) => ({
       i: p.id, nm: p.name, tm: p.team, bot: p.bot, role: p.role,
-      ch: p.char, g: p.goals,
+      g: p.goals,
     }));
   }
 
@@ -505,9 +491,6 @@ export class Room {
       players.push({
         i: p.id, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy),
         tm: p.team, fx: r1(p.fx), an: r1(p.anim), sl: p.slot,
-        ch: p.char,
-        em: p.emote,
-        eml: Math.max(0, p.emoteUntil - now),
         dsh: Math.max(0, 1 - p.dashCd / PLAYER.dashCd),
       });
     }

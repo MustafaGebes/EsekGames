@@ -12,10 +12,14 @@ export const PLAYER = {
   maxSpeed: 190,   // temel maksimum hız
   friction: 0.88,  // tick başına hız çarpanı
   kickCd: 0.26,    // vuruş arası bekleme (saniye)
-  dashSpeed: 520,  // depar (kayma) hızı
-  dashCd: 2.5,     // depar arası bekleme (saniye)
-  dashTime: 0.22,  // depar sürüş süresi (saniye)
-  dashFriction: 0.97,
+  // Depar (kayma): hız ANLIK atanmaz, ivme rampasıyla yumuşakça yükselir.
+  dashSpeed: 430,    // depar hedef hızı
+  dashAccel: 2000,   // depar ivmesi (birim/s^2)
+  dashCd: 2.2,       // depar arası bekleme (saniye)
+  dashTime: 0.34,    // depar sürüş süresi (saniye)
+  // Depar bittikten sonra hız sert kesilmez, kademeli olarak yavaşlar.
+  recoverFriction: 0.96,
+  decel: 420,        // yumuşak hız sınırı (birim/s^2)
 };
 
 export const BALL = {
@@ -75,22 +79,6 @@ export const PHASE = {
   golden: 'golden',   // beraberlik sonrası altın gol
   end: 'end',
 };
-
-// Aniball tarzı ifadeler: 1-6 tuşları ve alt butonlar.
-export const EMOTES = [
-  { key: '1', emoji: '😂', label: 'Kahkaha' },
-  { key: '2', emoji: '🔥', label: 'Ateş' },
-  { key: '3', emoji: '💪', label: 'Güç' },
-  { key: '4', emoji: '😭', label: 'Ağla' },
-  { key: '5', emoji: '😡', label: 'Sinir' },
-  { key: '6', emoji: '👋', label: 'Selam' },
-];
-
-export const EMOTE_MS = 3000;
-
-// Karakter (avatar) seçimi.
-export const AVATARS = ['🐱', '🐶', '🐯', '🦊', '🐻', '🐼', '🐸', '🐷'];
-export const AVATAR_COUNT = AVATARS.length;
 
 export const TEAM_COLORS = {
   0: { main: '#38bdf8', dark: '#0ea5e9', name: 'Mavi' },

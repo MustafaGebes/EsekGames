@@ -1,6 +1,6 @@
 // DOM üzerindeki HUD (skor, süre, takım şeritleri, oyuncu listesi, chat, ping).
 
-import { TEAM_COLORS, AVATARS, EMOTES } from '../shared/constants.js';
+import { TEAM_COLORS } from '../shared/constants.js';
 
 export class Hud {
   constructor() {
@@ -13,7 +13,6 @@ export class Hud {
       scorers: document.getElementById('scorerList'),
       strip0: document.getElementById('strip0'),
       strip1: document.getElementById('strip1'),
-      emoteBar: document.getElementById('emoteBar'),
       zoomBtn: document.getElementById('zoomBtn'),
       chatLog: document.getElementById('chatLog'),
       ping: document.getElementById('pingVal'),
@@ -25,25 +24,6 @@ export class Hud {
     };
     this.centerTimer = null;
     this.toastTimer = null;
-    this.onEmote = null;
-  }
-
-  // ------------------------------------------------------------ ifade butonlari
-
-  buildEmoteBar(onEmote) {
-    this.onEmote = onEmote;
-    const bar = this.el.emoteBar;
-    if (!bar) return;
-    bar.innerHTML = '';
-    for (const em of EMOTES) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'emote-btn';
-      btn.title = `${em.label} (${em.key})`;
-      btn.textContent = em.emoji;
-      btn.addEventListener('click', () => this.onEmote?.(EMOTES.indexOf(em)));
-      bar.appendChild(btn);
-    }
   }
 
   // ------------------------------------------------------------ skor / süre
@@ -77,8 +57,7 @@ export class Hud {
       for (const p of players) {
         const li = document.createElement('li');
         const me = p.i === myId ? ' (sen)' : '';
-        const avatar = AVATARS[p.ch] || '';
-        li.innerHTML = `<span class="av">${avatar}</span><span class="dot t${p.tm}"></span>`
+        li.innerHTML = `<span class="dot t${p.tm}"></span>`
           + `<span class="nm">${escapeHtml(p.nm)}${me}</span>`
           + `<span class="role">${p.bot ? 'BOT' : p.role}</span>`;
         list.appendChild(li);
@@ -98,8 +77,8 @@ export class Hud {
         badge.className = 'badge';
         if (p.i === myId) badge.classList.add('me');
         badge.style.borderColor = TEAM_COLORS[tm]?.main || '#fff';
+        badge.style.background = TEAM_COLORS[tm]?.main || '#1a2a44';
         badge.title = p.nm;
-        badge.textContent = AVATARS[p.ch] || '';
         if (p.g > 0) {
           const g = document.createElement('i');
           g.className = 'g';
@@ -126,7 +105,7 @@ export class Hud {
       for (const p of list2) {
         const li = document.createElement('li');
         const me = p.i === myId ? ' (sen)' : '';
-        li.innerHTML = `<span class="av">${AVATARS[p.ch] || ''}</span>`
+        li.innerHTML = `<span class="dot t${p.tm}"></span>`
           + `<span class="nm">${escapeHtml(p.nm)}${me}</span>`
           + `<span class="gcount">${p.g}</span>`;
         sc.appendChild(li);

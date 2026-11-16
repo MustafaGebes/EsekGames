@@ -1,6 +1,6 @@
 // Gelen mesajların doğrulanması ve temizlenmesi (güvenlik sınırı).
 
-import { AVATAR_COUNT, MIN_TEAM_SIZE, TEAM_SIZE } from '../shared/constants.js';
+import { MIN_TEAM_SIZE, TEAM_SIZE } from '../shared/constants.js';
 
 export function sanitizeName(n) {
   if (typeof n !== 'string') return 'Oyuncu';
@@ -19,13 +19,6 @@ export function sanitizeChat(m) {
 export function sanitizeRoom(c) {
   if (typeof c !== 'string') return '';
   return c.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-}
-
-// Karakter (avatar) indeksi: 0..AVATAR_COUNT-1
-export function sanitizeChar(c) {
-  const n = Math.round(Number(c));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return n > AVATAR_COUNT - 1 ? AVATAR_COUNT - 1 : n;
 }
 
 // Maç modu (takım başına oyuncu sayısı): 1..TEAM_SIZE

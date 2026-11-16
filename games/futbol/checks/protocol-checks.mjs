@@ -8,23 +8,27 @@ import WebSocket from 'ws';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const WS_URL = BASE.replace(/^http/, 'ws') + '/ws';
 
-function connect(name, room, md, ch) {
+function connect(name, room, md) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
     const c = {
       ws, id: null, room: null, team: null, snapshots: 0, roster: null,
-      events: [], chats: [], last: null, errors: [], size: null, char: null,
+      events: [], chats: [], last: null, errors: [], size: null, maxVx: 0,
     };
     const timer = setTimeout(() => reject(new Error(`${name}: welcome gelmedi`)), 8000);
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', nm: name, room, md, ch })));
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', nm: name, room, md })));
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
       if (m.t === 'welcome') {
         clearTimeout(timer);
         c.id = m.id; c.room = m.room; c.team = m.team;
-        c.size = m.size; c.char = m.char;
+        c.size = m.size;
         resolve(c);
-      } else if (m.t === 'snapshot') { c.snapshots++; c.last = m; } else if (m.t === 'roster') { c.roster = m.players; } else if (m.t === 'event') { c.events.push(m); } else if (m.t === 'chat') { c.chats.push(m); } else if (m.t === 'error') { c.errors.push(m); }
+      } else if (m.t === 'snapshot') {
+        c.snapshots++; c.last = m;
+        const me = m.players.find((p) => p.i === c.id);
+        if (me && Math.abs(me.vx) > c.maxVx) c.maxVx = Math.abs(me.vx);
+      } else if (m.t === 'roster') { c.roster = m.players; } else if (m.t === 'event') { c.events.push(m); } else if (m.t === 'chat') { c.chats.push(m); } else if (m.t === 'error') { c.errors.push(m); }
     });
     ws.on('error', reject);
   });
@@ -122,26 +126,45 @@ await check('ayrılınca roster güncellenir', async () => {
   const b = await connect('Kalan', 'TESTLEAVE');
   await sleep(400);
   a.ws.close();
-  await sleep(600);
-  const names = (b.roster || []).map((p) => p.nm);
-  assert.ok(!names.includes('Ayrilan'), 'ayrılan oyuncu listede kaldı');
-  assert.ok(names.includes('Kalan'), 'kalan oyuncu listede yok');
+  // Roster mesaji ag gecikmesine bagli; sabit bekleme yerine poll'lu beklenir.
+  let ok = false;
+  for (let i = 0; i < 40; i++) {
+    await sleep(150);
+    const names = (b.roster || []).map((p) => p.nm);
+    if (!names.includes('Ayrilan') && names.includes('Kalan')) { ok = true; break; }
+  }
+  assert.ok(ok, 'ayrılan oyuncu listede kaldı');
   b.ws.close();
 });
 
-await check('ifade (emote) mesajı diğer istemciye ulaşır', async () => {
-  const a = await connect('Ifadeci', 'TESTEMOTE');
-  const b = await connect('Izleyici', 'TESTEMOTE');
+await check('depar (dash) oyuncuyu hızlandırır', async () => {
+  const a = await connect('Deparci', 'TESTDASH');
   await sleep(400);
-  a.ws.send(JSON.stringify({ t: 'emote', e: 3 }));
+  for (let i = 0; i < 12; i++) {
+    a.ws.send(JSON.stringify({ t: 'input', mx: 1, my: 0, sp: false, k: false, p: false, d: i === 0 }));
+    await sleep(50);
+  }
   await sleep(500);
-  const ev = b.events.find((e) => e.kind === 'emote');
-  assert.ok(ev, 'emote olayı ulaşmadı');
-  assert.equal(ev.e, 3);
-  const me = (b.last?.players || []).find((p) => p.i === a.id);
-  assert.equal(me.em, 3, 'snapshot emote alanı yanlış');
+  assert.ok(a.maxVx > 190, `depar hızı görünmedi: maxVx=${a.maxVx}`);
+  assert.ok(a.maxVx <= 431, `hız sınırı aşıldı: maxVx=${a.maxVx}`);
   a.ws.close();
-  b.ws.close();
+});
+
+await check('roster ve snapshot emote/avatar alanı içermez', async () => {
+  const a = await connect('SadeAlan', 'TESTCLEAN');
+  await sleep(500);
+  const roster = a.roster || [];
+  assert.ok(roster.length > 0, 'roster bos');
+  for (const p of roster) {
+    assert.equal(p.ch, undefined, 'rosterda avatar alanı var');
+    assert.equal(p.em, undefined, 'rosterda emote alanı var');
+  }
+  const me = (a.last?.players || []).find((p) => p.i === a.id);
+  assert.ok(me, 'snapshotta oyuncu yok');
+  assert.equal(me.ch, undefined, 'snapshotta avatar alanı var');
+  assert.equal(me.em, undefined, 'snapshotta emote alanı var');
+  assert.equal(me.eml, undefined, 'snapshotta emote süresi alanı var');
+  a.ws.close();
 });
 
 await check('maç modu (1v1) oda boyutunu belirler', async () => {
@@ -152,17 +175,6 @@ await check('maç modu (1v1) oda boyutunu belirler', async () => {
   a.ws.close();
 });
 
-await check('karakter (avatar) seçimi aktarılır', async () => {
-  const a = await connect('Kaplı', 'TESTCHAR', 5, 4);
-  await sleep(300);
-  assert.equal(a.char, 4);
-  const roster = a.roster || [];
-  const me = roster.find((p) => p.i === a.id);
-  assert.ok(me, 'rosterde oyuncu yok');
-  assert.equal(me.ch, 4);
-  a.ws.close();
-});
-
 await check('istek gövdesi bozuksa sunucu çökmez', async () => {
   const ws = new WebSocket(WS_URL);
   await new Promise((res) => ws.on('open', res));
@@ -170,6 +182,7 @@ await check('istek gövdesi bozuksa sunucu çökmez', async () => {
   ws.send(JSON.stringify({ t: 'input', mx: 9999, my: -9999 }));
   ws.send(JSON.stringify({ t: 'bilinmeyen' }));
   ws.send(JSON.stringify({ t: 'emote', e: 999 }));
+  ws.send(JSON.stringify({ t: 'join', nm: 'X', room: 'ZZ', ch: 99 }));
   await sleep(300);
   assert.equal(ws.readyState, WebSocket.OPEN, 'bağlantı kapandı');
   ws.close();

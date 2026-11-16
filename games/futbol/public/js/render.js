@@ -1,7 +1,7 @@
 // Canvas çizimi: sabit kamera - tüm saha tek ekranda görünür (kaydırma yok).
-// Aniball tarzı detaylar: avatar rozetleri, "Sen" işareti, ifade balonu, depar barı.
+// Oyuncular sadece takım rengi daire olarak çizilir (avatar/resim yok).
 
-import { PITCH, GOAL, PLAYER, BALL, TEAM_COLORS, AVATARS, EMOTES } from '../shared/constants.js';
+import { PITCH, GOAL, PLAYER, BALL, TEAM_COLORS } from '../shared/constants.js';
 
 const INTERP_MS = 110;
 // Sahanın etrafındaki boşluk (kale arkası + masa çerçevesi) dünya biriminde.
@@ -213,37 +213,37 @@ export class Renderer {
 
   drawPlayer(ctx, p, isMe) {
     const info = this.roster.get(p.i);
-    const color = TEAM_COLORS[p.tm]?.main || '#ffffff';
+    const team = TEAM_COLORS[p.tm] || {};
+    const color = team.main || '#ffffff';
+    const dark = team.dark || color;
 
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(p.x + 2, p.y + 5, PLAYER.r, PLAYER.r * 0.6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Govde: takim rengi daire.
+    // Govde: takim rengi daire (avatar/resim yok).
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, PLAYER.r, 0, Math.PI * 2);
     ctx.fill();
 
+    // Ic koyu halka: daireyi daha belirgin gosterir.
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, PLAYER.r - 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+
     // Yone bakan nokta.
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.fx || 0);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
     ctx.arc(PLAYER.r * 0.45, 0, PLAYER.r * 0.3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-
-    // Karakter (avatar) rozeti.
-    const ch = info?.ch;
-    if (ch !== undefined && AVATARS[ch]) {
-      ctx.font = '17px "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(AVATARS[ch], p.x, p.y + 1);
-    }
 
     ctx.strokeStyle = isMe ? '#ffffff' : 'rgba(0,0,0,0.45)';
     ctx.lineWidth = isMe ? 3.5 : 2;
@@ -291,31 +291,6 @@ export class Renderer {
       ctx.fillStyle = '#ffffff';
       ctx.fillText(name, p.x, ty);
     }
-
-    // Ifade balonu.
-    if (typeof p.eml === 'number' && p.eml > 0 && p.em >= 0 && EMOTES[p.em]) {
-      this.drawEmote(ctx, p.x, p.y - PLAYER.r - 30, EMOTES[p.em].emoji);
-    }
-  }
-
-  drawEmote(ctx, x, y, emoji) {
-    ctx.font = '18px "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const w = 26;
-    const h = 26;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.beginPath();
-    if (ctx.roundRect) {
-      ctx.roundRect(x - w / 2, y - h / 2, w, h, 8);
-    } else {
-      ctx.rect(x - w / 2, y - h / 2, w, h);
-    }
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillText(emoji, x, y + 1);
   }
 
   drawBall(ctx, ball) {

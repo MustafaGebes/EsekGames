@@ -11,7 +11,7 @@ HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + R
 - 30 Hz fizik, 20 Hz snapshot, yerel tahmin (prediction) + interpolasyon
 - **Sabit kamera**: tüm saha tek ekranda görünür (kaydırma yok, Aniball tarzı), sahanın etrafında masa çerçevesi
 - Tek devre 90 saniye: süre bitince **önde olan kazanır**, beraberlikte **altın gol** oynanır
-- **Depar** (Shift), **ifadeler** (1-6), **8 karakter** seçimi, takım avatar şeritleri, gol atanlar tablosu
+- **Depar** (Shift, akıcı ivme rampasıyla), **takım renkli oyuncular** (avatar/resim yok), gol atanlar tablosu
 - Kamera: uzak (tüm saha) / yakın (oyuncu takipli) geçişi
 - Sohbet, oyuncu listesi, ping göstergesi, mobil joystick desteği
 
@@ -23,9 +23,8 @@ HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + R
 |---|---|
 | `W A S D` / ok tuşları | Hareket |
 | `Boşluk` | Vur (şut) |
-| `Shift` / `C` | Depar (kayma, 2,5 sn bekleme) |
+| `Shift` / `C` | Depar (kayma, 2,2 sn bekleme) |
 | `E` | Pas (en uygun arkadaşa) |
-| `1` – `6` | İfade gönder (😂 🔥 💪 😭 😡 👋) |
 
 Mobilde ekranın sol altında joystick, sağ altında `VUR` / `DEPAR` / `PAS` düğmeleri çıkar.
 
@@ -135,7 +134,7 @@ checks/
 
 ## Protokol (özet)
 
-**Client → Server:** `join` · `input` · `emote` · `chat` · `again` · `ping`
+**Client → Server:** `join` · `input` · `chat` · `again` · `ping`
 **Server → Client:** `welcome` · `snapshot` · `roster` · `event` · `chat` · `pong`
 
 Fizik ve sabitler `shared/` altında olduğu için sunucu ile tarayıcı **her zaman aynı sayıları** kullanır.
