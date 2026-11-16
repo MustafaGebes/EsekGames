@@ -1,11 +1,10 @@
-// Canvas çizimi: yakınlaştırılmış, topu takip eden kamera + mini harita.
+// Canvas çizimi: sabit kamera - tüm saha tek ekranda görünür (kaydırma yok).
 
 import { PITCH, GOAL, PLAYER, BALL, TEAM_COLORS } from '../shared/constants.js';
 
 const INTERP_MS = 110;
-const VIEW_W = 700;   // ekranda gorunur saha genisligi (dunya birimi)
-
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// Sahanın etrafındaki boşluk (kale arkası + masa çerçevesi) dünya biriminde.
+const MARGIN = 42;
 
 export class Renderer {
   constructor(canvas) {
@@ -28,11 +27,16 @@ export class Renderer {
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
 
-    // Gorunur alan sabit genislikte; yukseklik ekran oranina gore belirlenir.
-    const aspect = this.canvas.width / this.canvas.height;
-    this.scale = Math.min(this.canvas.width / VIEW_W, this.canvas.height / (VIEW_W / aspect));
+    // Sabit kamera: saha + cerceve ekrana tam sigar, gorsunum kaymaz.
+    const worldW = PITCH.w + MARGIN * 2;
+    const worldH = PITCH.h + MARGIN * 2;
+    this.scale = Math.min(this.canvas.width / worldW, this.canvas.height / worldH);
     this.viewW = this.canvas.width / this.scale;
     this.viewH = this.canvas.height / this.scale;
+
+    // Kamera daima saha merkezine sabitlenir.
+    this.cam.x = PITCH.w / 2;
+    this.cam.y = PITCH.h / 2;
   }
 
   setRoster(list) {
@@ -83,43 +87,17 @@ export class Renderer {
     };
   }
 
-  // Kamera topu ve kendi oyuncumuzu takip eder, saha disina tasmaz.
-  updateCamera(dt, focusX, focusY) {
-    const k = Math.min(1, dt * 6);
-    this.cam.x += (focusX - this.cam.x) * k;
-    this.cam.y += (focusY - this.cam.y) * k;
-
-    const halfW = this.viewW / 2;
-    const halfH = this.viewH / 2;
-    const margin = 40; // kaleler de gorunur kalsin
-    this.cam.x = halfW * 2 >= PITCH.w
-      ? PITCH.w / 2
-      : clamp(this.cam.x, halfW - margin, PITCH.w - halfW + margin);
-    this.cam.y = halfH * 2 >= PITCH.h
-      ? PITCH.h / 2
-      : clamp(this.cam.y, halfH - margin, PITCH.h - halfH + margin);
-  }
-
+  // Kamera sabittir: gorsunum alani degismez, top nereye giderse gitsin
+  // tum saha ekranda gorunur kalir.
   draw(now, myId, predicted, dt = 0.016) {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0b1220';
+    // Masa zemini: sahanin etrafini tamamen kaplar (Aniball tarzi).
+    ctx.fillStyle = '#a9713c';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const snap = this.sample(now);
     if (!snap) return;
-
-    const me = predicted ? { x: predicted.x, y: predicted.y } : null;
-    // Kamera topa bakar ama kendi oyuncumuz ekrandan cikip gitmez.
-    let focusX = snap.ball.x;
-    let focusY = snap.ball.y;
-    if (me) {
-      const spanX = Math.abs(snap.ball.x - me.x);
-      const spanY = Math.abs(snap.ball.y - me.y);
-      focusX = spanX > this.viewW - 90 ? (snap.ball.x + me.x) / 2 : snap.ball.x;
-      focusY = spanY > this.viewH - 90 ? (snap.ball.y + me.y) / 2 : snap.ball.y;
-    }
-    this.updateCamera(dt, focusX, focusY);
 
     ctx.save();
     ctx.translate(
@@ -139,11 +117,13 @@ export class Renderer {
       this.drawPlayer(ctx, { ...predicted, i: myId }, true);
     }
     ctx.restore();
-
-    this.drawMinimap(ctx, snap, myId);
   }
 
   drawPitch(ctx) {
+    // Sahanin kenari: hafif golge ile masa uzerinde hafif kabartma hissi.
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(-8, -8, PITCH.w + 16, PITCH.h + 16);
+
     ctx.fillStyle = '#1e7a44';
     ctx.fillRect(0, 0, PITCH.w, PITCH.h);
 
@@ -216,14 +196,16 @@ export class Renderer {
 
     const name = info?.nm || '';
     if (name) {
-      ctx.font = '600 12px system-ui, -apple-system, sans-serif';
+      ctx.font = '600 11px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       // Isimler ust uste binmesin: slot tek/ciift ekrana gore kaydirilir.
       const off = (p.sl ?? 0) % 2 === 0 ? -(PLAYER.r + 5) : (PLAYER.r + 16);
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
-      ctx.fillText(name, p.x + 1, p.y + off + 1);
+      const ty = p.y + off;
+      const tw = ctx.measureText(name).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(p.x - tw / 2 - 3, ty - 9, tw + 6, 13);
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(name, p.x, p.y + off);
+      ctx.fillText(name, p.x, ty);
     }
   }
 
@@ -244,73 +226,5 @@ export class Renderer {
     ctx.fill();
   }
 
-  // Sol alt kosede tum sahayi gosteren mini harita.
-  drawMinimap(ctx, snap, myId) {
-    const w = Math.min(190, this.canvas.width * 0.2);
-    const h = w * (PITCH.h / PITCH.w);
-    const pad = 10;
-    const x = pad;
-    const y = this.canvas.height - h - pad;
-    const s = w / PITCH.w;
-
-    ctx.save();
-    this.roundRect(ctx, x - 5, y - 5, w + 10, h + 10, 8);
-    ctx.fillStyle = 'rgba(6, 12, 22, 0.78)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.translate(x, y);
-    ctx.fillStyle = 'rgba(30, 122, 68, 0.95)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.strokeRect(0, 0, w, h);
-    ctx.beginPath();
-    ctx.moveTo(w / 2, 0);
-    ctx.lineTo(w / 2, h);
-    ctx.stroke();
-
-    for (const p of snap.players) {
-      ctx.fillStyle = TEAM_COLORS[p.tm]?.main || '#ffffff';
-      ctx.beginPath();
-      ctx.arc(p.x * s, p.y * s, p.i === myId ? 3.4 : 2.2, 0, Math.PI * 2);
-      ctx.fill();
-      if (p.i === myId) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-      }
-    }
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(snap.ball.x * s, snap.ball.y * s, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Kamera gorunur alani
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-      (this.cam.x - this.viewW / 2) * s,
-      (this.cam.y - this.viewH / 2) * s,
-      this.viewW * s,
-      this.viewH * s,
-    );
-    ctx.restore();
-  }
-
-  roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(x, y, w, h, r);
-      return;
-    }
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
+  // Sabit kamera oldugu icin mini haritaya gerek yok; saha zaten tam ekranda.
 }

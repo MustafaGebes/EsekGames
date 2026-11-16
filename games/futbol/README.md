@@ -3,6 +3,8 @@
 Tarayıcıda oynanan **gerçek zamanlı çok oyunculu 2D futbol** oyunu.
 HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu.
 
+> **Canlı adres:** https://eskgame.onrender.com/games/futbol/
+>
 > **EsekGames içindeki yerleşim:** bu klasör EsekGames hub'ının bir parçasıdır.
 > Oyun ana sitede **`/games/futbol/`** adresinde yayınlanır ve aynı Node sunucusu
 > tarafından sunulur (`/games/futbol/ws` WebSocket kanalı).
@@ -11,7 +13,7 @@ HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu.
 - 5'li format, iki takım, **botlarla otomatik tamamlanır** (tek başına da oynanır)
 - Sunucu **otoriter**: konum istemcide değil sunucuda hesaplanır (hile yok)
 - 30 Hz fizik, 20 Hz snapshot, yerel tahmin (prediction) + interpolasyon
-- **Kamera topu takip eder** (arkadaş 2D futbol oyunlarındaki gibi), sol altta **mini harita** vardır
+- **Sabit kamera**: tüm saha tek ekranda görünür (kaydırma yok, Aniball tarzı), sahanın etrafında masa çerçevesi
 - 2 devre × 90 saniye, gol/ devre arası/ maç sonu akışı
 - Sohbet, oyuncu listesi, ping göstergesi, mobil joystick desteği
 
@@ -144,7 +146,7 @@ public/
   js/net.js      WebSocket istemcisi, otomatik yeniden bağlanma, ping
   js/input.js    Klavye + dokunmatik joystick
   js/predict.js  Yerel tahmin ve düzeltme (reconciliation)
-  js/render.js   Canvas çizimi, kamera (topu takip eder) + mini harita + interpolasyon
+  js/render.js   Canvas çizimi, sabit kamera (tüm saha ekranda) + interpolasyon
   js/hud.js      Skor, süre, oyuncu listesi, chat
 checks/
   game-checks.mjs      Oyun mantığı testleri (12 test)

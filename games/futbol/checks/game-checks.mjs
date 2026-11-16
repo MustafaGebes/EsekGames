@@ -48,8 +48,14 @@ check('insan çıkınca yerine bot gelir', () => {
 
 check('kickoff sonrası maç başlar', () => {
   const room = new Room('TEST04');
-  for (let i = 0; i < 120; i++) room.step(1 / 30);
-  assert.equal(room.phase, PHASE.play);
+  // Not: botlar bu sürede gol atabilir ve faz tekrar 'kickoff' olabilir;
+  // bu yüzden "play fazına geçildi mi" diye bakıyoruz, son faza değil.
+  let sawPlay = false;
+  for (let i = 0; i < 120; i++) {
+    room.step(1 / 30);
+    if (room.phase === PHASE.play) sawPlay = true;
+  }
+  assert.ok(sawPlay, 'maç başlamadı');
 });
 
 check('sağ kaleye gol sayılır', () => {
