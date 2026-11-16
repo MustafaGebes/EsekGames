@@ -1,7 +1,12 @@
 # ⚽ Online Futbol
 
 Tarayıcıda oynanan **gerçek zamanlı çok oyunculu 2D futbol** oyunu.
-HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + Render ile tek tık deploy.
+HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu.
+
+> **EsekGames içindeki yerleşim:** bu klasör EsekGames hub'ının bir parçasıdır.
+> Oyun ana sitede **`/games/futbol/`** adresinde yayınlanır ve aynı Node sunucusu
+> tarafından sunulur (`/games/futbol/ws` WebSocket kanalı).
+> Ayrı bir Render servisi istiyorsan aşağıdaki "Tek başına deploy" bölümüne bak.
 
 - 5'li format, iki takım, **botlarla otomatik tamamlanır** (tek başına da oynanır)
 - Sunucu **otoriter**: konum istemcide değil sunucuda hesaplanır (hile yok)
@@ -9,6 +14,24 @@ HTML + CSS + JavaScript (Canvas) istemci, Node.js + WebSocket sunucu, GitHub + R
 - **Kamera topu takip eder** (arkadaş 2D futbol oyunlarındaki gibi), sol altta **mini harita** vardır
 - 2 devre × 90 saniye, gol/ devre arası/ maç sonu akışı
 - Sohbet, oyuncu listesi, ping göstergesi, mobil joystick desteği
+
+---
+
+## EsekGames hub'ına bağlı nasıl çalışıyor
+
+| Parça | Yeri |
+|---|---|
+| Oyun istemcisi (statik) | `games/futbol/public/` → `/games/futbol/` |
+| Paylaşılan fizik sabitleri | `games/futbol/shared/` → `/games/futbol/shared/` |
+| WebSocket oyun kanalı | `/games/futbol/ws` |
+| Oda listesi API'si | `/games/futbol/api/rooms` |
+| Sunucu modülü | `games/futbol/server/football.js` → `createFootball()` fabrikası |
+| Kök sunucu bağlantısı | `server.js` → dinamik `import()` + `upgrade` delegasyonu |
+
+Kök `server.js` CommonJS, oyun modülü ESM olduğu için modül çalışma anında
+`import()` ile yüklenir; WebSocket `upgrade` istekleri `/games/futbol/ws` yoluna
+yönlendirilir. Oyun klasörü kendi `package.json` dosyasında `"type": "module"`
+bildirir, bu yüzden ESM dosyaları doğru yorumlanır.
 
 ---
 
@@ -48,39 +71,38 @@ node test/game-test.mjs           # oyun mantığı testleri (sunucu gerekmez)
 
 ---
 
-## Deploy (GitHub → Render)
+## Deploy
 
-### 1. GitHub'a gönder
+### EsekGames ile birlikte (varsayılan — zaten aktif)
 
-**En kolay yol — hazır script:**
+Oyun `games/futbol/` altında EsekGames reposunda duruyor ve kök `server.js` tarafından
+sunuluyor. GitHub'a `main` branch'ine push yaptığında Render otomatik deploy eder;
+kurulum gerektiren ek bir servis yok.
 
 ```powershell
-.\deploy-push.ps1                          # yeni repo (online-futbol)
-.\deploy-push.ps1 -Repo esekgames -Existing   # mevcut repo
-```
-
-Script testleri çalıştırır, `gh` ile repo'yu oluşturur (gh oturumluysa) ve push eder.
-`gh` oturumun yoksa önce bir terminalde `gh auth login` çalıştır.
-
-**Manuel:**
-
-```bash
-git init
 git add .
-git commit -m "Online futbol v1"
-gh repo create online-futbol --public --source=. --push --description "Tarayıcıda oynanan online 2D futbol oyunu"
+git commit -m "Online Futbol guncellemesi"
+git push origin main
 ```
 
-(`gh` kurulu değilse: <https://cli.github.com> — ya da GitHub'da boş repo açıp `git push`)
+Yerel deneme:
 
-### 2. Render'da servis oluştur
+```powershell
+cd D:\Projelerim\EsekGames
+npm install
+$env:PORT = 3100
+node server.js      # ana site: http://localhost:3100  |  oyun: http://localhost:3100/games/futbol/
+```
 
-- Dashboard → **New → Blueprint** → repo'yu seç → `render.yaml` otomatik okunur → **Apply**
-- Region: **Frankfurt (eu-central)** → Türkiye'ye gecik en düşük
-- Sonuç: `https://online-futbol.onrender.com`
+### Tek başına deploy (ayrı Render servisi istersen)
 
-İleri / Manuel kurulum istersen: **New → Web Service** →
-Build Command `npm install`, Start Command `npm start`, Health Check Path `/health`, Plan **Free**.
+Oyun klasörü kendi sunucusunu da içerir (`server/standalone.js`), bu yüzden ayrı bir
+Render servesi olarak da yayınlanabilir:
+
+- Dashboard → **New → Web Service** → repo: `MustafaGebes/EsekGames`
+- **Root Directory**: `games/futbol`
+- Build Command `npm install`, Start Command `npm start`, Health Check Path `/health`
+- Region: **Frankfurt (eu-central)**, Plan **Free**
 
 ### 3. Bilmen gereken sınırlar (ücretsiz plan)
 
